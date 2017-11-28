@@ -1,0 +1,226 @@
+---
+title: "Primary In-Hospital Outcomes Analysis of the MIND-USA Clinical Trial"
+output:
+  html_notebook:
+    theme: flatly
+    highlight: tango
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522).
+
+```{r setup}
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(captioner))
+
+## Helper functions
+format_comma <- partial(format, big.mark = ",")
+sum_na <- partial(sum, na.rm = TRUE)
+
+## kable_styling wrapper to ensure all tables are consistently styled
+mykablestyle <- function(obj, stripes = FALSE, ...){
+  boptions <- c("hover", "responsive", "condensed", "bordered")
+  if(stripes){ boptions <- c(boptions, "striped") }
+  
+  kable_styling(
+    obj,
+    bootstrap_options = boptions,
+    full_width = FALSE,
+    ...
+  )
+}
+
+## Analysis datasets are stored in an .Rdata file, originally created and stored
+##  by create_rctdata.R in ../MINDUSADataMgmt
+load("analysisdata/rct.Rdata")
+
+```
+
+```{r captions, results = "hide"}
+## -- Table and figure captions ------------------------------------------------
+table_nums <- captioner(prefix = "Table")
+fig_nums <- captioner(prefix = "Figure")
+
+table_nums(
+  name = "screening", caption = "Overview of Screening, Exclusions & Enrollment"
+)
+table_nums(name = "exclusions", caption = "Study Exclusions")
+
+```
+
+# Screening, Enrollment, and Randomization
+
+```{r prep_screen_table}
+## -- Create a data frame with rows = various categories of patients -----------
+## --  (screened, enrolled, etc), along with N, % of patients in each ----------
+
+## Get total N in each category; result = df with 1 row, columns = categories
+## This will be added to a "vertical" data.frame to use as denominators
+screen_ns <- ptstatus_df %>%
+  ## Only include patients who met screening criteria
+  filter(screened) %>%
+  ## Select the categories we want
+  select(screened, excluded_imm, approached, refused, enrolled, excluded_later,
+         disqualified, randomized) %>%
+  summarize_all(sum, na.rm = TRUE)
+
+## Create data.frame for final table, starting with horizontal df
+screen_table <- screen_ns %>%
+  ## Transpose to one row per category
+  gather(key = "status", value = "npts") %>%
+  ## Add potential denominators from horizontal df (need to replicate original
+  ##  to get the same number of rows)
+  bind_cols(bind_rows(rep(list(screen_ns), nrow(.)))) %>%
+  mutate(
+    ## Determine appropriate denominator for each category %
+    denom = ifelse(status %in% c("excluded_imm", "approached"), screened,
+            ifelse(status %in% c("refused", "enrolled"), approached,
+            ifelse(status %in% c("excluded_later", "randomized", "disqualified"),
+                   enrolled,
+                   NA))),
+    ## Calculate %
+    pctpts = round((npts / denom) * 100),
+    ## More informative statuses
+    status_label = case_when(
+      status == "screened"       ~ "Screened within 72 hours of meeting inclusion criteria",
+      status == "excluded_imm"   ~ "Excluded immediately (details below)",
+      status == "approached"     ~ "Staff approached patient/surrogate",
+      status == "refused"        ~ "Patient/surrogate refused consent",
+      status == "enrolled"       ~ "Enrolled in study",
+      status == "excluded_later" ~ "Excluded after enrollment (details below)",
+      status == "disqualified"   ~ "Disqualified prior to randomization",
+      status == "randomized"     ~ "Randomized to study drug",
+      TRUE ~ status
+    ),
+    ## Create character string with N (%)
+    npct = ifelse(is.na(pctpts), format_comma(npts),
+                  sprintf("%s (%s%%)", format_comma(npts), pctpts))
+  ) %>%
+  select(status_label, npct)
+
+## When did screening take place? Find first and last month
+screening_months <- ptstatus_df %>%
+  select(screened, exc_month, exc_year, enroll_month, enroll_year) %>%
+  mutate(screen_month = ifelse(!is.na(exc_month), exc_month, enroll_month),
+         screen_year = ifelse(!is.na(exc_year), exc_year, enroll_year)) %>%
+  filter(screened & !is.na(screen_month)) %>%
+  arrange(screen_year, screen_month) %>%
+  slice(c(1, n())) %>%
+  mutate(monthyr = paste(month.name[screen_month], screen_year))
+
+first_month <- screening_months %>% slice(1) %>% pull(monthyr)
+last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
+
+```
+
+### `r table_nums("screening")`
+
+`r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`. 
+
+```{r print_screen_table}
+screen_table %>%
+  kable(format = "html", col.names = c("", "N (%)"), align = c("l", "r")) %>%
+  mykablestyle %>%
+  group_rows("Screened Patients", 2, 3) %>%
+  group_rows("Approached Patients", 4, 5) %>%
+  group_rows("Enrolled Patients", 6, 8)
+
+```
+
+### `r table_nums("exclusions")`
+
+```{r prep_exclusions}
+## Some exclusions aren't relevant for our purposes here:
+## - Rapidly resolving organ failure, 72h eligibility period exceeded:
+##     indicates patient did not meet screening criteria
+## - Patient/surrogate refusal: not considered a study exclusion
+## We're also interested in the *combined* version of some:
+## - pregnancy + breast feeding (2a, 2b); look at exc_2 instead
+## - all exclusions relating to time running out (9c, e, f); look at exc_9cef
+exclusion_rsns <- paste0(
+  "exc_",
+  c("2_pregbf", "34_neuro", "5_torsadesqtc", "6_maintmeds", "7_nmsallergy",
+    "8_death24", "9a_refusal_md", "9cef_time", "10_blind_lang", "11_prison",
+    "12_coenroll", "13_iqcode", "14_screen", "99_other")
+)
+
+exc_table <- ptstatus_df %>%
+  ###### TEMPORARY: TWO YAL PATIENTS PROBABLY DOUBLE-ENTERED
+  ## Have contacted VCC to check/fix this; remove them for now
+  filter(!(id %in% paste0("YAL_", c(2053, 2054)))) %>%
+  
+  ## Select only exclusion indicators (overall + specific exclusions)
+  select(id, matches("^excluded\\_"), one_of(exclusion_rsns)) %>%
+  
+  ## Reshape to long format: one row per "time" of exclusion (ever, screening,
+  ##  after enrollment)
+  gather(key = "when", value = "excluded", excluded_imm:excluded_ever) %>%
+  
+  ## Count only patients who were actually excluded
+  filter(excluded) %>%
+  
+  ## Get count of each exclusion by time point
+  group_by(when) %>%
+  summarise_at(vars(-id), sum_na) %>%
+  ungroup %>%
+  
+  ## Reshape to long format: one row per time + exclusion
+  gather(key = "exclusion", value = "nexc", matches("^exc\\_[0-9]+")) %>%
+  
+  mutate(
+    ## Calculate % of exclusions at each time point for each possible exclusion
+    pctexc = round((nexc / excluded) * 100),
+    ## Formatting/text work
+    npct = sprintf("%s (%s%%)", format_comma(nexc), pctexc),
+    when = gsub("^excluded\\_", "", when),
+    exclusion = case_when(
+      exclusion == "exc_2_pregbf"      ~ "Pregnancy or breast feeding",
+      exclusion == "exc_34_neuro"      ~ "Severe dementia or neurodegenerative disease",
+      exclusion == "exc_5_torsadesqtc" ~ "History of Torsades or prolonged QTc",
+      exclusion == "exc_6_maintmeds"   ~ "Maintenance therapy with antipsychotics/lithium",
+      exclusion == "exc_7_nmsallergy"  ~ "History of NMS or allergy to study drugs",
+      exclusion == "exc_8_death24"     ~ "Expected death within 24 hours",
+      exclusion == "exc_9a_refusal_md" ~ "Attending physician refusal",
+      exclusion == "exc_9cef_time"     ~ "No surrogate available within window",
+      exclusion == "exc_10_blind_lang" ~ "Blind, deaf, or unable to speak English",
+      exclusion == "exc_11_prison"     ~ "Incarceration",
+      exclusion == "exc_12_coenroll"   ~ "Enrolled in a study ineligible for co-enrollment",
+      exclusion == "exc_13_iqcode"     ~ "IQCODE score >= 4.5",
+      exclusion == "exc_14_screen"     ~ "Screening failure",
+      TRUE ~ "Other exclusion"
+    )
+  ) %>%
+  select(exclusion, when, npct) %>%
+  spread(key = when, value = npct) %>%
+  arrange(desc(as.numeric(gsub(",", "", gsub(" \\([0-9]+\\%\\)$", "", ever)))))
+
+exc_colheads <- c(
+  "Exclusion",
+  sprintf("Ever\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_ever))),
+  sprintf("At Screening\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_imm))),
+  sprintf("After Enrollment\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_later)))
+)
+
+```
+
+Exclusions could take place at the time of screening (vast majority), or after enrollment, if a patient was discovered to have an exclusion criteria or was determined to have cognitive disability (indicated by an IQCODE score >= 4.5). For the `r format_comma(sum_na(ptstatus_df$excluded_ever))` patients excluded from MINDUSA, `r table_nums("exclusions", display = "cite")` presents exclusions:
+
+1. At any point (column 1; % out of all exclusions)
+1. At the time of screening (column 2; % out of all screening exclusions)
+1. After enrollment (column 3; % out of all post-enrollment exclusions)
+
+Patients could meet multiple exclusion criteria; therefore, column percentages may total more than 100%.
+
+```{r print_exc_table}
+exc_table %>%
+  kable(format = "html", col.names = exc_colheads, align = c("l", rep("r", 3))) %>%
+  mykablestyle(stripes = TRUE)
+
+```
