@@ -66,9 +66,17 @@ table_nums(name = "exclusions", caption = "Study Exclusions")
 screen_ns <- ptstatus_df %>%
   ## Only include patients who met screening criteria
   filter(screened) %>%
+  ## Create indicators for each reason for disqualification
+  mutate(
+    dq_nodel = ifelse(!disqualified, NA, dq_reason == "No delirium within 5 days"),
+    dq_icudc = ifelse(!disqualified, NA, dq_reason == "ICU discharge before delirium"),
+    dq_exc = ifelse(!disqualified, NA, dq_reason == "Exclusion identified"),
+    dq_diedwd = ifelse(!disqualified, NA, dq_reason == "Died/withdrew before delirium")
+  ) %>%
   ## Select the categories we want
   select(screened, excluded_imm, approached, refused, enrolled, excluded_later,
-         disqualified, randomized) %>%
+         disqualified, randomized, dq_nodel, dq_icudc, dq_exc, dq_diedwd,
+         matches("^rand\\_")) %>%
   summarize_all(sum, na.rm = TRUE)
 
 ## Create data.frame for final table, starting with horizontal df
@@ -84,7 +92,8 @@ screen_table <- screen_ns %>%
             ifelse(status %in% c("refused", "enrolled"), approached,
             ifelse(status %in% c("excluded_later", "randomized", "disqualified"),
                    enrolled,
-                   NA))),
+            ifelse(substr(status, 1, 4) == "rand", randomized,
+            ifelse(substr(status, 1, 2) == "dq", disqualified, NA))))),
     ## Calculate %
     pctpts = round((npts / denom) * 100),
     ## More informative statuses
@@ -97,6 +106,13 @@ screen_table <- screen_ns %>%
       status == "excluded_later" ~ "Excluded after enrollment (details below)",
       status == "disqualified"   ~ "Disqualified prior to randomization",
       status == "randomized"     ~ "Randomized to study drug",
+      status == "rand_mv"        ~ "Mechanical ventilation",
+      status == "rand_nippv"     ~ "Non-invasive positive pressure ventilation (NIPPV)",
+      status == "rand_shock"     ~ "Requiring treatment for shock",
+      status == "dq_nodel"       ~ "No delirium in 5 days after consent",
+      status == "dq_icudc"       ~ "ICU discharge prior to delirium",
+      status == "dq_exc"         ~ "Exclusion identified",
+      status == "dq_diedwd"      ~ "Died/withdrew prior to delirium",
       TRUE ~ status
     ),
     ## Create character string with N (%)
@@ -130,7 +146,9 @@ screen_table %>%
   mykablestyle %>%
   group_rows("Screened Patients", 2, 3) %>%
   group_rows("Approached Patients", 4, 5) %>%
-  group_rows("Enrolled Patients", 6, 8)
+  group_rows("Enrolled Patients", 6, 8) %>%
+  group_rows("Reasons for Disqualification", 9, 12) %>%
+  group_rows("Organ Failures Present at Randomization", 13, 15)
 
 ```
 
