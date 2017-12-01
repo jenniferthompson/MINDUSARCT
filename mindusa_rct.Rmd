@@ -49,33 +49,38 @@ table_nums <- captioner(prefix = "Table")
 fig_nums <- captioner(prefix = "Figure")
 
 table_nums(
-  name = "screening", caption = "Overview of Screening, Exclusions & Enrollment"
+  name = "screening", caption = "Overview of Screening, Exclusions & Randomization"
 )
 table_nums(name = "exclusions", caption = "Study Exclusions")
 
 ```
 
-# Screening, Enrollment, and Randomization
+# Screening, Consent, and Randomization
+
+Because this trial aims to describe the association between antipsychotics and treatment of delirium (rather than prevention), patients were required to be delirious prior to being randomized to study drug. In order to treat delirium immediately upon it being observed, however, patients (or their surrogates) were consented as soon as they met study inclusion criteria and were found not to meet exclusion criteria.
+
+Upon consent, patients could be randomized any time in the following five days, provided no exclusions were met within that time, the patient remained in the ICU, and they did eventually become delirious. Patients are considered "disqualified" if they left the ICU or the study (via discharge, death, or withdrawal) prior to experiencing delirium, or never experienced delirium in the five days following consent.
 
 ```{r prep_screen_table}
 ## -- Create a data frame with rows = various categories of patients -----------
-## --  (screened, enrolled, etc), along with N, % of patients in each ----------
+## --  (screened, consented, etc), along with N, % of patients in each ---------
 
 ## Get total N in each category; result = df with 1 row, columns = categories
 ## This will be added to a "vertical" data.frame to use as denominators
 screen_ns <- ptstatus_df %>%
   ## Only include patients who met screening criteria
   filter(screened) %>%
-  ## Create indicators for each reason for disqualification
+  ## Create indicators for each reason for disqualification; patients
+  ## disqualified for meeting exclusion criteria are included in "excluded after
+  ## consent" and will not be listed here
   mutate(
     dq_nodel = ifelse(!disqualified, NA, dq_reason == "No delirium within 5 days"),
     dq_icudc = ifelse(!disqualified, NA, dq_reason == "ICU discharge before delirium"),
-    dq_exc = ifelse(!disqualified, NA, dq_reason == "Exclusion identified"),
     dq_diedwd = ifelse(!disqualified, NA, dq_reason == "Died/withdrew before delirium")
   ) %>%
   ## Select the categories we want
-  select(screened, excluded_imm, approached, refused, enrolled, excluded_later,
-         disqualified, randomized, dq_nodel, dq_icudc, dq_exc, dq_diedwd,
+  select(screened, excluded_imm, approached, refused, consented, excluded_later,
+         disqualified, randomized, dq_nodel, dq_icudc, dq_diedwd,
          matches("^rand\\_")) %>%
   summarize_all(sum, na.rm = TRUE)
 
@@ -89,9 +94,9 @@ screen_table <- screen_ns %>%
   mutate(
     ## Determine appropriate denominator for each category %
     denom = ifelse(status %in% c("excluded_imm", "approached"), screened,
-            ifelse(status %in% c("refused", "enrolled"), approached,
+            ifelse(status %in% c("refused", "consented"), approached,
             ifelse(status %in% c("excluded_later", "randomized", "disqualified"),
-                   enrolled,
+                   consented,
             ifelse(substr(status, 1, 4) == "rand", randomized,
             ifelse(substr(status, 1, 2) == "dq", disqualified, NA))))),
     ## Calculate %
@@ -102,8 +107,8 @@ screen_table <- screen_ns %>%
       status == "excluded_imm"   ~ "Excluded immediately (details below)",
       status == "approached"     ~ "Staff approached patient/surrogate",
       status == "refused"        ~ "Patient/surrogate refused consent",
-      status == "enrolled"       ~ "Enrolled in study",
-      status == "excluded_later" ~ "Excluded after enrollment (details below)",
+      status == "consented"      ~ "Consented for study",
+      status == "excluded_later" ~ "Excluded after consent (details below)",
       status == "disqualified"   ~ "Disqualified prior to randomization",
       status == "randomized"     ~ "Randomized to study drug",
       status == "rand_mv"        ~ "Mechanical ventilation",
@@ -111,7 +116,6 @@ screen_table <- screen_ns %>%
       status == "rand_shock"     ~ "Requiring treatment for shock",
       status == "dq_nodel"       ~ "No delirium in 5 days after consent",
       status == "dq_icudc"       ~ "ICU discharge prior to delirium",
-      status == "dq_exc"         ~ "Exclusion identified",
       status == "dq_diedwd"      ~ "Died/withdrew prior to delirium",
       TRUE ~ status
     ),
@@ -138,7 +142,7 @@ last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
 
 ### `r table_nums("screening")`
 
-`r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`. 
+`r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`.
 
 ```{r print_screen_table}
 screen_table %>%
@@ -146,11 +150,14 @@ screen_table %>%
   mykablestyle %>%
   group_rows("Screened Patients", 2, 3) %>%
   group_rows("Approached Patients", 4, 5) %>%
-  group_rows("Enrolled Patients", 6, 8) %>%
-  group_rows("Reasons for Disqualification", 9, 12) %>%
-  group_rows("Organ Failures Present at Randomization", 13, 15)
+  group_rows("Consented Patients", 6, 8) %>%
+  group_rows("Reasons for Disqualification", 9, 11) %>%
+  group_rows("Organ Failures Present at Randomization", 12, 14) %>%
+  row_spec(grep("^Randomized", screen_table$status_label), bold = TRUE)
 
 ```
+
+Patients could have none, one, or two of the listed organ failures present at randomization; it is not necessarily expected that percentages add up to 100%.
 
 ### `r table_nums("exclusions")`
 
@@ -170,15 +177,11 @@ exclusion_rsns <- paste0(
 )
 
 exc_table <- ptstatus_df %>%
-  ###### TEMPORARY: TWO YAL PATIENTS PROBABLY DOUBLE-ENTERED
-  ## Have contacted VCC to check/fix this; remove them for now
-  filter(!(id %in% paste0("YAL_", c(2053, 2054)))) %>%
-  
   ## Select only exclusion indicators (overall + specific exclusions)
   select(id, matches("^excluded\\_"), one_of(exclusion_rsns)) %>%
   
   ## Reshape to long format: one row per "time" of exclusion (ever, screening,
-  ##  after enrollment)
+  ##  after consent)
   gather(key = "when", value = "excluded", excluded_imm:excluded_ever) %>%
   
   ## Count only patients who were actually excluded
@@ -223,16 +226,16 @@ exc_colheads <- c(
   "Exclusion",
   sprintf("Ever\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_ever))),
   sprintf("At Screening\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_imm))),
-  sprintf("After Enrollment\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_later)))
+  sprintf("After Consent\\\n(N = %s)", format_comma(sum_na(ptstatus_df$excluded_later)))
 )
 
 ```
 
-Exclusions could take place at the time of screening (vast majority), or after enrollment, if a patient was discovered to have an exclusion criteria or was determined to have cognitive disability (indicated by an IQCODE score >= 4.5). For the `r format_comma(sum_na(ptstatus_df$excluded_ever))` patients excluded from MINDUSA, `r table_nums("exclusions", display = "cite")` presents exclusions:
+Exclusions could take place at the time of screening (vast majority), or after consent, if a patient was determined to have cognitive disability (indicated by an IQCODE score >= 4.5) or was discovered to have an exclusion criteria prior to randomization. For the `r format_comma(sum_na(ptstatus_df$excluded_ever))` patients excluded from MINDUSA, `r table_nums("exclusions", display = "cite")` presents exclusions:
 
 1. At any point (column 1; % out of all exclusions)
 1. At the time of screening (column 2; % out of all screening exclusions)
-1. After enrollment (column 3; % out of all post-enrollment exclusions)
+1. After consent (column 3; % out of all post-consent exclusions)
 
 Patients could meet multiple exclusion criteria; therefore, column percentages may total more than 100%.
 
