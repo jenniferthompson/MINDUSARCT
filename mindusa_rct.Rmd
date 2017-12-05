@@ -17,12 +17,22 @@ suppressPackageStartupMessages(library(knitr))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(captioner))
 
 ## Helper functions
 format_comma <- partial(format, big.mark = ",")
 sum_na <- partial(sum, na.rm = TRUE)
+q25 <- partial(quantile, probs = 0.25, na.rm = TRUE)
+q50 <- partial(quantile, probs = 0.25, na.rm = TRUE)
+q75 <- partial(quantile, probs = 0.25, na.rm = TRUE)
+mean_na <- partial(mean, na.rm = TRUE)
+sd_na <- partial(sd, na.rm = TRUE)
+rndformat <- function(x, digits = 2){ format(round(x, digits), nsmall = digits) }
+get_npct <- function(num, denom){
+  sprintf("%s (%s%%)", num, round((num / denom) * 100))
+}
 
 ## kable_styling wrapper to ensure all tables are consistently styled
 mykablestyle <- function(obj, stripes = FALSE, ...){
@@ -52,6 +62,7 @@ table_nums(
   name = "screening", caption = "Overview of Screening, Exclusions & Randomization"
 )
 table_nums(name = "exclusions", caption = "Study Exclusions")
+table_nums(name = "intervention", caption = "Description of Intervention by Patient")
 
 ```
 
@@ -245,3 +256,145 @@ exc_table %>%
   mykablestyle(stripes = TRUE)
 
 ```
+
+### `r table_nums("intervention")`
+
+Once randomized, patients could receive study drug for treatment of delirium for up to 14 days, up to twice per day (with a third dose occasionally permitted in rare cases). Study drug could be held temporarily, either for delirium resolution or for other reasons, or permanently discontinued. `r table_nums("intervention", display = "cite")` describes randomization, receipt of study drug, reasons for study drug hold or discontinuation, and status at the end of hospitalization for each of the three treatment groups.
+
+Columns represent N (%) except in the case of number of days and number of doses of study drug, where columns represent `median [25th, 75th percentiles]`, followed by `mean +/- standard deviation`.
+
+
+```{r prep_int_table}
+## Function to create indicator for whether drug permanently discontinued for
+##  a given reason
+ind_permdc_rsn <- function(rsn, x){ !is.na(x) & x == rsn }
+
+rand_df <- ptstatus_df %>%
+  filter(randomized) %>%
+  select(id, randomized, died_inhosp, wd_inhosp, elig_fu) %>%
+  ## Add study drug info
+  left_join(ptdrug_df, by = "id") %>%
+  group_by(trt)
+
+## Summarize variables that just need sums
+rand_sums <- rand_df %>%
+  summarise_at(
+    vars(randomized, ever_studydrug, ever_drug_held,
+         matches("^ever\\_held\\_[a-z]+$"),
+         ever_drug_permdc, matches("^permdc\\_[a-z]+$"),
+         died_inhosp, wd_inhosp, elig_fu),
+    funs(sum_na)
+  )
+
+## Summarize continuous variables
+rand_cont <- rand_df %>%
+  summarise_at(
+    vars(num_drug_days, num_drug_doses),
+    funs(q25, q50, q75, "mean" = mean_na, "sd" = sd_na)
+  )
+
+## Recombine
+rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
+  ## Calculate and create strings for table
+  mutate(
+    npct_studydrug = get_npct(ever_studydrug, randomized),
+    npct_held = get_npct(ever_drug_held, ever_studydrug),
+    npct_held_ae = get_npct(ever_held_ae, ever_drug_held),
+    npct_held_dystonia = get_npct(ever_held_dystonia, ever_drug_held),
+    npct_held_eps = get_npct(ever_held_eps, ever_drug_held),
+    npct_held_other = get_npct(ever_held_other, ever_drug_held),
+    npct_held_oversed = get_npct(ever_held_oversed, ever_drug_held),
+    npct_held_refuseptfam = get_npct(ever_held_refuseptfam, ever_drug_held),
+    npct_held_qtc = get_npct(ever_held_qtc, ever_drug_held),
+    npct_held_refuseteam = get_npct(ever_held_refuseteam, ever_drug_held),
+    npct_permdc = get_npct(ever_drug_permdc, ever_studydrug),
+    npct_permdc_ae = get_npct(permdc_ae, ever_drug_permdc),
+    npct_permdc_coma = get_npct(permdc_coma, ever_drug_permdc),
+    npct_permdc_refuseteam = get_npct(permdc_refuseteam, ever_drug_permdc),
+    npct_permdc_nms = get_npct(permdc_nms, ever_drug_permdc),
+    npct_permdc_other = get_npct(permdc_other, ever_drug_permdc),
+    npct_permdc_refuseptfam = get_npct(permdc_refuseptfam, ever_drug_permdc),
+    npct_permdc_torsades = get_npct(permdc_torsades, ever_drug_permdc),
+    npct_died = get_npct(died_inhosp, randomized),
+    npct_wd = get_npct(wd_inhosp, randomized),
+    npct_elig = get_npct(elig_fu, randomized),
+
+    drug_days = sprintf(
+      "%s [%s, %s]\\\n%s +/- %s",
+      rndformat(num_drug_days_q50, 0),
+      rndformat(num_drug_days_q25, 0),
+      rndformat(num_drug_days_q75, 0),
+      rndformat(num_drug_days_mean, 2),
+      rndformat(num_drug_days_sd, 2)
+    ),
+    drug_doses = sprintf(
+      "%s [%s, %s]\\\n%s +/- %s",
+      rndformat(num_drug_doses_q50, 0),
+      rndformat(num_drug_doses_q25, 0),
+      rndformat(num_drug_doses_q75, 0),
+      rndformat(num_drug_doses_mean, 2),
+      rndformat(num_drug_doses_sd, 2)
+    )
+  ) %>%
+  select(trt, randomized, npct_studydrug, drug_days, drug_doses, npct_held,
+         matches("^npct\\_held\\_"), npct_permdc, matches("^npct\\_permdc\\_"),
+         npct_died, npct_wd, npct_elig) %>%
+  gather(key = table_row, value = table_string, -trt) %>%
+  spread(key = trt, value = table_string) %>%
+  mutate(
+    sort_order = case_when(
+      table_row == "randomized" ~ 1,
+      table_row == "npct_studydrug" ~ 2,
+      table_row == "drug_days" ~ 3,
+      table_row == "drug_doses" ~ 4,
+      table_row == "npct_held" ~ 5,
+      table_row == "npct_permdc" ~ 6,
+      table_row == "npct_died" ~ 7,
+      table_row == "npct_wd" ~ 8,
+      table_row == "npct_elig" ~ 9,
+      str_detect(table_row, "^npct\\_held\\_") ~ 10,
+      str_detect(table_row, "^npct\\_permdc\\_") ~ 11,
+      TRUE ~ 12),
+    table_row = case_when(
+      table_row == "randomized"              ~ "Randomized",
+      table_row == "npct_studydrug"          ~ "Received >=1 dose study drug",
+      table_row == "drug_days"               ~ "Days received study drug",
+      table_row == "drug_doses"              ~ "Doses of study drug",
+      table_row == "npct_held"               ~ "Ever had study drug temporarily held",
+      table_row == "npct_permdc"             ~ "Had study drug permanently discontinued",
+      table_row == "npct_died"               ~ "Died in the hospital",
+      table_row == "npct_wd"                 ~ "Withdrew from study in the hospital",
+      table_row == "npct_elig"               ~ "Eligible for long-term follow-up",
+      table_row == "npct_held_ae"            ~ "Adverse event",
+      table_row == "npct_held_dystonia"      ~ "Dystonia",
+      table_row == "npct_held_eps"           ~ "Extrapyramidal symptoms",
+      table_row == "npct_held_other"         ~ "Other reason",
+      table_row == "npct_held_oversed"       ~ "Oversedation",
+      table_row == "npct_held_qtc"           ~ "Prolonged QTc",
+      table_row == "npct_held_refuseptfam"   ~ "Patient/family refusal",
+      table_row == "npct_held_refuseteam"    ~ "Medical team refusal",
+      table_row == "npct_permdc_ae"          ~ "Adverse event",
+      table_row == "npct_permdc_coma"        ~ "Coma due to structural brain damage",
+      table_row == "npct_permdc_nms"         ~ "NMS",
+      table_row == "npct_permdc_other"       ~ "Other reason",
+      table_row == "npct_permdc_refuseptfam" ~ "Patient/family refusal",
+      table_row == "npct_permdc_refuseteam"  ~ "Medical team refusal",
+      table_row == "npct_permdc_torsades"    ~ "Torsades de pointes",
+      TRUE ~ "")
+  ) %>%
+  arrange(sort_order) %>%
+  select(-sort_order)
+
+```
+
+```{r print_rand_table}
+rand_table %>%
+  kable(format = "html", col.names = c("", LETTERS[1:3]), align = c("l", rep("r", 3))) %>%
+  mykablestyle %>%
+  group_rows("Randomized Patients", 2, 9) %>%
+  group_rows("Reasons Study Drug Temporarily Held", 10, 17) %>%
+  group_rows("Reasons Study Drug Permanently Discontinued", 18, 24)
+
+```
+
+**Note** that temporary holds and permanent discontinuations listed in `r table_nums("intervention", display = "cite")` only include drug stopped for clinical reasons; they do *not* include instances where study drug was not administered due to patient unavailability, including ICU discharge, death, study withdrawal, being off the floor, or being placed on comfort care measures/hospice.
