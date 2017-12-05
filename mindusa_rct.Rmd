@@ -74,12 +74,21 @@ table_nums(
   name = "screening", caption = "Overview of Screening, Exclusions & Randomization"
 )
 table_nums(name = "exclusions", caption = "Study Exclusions")
+table_nums(name = "exc_other", caption = "'Other' Exclusions")
 table_nums(
   name = "intervention_pt", caption = "Description of Intervention by Patient"
 )
 table_nums(
   name = "intervention_dose",
   caption = "Description of Intervention by Study Drug Dose"
+)
+table_nums(
+  name = "dose_held_other",
+  caption = "Reasons for Temporary Study Drug Hold due to 'Other'"
+)
+table_nums(
+  name = "dose_permdc_other",
+  caption = "Reasons for Study Drug Discontinuation due to 'Other'"
 )
 
 ```
@@ -138,7 +147,7 @@ screen_table <- screen_ns %>%
       status == "refused"        ~ "Patient/surrogate refused consent",
       status == "consented"      ~ "Consented for study",
       status == "excluded_later" ~ "Excluded after consent (details below)",
-      status == "disqualified"   ~ "Disqualified prior to randomization",
+      status == "disqualified"   ~ "Ineligible for randomization",
       status == "randomized"     ~ "Randomized to study drug",
       status == "rand_mv"        ~ "Mechanical ventilation",
       status == "rand_nippv"     ~ "Non-invasive positive pressure ventilation (NIPPV)",
@@ -180,7 +189,7 @@ screen_table %>%
   group_rows("Screened Patients", 2, 3) %>%
   group_rows("Approached Patients", 4, 5) %>%
   group_rows("Consented Patients", 6, 8) %>%
-  group_rows("Reasons for Disqualification", 9, 11) %>%
+  group_rows("Reasons for Ineligibility", 9, 11) %>%
   group_rows("Organ Failures Present at Randomization", 12, 14) %>%
   row_spec(grep("^Randomized", screen_table$status_label), bold = TRUE)
 
@@ -274,6 +283,22 @@ exc_table %>%
   mykablestyle(stripes = TRUE)
 
 ```
+
+### `r table_nums("exc_other")`
+
+To save space, reasons for "other" exclusions are collapsed. Click on `Details` below to view them.
+
+<details>
+```{r exc_other_table}
+ptstatus_df %>%
+  filter(exc_99_other) %>%
+  select(exc_other) %>%
+  kable(format = "html", col.names = c("Explanation for 'other' exclusion"), align = c("l")) %>%
+  mykablestyle
+
+```
+
+</details>
 
 # Description of the Intervention
 
@@ -609,3 +634,40 @@ dose_table %>%
   group_rows("Doses Permanently Discontinued", 31, 38)
 
 ```
+
+## "Other" Reasons for Hold & Discontinuation
+
+Explanations for study drug held (`r table_nums("dose_held_other", display = "cite")`) and discontinued (`r table_nums("dose_permdc_other", display = "cite")`) for "other" reasons are listed in the tables below. To save space, these tables are collapsed; click on `Details` to see them.
+
+```{r prep_dose_other}
+other_held_table <- doses_df %>%
+  filter(held_other) %>%
+  select(held_other_exp)
+
+other_permdc_table <- doses_df %>%
+  filter(permdc_other) %>%
+  select(permdc_other_exp)
+
+```
+
+### `r table_nums("dose_held_other")`
+
+<details>
+```{r print_dose_held_other}
+other_held_table %>%
+  kable(format = "html", col.names = c("Explanation for 'other' study drug hold"), align = c("l")) %>%
+  mykablestyle
+
+```
+</details>
+
+### `r table_nums("dose_permdc_other")`
+
+<details>
+```{r print_dose_permdc_other}
+other_permdc_table %>%
+  kable(format = "html", col.names = c("Explanation for 'other' study drug discontinuation"), align = c("l")) %>%
+  mykablestyle
+
+```
+</details>
