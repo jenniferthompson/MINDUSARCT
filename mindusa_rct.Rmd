@@ -340,7 +340,7 @@ rand_sums <- rand_df %>%
 ## Summarize continuous variables
 rand_cont <- rand_df %>%
   summarise_at(
-    vars(num_drug_days, num_drug_doses),
+    vars(num_drug_days, num_drug_doses, mean_drug_daily),
     funs(q25, q50, q75, "mean" = mean_na, "sd" = sd_na)
   )
 
@@ -378,11 +378,15 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
     drug_doses = describe_cont(
       num_drug_doses_q50, num_drug_doses_q25, num_drug_doses_q75,
       num_drug_doses_mean, num_drug_doses_sd
+    ),
+    mean_drug_daily = describe_cont(
+      mean_drug_daily_q50, mean_drug_daily_q25, mean_drug_daily_q75,
+      mean_drug_daily_mean, mean_drug_daily_sd
     )
   ) %>%
-  select(trt, randomized, npct_studydrug, drug_days, drug_doses, npct_held,
-         matches("^npct\\_held\\_"), npct_permdc, matches("^npct\\_permdc\\_"),
-         npct_died, npct_wd, npct_elig) %>%
+  select(trt, randomized, npct_studydrug, drug_days, drug_doses,
+         mean_drug_daily, npct_held, matches("^npct\\_held\\_"), npct_permdc,
+         matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig) %>%
   gather(key = table_row, value = table_string, -trt) %>%
   spread(key = trt, value = table_string) %>%
   mutate(
@@ -391,19 +395,21 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "npct_studydrug" ~ 2,
       table_row == "drug_days" ~ 3,
       table_row == "drug_doses" ~ 4,
-      table_row == "npct_held" ~ 5,
-      table_row == "npct_permdc" ~ 6,
-      table_row == "npct_died" ~ 7,
-      table_row == "npct_wd" ~ 8,
-      table_row == "npct_elig" ~ 9,
-      str_detect(table_row, "^npct\\_held\\_") ~ 10,
-      str_detect(table_row, "^npct\\_permdc\\_") ~ 11,
-      TRUE ~ 12),
+      table_row == "mean_drug_daily" ~ 5,
+      table_row == "npct_held" ~ 6,
+      table_row == "npct_permdc" ~ 7,
+      table_row == "npct_died" ~ 8,
+      table_row == "npct_wd" ~ 9,
+      table_row == "npct_elig" ~ 10,
+      str_detect(table_row, "^npct\\_held\\_") ~ 11,
+      str_detect(table_row, "^npct\\_permdc\\_") ~ 12,
+      TRUE ~ 13),
     table_row = case_when(
       table_row == "randomized"              ~ "Randomized",
       table_row == "npct_studydrug"          ~ "Received >=1 dose study drug",
       table_row == "drug_days"               ~ "Days received study drug",
       table_row == "drug_doses"              ~ "Doses of study drug",
+      table_row == "mean_drug_daily"         ~ "Mean daily dose of study drug (mL)",
       table_row == "npct_held"               ~ "Ever had study drug temporarily held",
       table_row == "npct_permdc"             ~ "Had study drug permanently discontinued",
       table_row == "npct_died"               ~ "Died in the hospital",
@@ -436,9 +442,9 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
 rand_table %>%
   kable(format = "html", col.names = c("", LETTERS[1:3]), align = c("l", rep("r", 3))) %>%
   mykablestyle %>%
-  group_rows("Randomized Patients", 2, 9) %>%
-  group_rows("Reasons Study Drug Temporarily Held", 10, 17) %>%
-  group_rows("Reasons Study Drug Permanently Discontinued", 18, 25)
+  group_rows("Randomized Patients", 2, 10) %>%
+  group_rows("Reasons Study Drug Temporarily Held", 11, 18) %>%
+  group_rows("Reasons Study Drug Permanently Discontinued", 19, 26)
 
 ```
 
@@ -656,7 +662,7 @@ other_permdc_table <- doses_df %>%
 ```{r print_dose_held_other}
 other_held_table %>%
   kable(format = "html", col.names = c("Explanation for 'other' study drug hold"), align = c("l")) %>%
-  mykablestyle
+  mykablestyle(stripes = TRUE)
 
 ```
 </details>
@@ -667,7 +673,7 @@ other_held_table %>%
 ```{r print_dose_permdc_other}
 other_permdc_table %>%
   kable(format = "html", col.names = c("Explanation for 'other' study drug discontinuation"), align = c("l")) %>%
-  mykablestyle
+  mykablestyle(stripes = TRUE)
 
 ```
 </details>
