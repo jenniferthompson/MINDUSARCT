@@ -12,7 +12,7 @@ output:
 
 The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522).
 
-```{r setup}
+```{r setup, results = "hide"}
 suppressPackageStartupMessages(library(knitr))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(tidyr))
@@ -60,8 +60,17 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
 }
 
 ## Analysis datasets are stored in an .Rdata file, originally created and stored
-##  by create_rctdata.R in ../MINDUSADataMgmt
+##  by create_rctdata.R in ../MINDUSADataMgmt.
 load("analysisdata/rct.Rdata")
+
+## Create data frame of all randomized patients + treatment assignment
+rand_df <- ptstatus_df %>%
+  filter(randomized) %>%
+  left_join(trt_df, by = "id") %>%
+  select(id, trt)
+
+## Vector of IDs for all randomized patients
+rand_pts <- rand_df %>% pull(id)
 
 ```
 
@@ -317,18 +326,17 @@ Among patients with study drug temporarily held, the most common reasons were ov
 ### `r table_nums("intervention_pt")`
 
 ```{r prep_rand_table}
-rand_df <- ptstatus_df %>%
-  filter(randomized) %>%
-  select(id, randomized, died_inhosp, wd_inhosp, elig_fu) %>%
+randtable_df <- rand_df %>%
+  left_join(
+    select(ptstatus_df, id, randomized, died_inhosp, wd_inhosp, elig_fu),
+    by = "id"
+  ) %>%
   ## Add study drug info
   left_join(ptdrug_df, by = "id") %>%
   group_by(trt)
 
-## For later: Vector of IDs of all randomized patients
-rand_pts <- ptstatus_df %>% filter(randomized) %>% pull(id)
-
 ## Summarize variables that just need sums
-rand_sums <- rand_df %>%
+rand_sums <- randtable_df %>%
   summarise_at(
     vars(randomized, ever_studydrug, ever_drug_held,
          matches("^ever\\_held\\_[a-z]+$"),
@@ -338,7 +346,7 @@ rand_sums <- rand_df %>%
   )
 
 ## Summarize continuous variables
-rand_cont <- rand_df %>%
+rand_cont <- randtable_df %>%
   summarise_at(
     vars(num_drug_days, num_drug_doses, mean_drug_daily),
     funs(q25, q50, q75, "mean" = mean_na, "sd" = sd_na)
@@ -461,15 +469,21 @@ Oversedation was the most common reason for temporary hold by far; actual RASSes
 ```{r prep_dose_table}
 ## How many total doses in each treatment group?
 doses_grp <- doses_df %>%
-  ## Only interested in 1) randomized patients, and
-  ##   2) doses not held/dc'd due to patient unavailability
-  filter(id %in% rand_pts & (drug_given | drug_held | drug_permdc)) %>%
+  ## Restrict to randomized patients and add treatment group
+  right_join(rand_df, by = "id") %>%
+  ## Only keep doses either given, or held/d/c'd due to adverse clinical reasons
+  ## (excludes doses held due to patient unavailability)
+  filter(drug_given | drug_held | drug_permdc) %>%
   group_by(trt) %>%
   summarise(doses_trt = n())
 
 ## Summarize variables that just need sums
 dose_table <- doses_df %>%
-  filter(id %in% rand_pts) %>%
+  ## Restrict to randomized patients and add treatment group
+  right_join(rand_df, by = "id") %>%
+  ## Only keep doses either given, or held/d/c'd due to adverse clinical reasons
+  ## (excludes doses held due to patient unavailability)
+  filter(drug_given | drug_held | drug_permdc) %>%
   group_by(trt) %>%
   summarise(
     doses_given = sum_na(drug_given),
