@@ -13,6 +13,8 @@ output:
 The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522).
 
 ```{r setup, results = "hide"}
+knitr::opts_chunk$set(message = FALSE)
+
 suppressPackageStartupMessages(library(knitr))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(tidyr))
@@ -20,6 +22,7 @@ suppressPackageStartupMessages(library(purrr))
 suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(captioner))
+suppressPackageStartupMessages(library(rms))
 
 ## Helper functions
 format_comma <- partial(format, big.mark = ",")
@@ -59,19 +62,6 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
   )
 }
 
-## Analysis datasets are stored in an .Rdata file, originally created and stored
-##  by create_rctdata.R in ../MINDUSADataMgmt.
-load("analysisdata/rct.Rdata")
-
-## Create data frame of all randomized patients + treatment assignment
-rand_df <- ptstatus_df %>%
-  filter(randomized) %>%
-  left_join(trt_df, by = "id") %>%
-  select(id, trt)
-
-## Vector of IDs for all randomized patients
-rand_pts <- rand_df %>% pull(id)
-
 ```
 
 ```{r captions, results = "hide"}
@@ -84,6 +74,21 @@ table_nums(
 )
 table_nums(name = "exclusions", caption = "Study Exclusions")
 table_nums(name = "exc_other", caption = "'Other' Exclusions")
+table_nums(
+  name = "baseline_all",
+  caption = "Demographic & ICU Admission Characteristics, All Consented Patients"
+)
+table_nums(
+  name = "baseline_trt",
+  caption = "Demographic & ICU Admission Characteristics, Randomized Patients"
+)
+table_nums(
+  name = "icursn_other", caption = "Descriptions of 'Other' ICU Admission Reasons"
+)
+table_nums(
+  name = "inhosp_trt",
+  caption = "Hospitalization Characteristics by Treatment Group"
+)
 table_nums(
   name = "intervention_pt", caption = "Description of Intervention by Patient"
 )
@@ -99,6 +104,37 @@ table_nums(
   name = "dose_permdc_other",
   caption = "Reasons for Study Drug Discontinuation due to 'Other'"
 )
+
+```
+
+```{r data_setup, results = "hide"}
+## -- General data prep: -------------------------------------------------------
+## - Combine one-record-per-pt datasets
+## - Restrict datasets to only consented/only randomized patients
+
+## Analysis datasets are stored in an .Rdata file, originally created and stored
+##  by create_rctdata.R in ../MINDUSADataMgmt.
+load("analysisdata/rct.Rdata")
+
+## Create data frame of all randomized patients + treatment assignment
+rand_df <- ptstatus_df %>%
+  filter(randomized) %>%
+  left_join(trt_df, by = "id") %>%
+  select(id, trt)
+
+## Vector of IDs for all randomized patients
+rand_pts <- rand_df %>% pull(id)
+
+## Want to describe demographics, ICU admission characteristics for all patients
+## consented and not excluded
+ptsummary_all_df <- left_join(ptstatus_df, admission_df, by = "id") %>%
+  filter(consented & !excluded_ever) %>%
+  select(id, study_site, protocol, excluded_later, inc_month:cv_sofa_adm_f)
+
+## Want to do a lot with all randomized patients
+ptsummary_rand_df <- ptsummary_all_df %>%
+  filter(randomized) %>%
+  left_join(rand_df)
 
 ```
 
@@ -308,6 +344,93 @@ ptstatus_df %>%
 ```
 
 </details>
+
+# Descriptions of the Cohorts
+
+Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
+
+## Randomized vs Non-Randomized Patients
+
+Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
+
+### `r table_nums("baseline_all")`
+
+```{r baseline_all}
+## Do things to make the table pretty: Factor version of rand. indicator, labels
+ptsummary_all_df2 <- ptsummary_all_df %>%
+  left_join(rand_df, by = "id") %>%
+  mutate(
+    randomized_f = factor(
+      as.numeric(ptsummary_all_df$randomized),
+      levels = 0:1,
+      labels = c("Not Randomized", "Randomized")
+    )
+  ) %>%
+  mutate_at(
+    vars(enroll_mv, enroll_nippv, enroll_shock),
+    funs(factor(as.numeric(.), levels = 0:1, labels = c("No", "Yes")))
+  )
+    
+label(ptsummary_all_df2$enroll_mv) <- "On invasive MV at consent"
+label(ptsummary_all_df2$enroll_nippv) <- "On NIPPV at consent"
+label(ptsummary_all_df2$enroll_shock) <- "Treatment for shock at consent"
+label(ptsummary_all_df2$age_consent) <- "Age at consent"
+label(ptsummary_all_df2$gender) <- "Gender"
+label(ptsummary_all_df2$race_cat) <- "Race"
+label(ptsummary_all_df2$ethnicity) <- "Ethnicity"
+label(ptsummary_all_df2$english_level) <- "Fluency in English"
+label(ptsummary_all_df2$education) <- "Education"
+label(ptsummary_all_df2$insurance) <- "Insurance"
+label(ptsummary_all_df2$bmi) <- "BMI"
+label(ptsummary_all_df2$home_antipsyc) <- "On antipsychotics prior to admission"
+label(ptsummary_all_df2$charlson_total) <- "Charlson Comorbidities Index"
+label(ptsummary_all_df2$frailty_f) <- "CSHA Clinical Frailty Score"
+label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
+label(ptsummary_all_df2$sofa_adm) <- "SOFA at consent"
+label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at consent"
+
+html(summaryM(enroll_mv + enroll_nippv + enroll_shock + age_consent + gender +
+                race_cat + ethnicity + english_level + education + insurance +
+                bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn +
+                sofa_adm + cv_sofa_adm_f ~ randomized_f,
+              data = ptsummary_all_df2,
+              overall = TRUE),
+     exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both")
+
+```
+
+## Randomized Patients by Treatment Group
+
+The following tables describe demographic and ICU admission characteristics (`r table_nums("baseline_trt", display = "cite")`) and in-hospital characteristics (`r table_nums("inhosp_trt", display = "cite")`) of all randomized patients.
+
+### `r table_nums("baseline_trt")`
+
+```{r baseline_trt}
+html(summaryM(enroll_mv + enroll_nippv + enroll_shock + age_consent + gender +
+                race_cat + ethnicity + english_level + education + insurance +
+                bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn +
+                sofa_adm + cv_sofa_adm_f ~ trt,
+              data = subset(ptsummary_all_df2, randomized)),
+     exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both")
+
+```
+
+### `r table_nums("icursn_other")`
+
+To save space, reasons for "other" ICU admission among randomized patients are collapsed. Click on `Details` below to view them.
+
+<details>
+```{r icursn_other_table}
+ptsummary_all_df %>%
+  filter(randomized & icu_rsn == "Other") %>%
+  select(icu_rsn_other) %>%
+  kable(format = "html", col.names = c("Explanation for 'other' ICU admission reason"), align = c("l")) %>%
+  mykablestyle
+
+```
+
+</details>
+
 
 # Description of the Intervention
 
@@ -691,3 +814,4 @@ other_permdc_table %>%
 
 ```
 </details>
+
