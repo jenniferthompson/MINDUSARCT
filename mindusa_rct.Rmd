@@ -349,6 +349,23 @@ ptstatus_df %>%
 
 Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
 
+## Notes on Severity of Illness {#soi}
+
+Due to the nature of clinical data collection, we had some missing values for APACHE II and SOFA components despite our coordinators' best efforts. We handled these missing values in the following ways:
+
+### APACHE II (ICU admission only)
+
+- Oxygenation: If no arterial blood gas was done, we converted the lowest O2 saturation to PaO2 per the [EPIC II conversions](http://intensive.org/epic2/Documents/Estimation%20of%20PO2%20and%20FiO2.pdf) and assigned points based on PaO2 alone.
+- pH: If no arterial blood gas was done, we used the serum HCO3 conversions noted in the original reference.
+- Glasgow Coma Score: If no GCS was available, we assigned points for the APACHE using the lowest RASS on the day of ICU admission using the [Vasilevskis et al's](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/) point values for the SOFA.
+- All other components: If no values were available on a given day, we looked for a value on the closest day within the three full days after ICU admission. If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
+
+### SOFA (ICU admission + daily throughout intervention period)
+
+- Respiratory: If P/F ratio was not available, we used the lowest S/F ratio, per [Pandharipande et al](https://www.ncbi.nlm.nih.gov/pubmed/19242333).
+- Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
+- Liver, coagulation, cardiovascular, renal: If no values were available on a given day, we looked for a value on the closest day within three full days of the missing value (after or before). If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
+
 ## Randomized vs Non-Randomized Patients
 
 Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
@@ -386,13 +403,14 @@ label(ptsummary_all_df2$home_antipsyc) <- "On antipsychotics prior to admission"
 label(ptsummary_all_df2$charlson_total) <- "Charlson Comorbidities Index"
 label(ptsummary_all_df2$frailty_f) <- "CSHA Clinical Frailty Score"
 label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
-label(ptsummary_all_df2$sofa_adm) <- "SOFA at consent"
-label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at consent"
+label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission"
+label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
+label(ptsummary_all_df2$apache_adm) <- "APACHE II at ICU admission"
 
-html(summaryM(enroll_mv + enroll_nippv + enroll_shock + age_consent + gender +
-                race_cat + ethnicity + english_level + education + insurance +
-                bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn +
-                sofa_adm + cv_sofa_adm_f ~ randomized_f,
+## Formula we'll use for both demographic/admission tables
+admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + apache_adm + sofa_adm + cv_sofa_adm_f"
+
+html(summaryM(as.formula(paste(admit_formula_lhs, "randomized_f", sep = " ~ ")),
               data = ptsummary_all_df2,
               overall = TRUE),
      exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both")
@@ -406,10 +424,7 @@ The following tables describe demographic and ICU admission characteristics (`r 
 ### `r table_nums("baseline_trt")`
 
 ```{r baseline_trt}
-html(summaryM(enroll_mv + enroll_nippv + enroll_shock + age_consent + gender +
-                race_cat + ethnicity + english_level + education + insurance +
-                bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn +
-                sofa_adm + cv_sofa_adm_f ~ trt,
+html(summaryM(as.formula(paste(admit_formula_lhs, "trt", sep = " ~ ")),
               data = subset(ptsummary_all_df2, randomized)),
      exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both")
 
