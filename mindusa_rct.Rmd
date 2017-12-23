@@ -136,6 +136,28 @@ ptsummary_rand_df <- ptsummary_all_df %>%
   filter(randomized) %>%
   left_join(rand_df)
 
+## -- Combine related datasets -------------------------------------------------
+## One record per randomized patient
+ptsummary_rand_df <- reduce(
+  list(ptsummary_rand_df, datestrack_df, padsummary_df, ptdrug_df),
+  left_join,
+  by = "id"
+)
+
+## One record per day in the hospital
+daily_all_df <- reduce(
+  list(allptevents_df, paddaily_df),
+  left_join,
+  by = c("id", "redcap_event_name")
+)
+
+## One record per day after randomization, including post-discharge/death
+daily_int_df <- reduce(
+  list(randptevents_df, paddaily_df),
+  left_join,
+  by = c("id", "redcap_event_name")
+)
+
 ```
 
 # Screening, Consent, and Randomization
@@ -349,22 +371,28 @@ ptstatus_df %>%
 
 Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
 
-## Notes on Severity of Illness {#soi}
+## Notes on Variable Calculation
+
+### Severity of Illness{#soi}
 
 Due to the nature of clinical data collection, we had some missing values for APACHE II and SOFA components despite our coordinators' best efforts. We handled these missing values in the following ways:
 
-### APACHE II (ICU admission only)
+#### APACHE II (ICU admission only)
 
-- Oxygenation: If no arterial blood gas was done, we converted the lowest O2 saturation to PaO2 per the [EPIC II conversions](http://intensive.org/epic2/Documents/Estimation%20of%20PO2%20and%20FiO2.pdf) and assigned points based on PaO2 alone.
+- Oxygenation: If no arterial blood gas was done, we converted the lowest O2 saturation to PaO2 per the [EPIC II conversions](http://intensive.org/epic2/Documents/Estimation%20of%20PO2%20and%20FiO2.pdf) and assigned points based on PaO2 alone. O2 saturations below the lowest level included in the conversion table were assigned the lowest PaO2; O2 saturations of 100 were assigned the highest PaO2.
 - pH: If no arterial blood gas was done, we used the serum HCO3 conversions noted in the original reference.
 - Glasgow Coma Score: If no GCS was available, we assigned points for the APACHE using the lowest RASS on the day of ICU admission using the [Vasilevskis et al's](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/) point values for the SOFA.
 - All other components: If no values were available on a given day, we looked for a value on the closest day within the three full days after ICU admission. If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
 
-### SOFA (ICU admission + daily throughout intervention period)
+#### SOFA (ICU admission + daily throughout intervention period)
 
 - Respiratory: If P/F ratio was not available, we used the lowest S/F ratio, per [Pandharipande et al](https://www.ncbi.nlm.nih.gov/pubmed/19242333).
 - Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
 - Liver, coagulation, cardiovascular, renal: If no values were available on a given day, we looked for a value on the closest day within three full days of the missing value (after or before). If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
+
+### Time on Mechanical Ventilation
+
+During the course of the study, patients could be on invasive mechanical ventilation (MV), noninvasive positive pressure support (NIPPV), both, or neither. For our purposes, "time on MV" describes the number of days each patient was on *either* type of MV beginning at the time of randomization, **including** time between discontinuation of MV and reinitiation or death, if that time is less than 48 hours. (In other words, if a patient was extubated at 12pm and died at 3pm, those final three hours are included in the total time on MV.)
 
 ## Randomized vs Non-Randomized Patients
 
@@ -446,6 +474,81 @@ ptsummary_all_df %>%
 
 </details>
 
+### `r table_nums("inhosp_trt")`
+
+"Study period" indicates the 14 days including and following the day of randomization. All time-to-event descriptions (eg, ICU length of stay) begin at the time of randomization.
+
+```{r inhosp_trt}
+inhosp_vars <- c(
+  "ever_mv", "days_mv_exp", "mv_num", "int_num", "noninv_num",
+  "ever_mvlib", "daysto_mvlib_exp",
+  "sepsis", "stroke",
+  ## Insert drugs, SOI here
+  # amounts of benzos, opioids, propofol, dex, open label haldol and ziprasidone
+  # (overall and mean daily doses, days received)
+  # Mean, max SOFA
+  "ever_del_int", "del_int_exp", "ever_coma_int", "coma_int_exp",
+  "ever_delcoma_int", "delcoma_int_exp", "dcfd_int_all",
+  "icu_los", "icu_readmit_number", "hosp_los", "dc_status", "hospdis_loc"
+)
+
+## Create new dataset with variable labels, factors
+inhosp_desc_df <- ptsummary_rand_df %>%
+  mutate(
+    ever_mv = factor(
+      as.numeric(ever_mv), levels = 1:0, labels = c("Yes", "No")
+    ),
+    ever_mvlib = factor(
+      as.numeric(ever_mvlib), levels = 1:0, labels = c("Yes", "No")
+    ),
+    ever_del_int = factor(
+      as.numeric(ever_del_int), levels = 1:0, labels = c("Yes", "No")
+    ),
+    ever_coma_int = factor(
+      as.numeric(ever_coma_int), levels = 1:0, labels = c("Yes", "No")
+    ),
+    ever_delcoma_int = factor(
+      as.numeric(ever_delcoma_int), levels = 1:0, labels = c("Yes", "No")
+    )
+  )
+label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type)"
+label(inhosp_desc_df$days_mv_exp) <- "Days on mechanical ventilation"
+label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type)"
+label(inhosp_desc_df$int_num) <- "Number of intubations"
+label(inhosp_desc_df$noninv_num) <- "Times NIPPV initiated"
+label(inhosp_desc_df$ever_mvlib) <- "Ever successfully liberated from MV"
+label(inhosp_desc_df$daysto_mvlib_exp) <-
+  "Days to successful liberation from MV"
+label(inhosp_desc_df$sepsis) <-
+  "Met criteria for sepsis on or before Intervention Day 18"
+label(inhosp_desc_df$stroke) <- "Had a stroke during hospitalization"
+label(inhosp_desc_df$ever_del_int) <- "Experienced delirium during study period"
+label(inhosp_desc_df$del_int_exp) <- "Days of delirium during study period"
+label(inhosp_desc_df$ever_coma_int) <- "Experienced coma during study period"
+label(inhosp_desc_df$coma_int_exp) <- "Days of coma during study period"
+label(inhosp_desc_df$ever_delcoma_int) <-
+  "Experienced delirium and/or coma during study period"
+label(inhosp_desc_df$delcoma_int_exp) <-
+  "Days of delirium and/or coma during study period"
+label(inhosp_desc_df$dcfd_int_all) <-
+  "Delirium/coma-free days during study period"
+label(inhosp_desc_df$icu_los) <- "Total length of ICU stay (all admissions)"
+label(inhosp_desc_df$icu_readmit_number) <-
+  "Number of ICU readmissions during hospitalization"
+label(inhosp_desc_df$hosp_los) <- "Total length of hospitalization"
+label(inhosp_desc_df$dc_status) <- "Status at end of hospitalization"
+label(inhosp_desc_df$hospdis_loc) <- "Hospital discharge location"
+
+html(
+  summaryM(
+    as.formula(paste(paste(inhosp_vars, collapse = "+"), "trt", sep = " ~ ")),
+    data = inhosp_desc_df,
+    overall = TRUE
+  ),
+  exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both"
+)
+
+```
 
 # Description of the Intervention
 
