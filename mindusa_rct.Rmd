@@ -452,46 +452,6 @@ ptstatus_df %>%
 
 Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
 
-## Notes on Variable Calculation
-
-### Severity of Illness{#soi}
-
-Due to the nature of clinical data collection, we had some missing values for APACHE II and SOFA components despite our coordinators' best efforts. We handled these missing values in the following ways:
-
-#### APACHE II (ICU admission only)
-
-- Oxygenation: If no arterial blood gas was done, we converted the lowest O2 saturation to PaO2 per the [EPIC II conversions](http://intensive.org/epic2/Documents/Estimation%20of%20PO2%20and%20FiO2.pdf) and assigned points based on PaO2 alone. O2 saturations below the lowest level included in the conversion table were assigned the lowest PaO2; O2 saturations of 100 were assigned the highest PaO2.
-- pH: If no arterial blood gas was done, we used the serum HCO3 conversions noted in the original reference.
-- Glasgow Coma Score: If no GCS was available, we assigned points for the APACHE using the lowest RASS on the day of ICU admission using the [Vasilevskis et al's](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/) point values for the SOFA.
-- All other components: If no values were available on a given day, we looked for a value on the closest day within the three full days after ICU admission. If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
-
-#### SOFA (ICU admission + daily throughout intervention period)
-
-- Substitutions for specific components:
-    - Respiratory: If P/F ratio was not available, we used the lowest S/F ratio, per [Pandharipande et al](https://www.ncbi.nlm.nih.gov/pubmed/19242333).
-    - Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
-- Missing data at ICU admission:
-
-    Using only data from ICU admission, there are `r sum(is.na(ptsummary_all_df$sofa_adm_only))` consented patients and  `r sum(is.na(ptsummary_rand_df$sofa_adm_only))` randomized patients missing at least one SOFA component score. For these patients' missing components, we imputed the next available value within the following two calendar days. If none was available, we assumed a normal value (0 points). (This could happen either because there was no clinical reason to order labs, or because the patient was not consented within three days of ICU admission and thus no study data was collected in that period.)
-    
-- Missing data during the intervention period:
-    - We were unable to calculate SOFA scores using raw data on `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period (randomization + 13 days). *(Missingness is much higher after the official intervention/post-intervention periods, when patients were no longer being actively followed for daily data collection. However, in this analysis we are only concerned about the official 14-day study period.)*
-    - If the data required to calculate a given component was unavailable, we imputed the closest non-missing component score before *or* after the missing day, up to two full days away (missing day +/-2 days). If data was available X days both before *and* after the missing day, we prioritized past over future values.
-    - If, after this imputation, values are still missing, we assume that no available data indicates no clinical reason to suspect organ dysfunction and therefore impute a normal value for that component. Again, this applies to `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period.
-        
-### Medications
-
-- **Benzodiazepines** include midazolam, lorazepam, and/or diazepam. Doses are expressed in midazolam equivalents.
-- **Opioids** include fentanyl, morphine, and/or hydromorphone. Doses are expressed in fentanyl equivalents.
-- **Antipsychotics** include open-label haloperidol, open-label ziprasidone, quetiapine, aripiprazole, olanzapine (including in combination with fluoxetine), and/or risperidone. Doses are expressed in haloperidol equivalents.
-- All conversion formulas can be found in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ZGfxAmTFxGgfzjwE0trrpKEn_21QDwCSGJIv-E5kiE4/edit?usp=sharing).
-
-### Mechanical Ventilation
-
-During the course of the study, patients could be on invasive mechanical ventilation (MV), noninvasive positive pressure support (NIPPV), both, or neither. For our purposes, "time on MV" describes the number of days each patient was on *either* type of MV beginning at the time of randomization, **including** time between discontinuation of MV and reinitiation or death, if that time is less than 48 hours. (In other words, if a patient was extubated at 12pm and died at 3pm, those final three hours are included in the total time on MV.)
-
-"Liberation from mechanical ventilation" indicates the first discontinuation of either type of MV which was followed by at least 48 hours alive without reinitiation of MV.
-
 ## Randomized vs Non-Randomized Patients
 
 Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
@@ -608,7 +568,7 @@ inhosp_vars <- c(
   paste("antipsyc", medsum_vars, sep = "_"),
   "sofa_imp_max_int", "sofa_imp_min_int", "sofa_imp_mean_int",
   "ever_del_int", "del_int_exp", "ever_coma_int", "coma_int_exp",
-  "ever_delcoma_int", "delcoma_int_exp", "dcfd_int_all",
+  "ever_delcoma_int", "delcoma_int_exp", "dcfd_int_nabad", "dcfd_int_nagood",
   "icu_los", "icu_readmit_number", "hosp_los", "dc_status", "hospdis_loc"
 )
 
@@ -694,7 +654,8 @@ label(inhosp_desc_df$ever_coma_int) <- "Experienced coma"
 label(inhosp_desc_df$coma_int_exp) <- "Days of coma"
 label(inhosp_desc_df$ever_delcoma_int) <- "Experienced delirium and/or coma"
 label(inhosp_desc_df$delcoma_int_exp) <- "Days of delirium and/or coma"
-label(inhosp_desc_df$dcfd_int_all) <- "Delirium/coma-free days"
+label(inhosp_desc_df$dcfd_int_nabad) <- "Delirium/coma-free days (missing = bad)"
+label(inhosp_desc_df$dcfd_int_nagood) <- "Delirium/coma-free days (missing = good)"
 label(inhosp_desc_df$icu_los) <- "Total length of ICU stay (entire hospitalization)"
 label(inhosp_desc_df$icu_readmit_number) <-
   "Number of ICU readmissions during hospitalization"
@@ -1104,4 +1065,55 @@ other_permdc_table %>%
 
 ```
 </details>
+
+# Notes on Variable Calculation
+
+## Severity of Illness{#soi}
+
+Due to the nature of clinical data collection, we had some missing values for APACHE II and SOFA components despite our coordinators' best efforts. We handled these missing values in the following ways:
+
+### APACHE II (ICU admission only)
+
+- Oxygenation: If no arterial blood gas was done, we converted the lowest O2 saturation to PaO2 per the [EPIC II conversions](http://intensive.org/epic2/Documents/Estimation%20of%20PO2%20and%20FiO2.pdf) and assigned points based on PaO2 alone. O2 saturations below the lowest level included in the conversion table were assigned the lowest PaO2; O2 saturations of 100 were assigned the highest PaO2.
+- pH: If no arterial blood gas was done, we used the serum HCO3 conversions noted in the original reference.
+- Glasgow Coma Score: If no GCS was available, we assigned points for the APACHE using the lowest RASS on the day of ICU admission using the [Vasilevskis et al's](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/) point values for the SOFA.
+- All other components: If no values were available on a given day, we looked for a value on the closest day within the three full days after ICU admission. If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
+
+### SOFA (ICU admission + daily throughout intervention period)
+
+- Substitutions for specific components:
+    - Respiratory: If P/F ratio was not available, we used the lowest S/F ratio, per [Pandharipande et al](https://www.ncbi.nlm.nih.gov/pubmed/19242333).
+    - Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
+- Missing data at ICU admission:
+
+    Using only data from ICU admission, there are `r sum(is.na(ptsummary_all_df$sofa_adm_only))` consented patients and  `r sum(is.na(ptsummary_rand_df$sofa_adm_only))` randomized patients missing at least one SOFA component score. For these patients' missing components, we imputed the next available value within the following two calendar days. If none was available, we assumed a normal value (0 points). (This could happen either because there was no clinical reason to order labs, or because the patient was not consented within three days of ICU admission and thus no study data was collected in that period.)
+    
+- Missing data during the intervention period:
+    - We were unable to calculate SOFA scores using raw data on `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period (randomization + 13 days). *(Missingness is much higher after the official intervention/post-intervention periods, when patients were no longer being actively followed for daily data collection. However, in this analysis we are only concerned about the official 14-day study period.)*
+    - If the data required to calculate a given component was unavailable, we imputed the closest non-missing component score before *or* after the missing day, up to two full days away (missing day +/-2 days). If data was available X days both before *and* after the missing day, we prioritized past over future values.
+    - If, after this imputation, values are still missing, we assume that no available data indicates no clinical reason to suspect organ dysfunction and therefore impute a normal value for that component. Again, this applies to `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period.
+        
+## Medications
+
+- **Benzodiazepines** include midazolam, lorazepam, and/or diazepam. Doses are expressed in midazolam equivalents.
+- **Opioids** include fentanyl, morphine, and/or hydromorphone. Doses are expressed in fentanyl equivalents.
+- **Antipsychotics** include open-label haloperidol, open-label ziprasidone, quetiapine, aripiprazole, olanzapine (including in combination with fluoxetine), and/or risperidone. Doses are expressed in haloperidol equivalents.
+- All conversion formulas can be found in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ZGfxAmTFxGgfzjwE0trrpKEn_21QDwCSGJIv-E5kiE4/edit?usp=sharing).
+
+## Mechanical Ventilation
+
+During the course of the study, patients could be on invasive mechanical ventilation (MV), noninvasive positive pressure support (NIPPV), both, or neither. For our purposes, "time on MV" describes the number of days each patient was on *either* type of MV beginning at the time of randomization, **including** time between discontinuation of MV and reinitiation or death, if that time is less than 48 hours. (In other words, if a patient was extubated at 12pm and died at 3pm, those final three hours are included in the total time on MV.)
+
+"Liberation from mechanical ventilation" indicates the first discontinuation of either type of MV which was followed by at least 48 hours alive without reinitiation of MV.
+
+## Delirium/Coma-Free Days
+
+This primary outcome variable is calculated over the 14 days including and immediately following randomization. It is defined as days alive and without brain dysfunction.
+
+We currently have `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status))` in-hospital patient-days during the intervention period which do not have enough CAM and/or RASS information to reliably determine mental status. In addition, we have `r sum(is.na(subset(daily_int_df, study_status == "Withdrawn" & study_day < 14)$mental_status))` in-hospital days where the patient had withdrawn from the study and was not assessed.
+
+Therefore, we calculate DCFDs two ways:
+
+1. **Primary**: Assume all missing days are "bad" (have delirium, coma or death)
+2. **Secondary**: Assume all missing days are "good" (alive without brain dysfunction)
 
