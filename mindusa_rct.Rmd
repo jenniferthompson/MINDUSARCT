@@ -23,6 +23,7 @@ suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(captioner))
 suppressPackageStartupMessages(library(rms))
+suppressPackageStartupMessages(library(ggthemr)) ## Github only; cttobin/ggthemr
 
 ## Hmisc setup for nicely printing summaryM output
 mu <- markupSpecs$html
@@ -78,6 +79,67 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
     ...
   )
 }
+
+## -- ggplot palette/custom theme ----------------------------------------------
+## Picked colors from/inspired by Flatly theme
+palette_colors <- c(
+  "dred"    = "#EA513B",
+  "dgreen"  = "#00BE9D",
+  "dblue"   = "#2595D6",
+  "dyellow" = "#F89B2F",
+  "lred"    = "#EF7A69",
+  "lgreen"  = "#00F1C7",
+  "lblue"   = "#4EAAE0",
+  "lyellow" = "#FAB360",
+  "dgray"   = "#2E3F4F",
+  "lgray"   = "#92A3A3"
+)
+
+## Use ggthemr to define the full palette
+mindusa_palette <- ggthemr::define_palette(
+  swatch = as.character(palette_colors),
+  gradient = c(
+    lower = "#F8CD2F",
+    upper = as.character(palette_colors["dblue"]))
+)
+
+## Set ggplot2 theme options directly
+mindusa_theme <- function(base_size = 13){
+  theme_bw(base_size = base_size, base_family = "Lato") +
+    theme(
+      text = element_text(colour = as.character(palette_colors["dgray"])),
+      plot.title = element_text(face = "bold"),
+      plot.caption = element_text(face = "italic"),
+      panel.grid.major = element_line(colour = "#E7E9E9"),
+      panel.grid.minor = element_line(colour = "#F4F5F5"),
+      legend.position = "bottom",
+      legend.direction = "horizontal",
+      strip.text = element_text(
+        face = "bold", colour = as.character(palette_colors["dgray"])
+      ),
+      strip.background = element_rect(
+        colour = as.character(palette_colors["dgray"]), fill = "#B9C3C4"
+      )
+    )
+}
+
+## Set final palette, theme
+ggthemr(mindusa_palette)
+theme_set(mindusa_theme())
+
+# ## Test it out
+# ggplot(data = iris, aes(x = Sepal.Length)) +
+#   facet_wrap(~ Species) +
+#   geom_histogram(aes(fill = Species), binwidth = 1) +
+#   labs(
+#     title = "This is a test plot",
+#     subtitle = "With iris data.",
+#     caption = "Everyone loves iris data."
+#   )
+
+# ggplot(data = iris, aes(x = Sepal.Length, y = Sepal.Width)) +
+#   geom_point(aes(colour = Petal.Length)) +
+#   labs(title = "Testing out continuous scale")
 
 ```
 
