@@ -693,7 +693,7 @@ rand_sums <- randtable_df %>%
 ## Summarize continuous variables
 rand_cont <- randtable_df %>%
   summarise_at(
-    vars(num_drug_days, num_drug_doses, mean_drug_daily),
+    vars(hrs_random_drug, num_drug_days, num_drug_doses, mean_drug_daily),
     funs(q25, q50, q75, "mean" = mean_na, "sd" = sd_na)
   )
 
@@ -724,6 +724,10 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
     npct_wd = get_npct(wd_inhosp, randomized),
     npct_elig = get_npct(elig_fu, randomized),
 
+    hrs_random_drug = describe_cont(
+      hrs_random_drug_q50, hrs_random_drug_q25, hrs_random_drug_q75,
+      hrs_random_drug_mean, hrs_random_drug_sd
+    ),
     drug_days = describe_cont(
       num_drug_days_q50, num_drug_days_q25, num_drug_days_q75,
       num_drug_days_mean, num_drug_days_sd
@@ -737,7 +741,7 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       mean_drug_daily_mean, mean_drug_daily_sd
     )
   ) %>%
-  select(trt, randomized, npct_studydrug, drug_days, drug_doses,
+  select(trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
          mean_drug_daily, npct_held, matches("^npct\\_held\\_"), npct_permdc,
          matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig) %>%
   gather(key = table_row, value = table_string, -trt) %>%
@@ -746,20 +750,22 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
     sort_order = case_when(
       table_row == "randomized" ~ 1,
       table_row == "npct_studydrug" ~ 2,
-      table_row == "drug_days" ~ 3,
-      table_row == "drug_doses" ~ 4,
-      table_row == "mean_drug_daily" ~ 5,
-      table_row == "npct_held" ~ 6,
-      table_row == "npct_permdc" ~ 7,
-      table_row == "npct_died" ~ 8,
-      table_row == "npct_wd" ~ 9,
-      table_row == "npct_elig" ~ 10,
-      str_detect(table_row, "^npct\\_held\\_") ~ 11,
-      str_detect(table_row, "^npct\\_permdc\\_") ~ 12,
-      TRUE ~ 13),
+      table_row == "hrs_random_drug" ~ 3,
+      table_row == "drug_days" ~ 4,
+      table_row == "drug_doses" ~ 5,
+      table_row == "mean_drug_daily" ~ 6,
+      table_row == "npct_held" ~ 7,
+      table_row == "npct_permdc" ~ 8,
+      table_row == "npct_died" ~ 9,
+      table_row == "npct_wd" ~ 10,
+      table_row == "npct_elig" ~ 11,
+      str_detect(table_row, "^npct\\_held\\_") ~ 12,
+      str_detect(table_row, "^npct\\_permdc\\_") ~ 13,
+      TRUE ~ 14),
     table_row = case_when(
       table_row == "randomized"              ~ "Randomized",
       table_row == "npct_studydrug"          ~ "Received >=1 dose study drug",
+      table_row == "hrs_random_drug"         ~ "Hours between randomization and first dose given",
       table_row == "drug_days"               ~ "Days received study drug",
       table_row == "drug_doses"              ~ "Doses of study drug",
       table_row == "mean_drug_daily"         ~ "Mean daily dose of study drug (mL)",
