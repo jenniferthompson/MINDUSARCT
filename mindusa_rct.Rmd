@@ -24,7 +24,12 @@ suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(captioner))
 suppressPackageStartupMessages(library(rms))
 
+## Hmisc setup for nicely printing summaryM output
+mu <- markupSpecs$html
+
 ## Helper functions
+factor_tf <-
+  function(x){ factor(as.numeric(x), levels = 1:0, labels = c("Yes", "No")) }
 format_comma <- partial(format, big.mark = ",")
 sum_na <- partial(sum, na.rm = TRUE)
 q25 <- partial(quantile, probs = 0.25, na.rm = TRUE)
@@ -46,6 +51,18 @@ describe_cont <- function(
     rndformat(v_q75, digits = dig_iqr),
     rndformat(v_mean, digits = dig_msd),
     rndformat(v_sd, digits = dig_msd)
+  )
+}
+
+## Wrapper with my preferred options for printing summaryM objects
+my_html <- function(sMobj, caption){
+  html(
+    sMobj,
+    exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both",
+    prmsd = TRUE, brmsd = TRUE, middle.bold = TRUE,
+    ## These options don't seem to be working.
+    msdsize = mu$smaller2, outer.size = mu$smaller2, rowsep = TRUE,
+    caption = caption
   )
 }
 
@@ -87,7 +104,7 @@ table_nums(
 )
 table_nums(
   name = "inhosp_trt",
-  caption = "Hospitalization Characteristics by Treatment Group"
+  caption = "Intervention Period Characteristics by Treatment Group"
 )
 table_nums(
   name = "intervention_pt", caption = "Description of Intervention by Patient"
@@ -129,7 +146,7 @@ rand_pts <- rand_df %>% pull(id)
 ## consented and not excluded
 ptsummary_all_df <- left_join(ptstatus_df, admission_df, by = "id") %>%
   filter(consented & !excluded_ever) %>%
-  select(id, study_site, protocol, excluded_later, inc_month:cv_sofa_adm_f)
+  select(-(screened:exc_other))
 
 ## Want to do a lot with all randomized patients
 ptsummary_rand_df <- ptsummary_all_df %>%
@@ -139,21 +156,23 @@ ptsummary_rand_df <- ptsummary_all_df %>%
 ## -- Combine related datasets -------------------------------------------------
 ## One record per randomized patient
 ptsummary_rand_df <- reduce(
-  list(ptsummary_rand_df, datestrack_df, padsummary_df, ptdrug_df),
+  list(
+    ptsummary_rand_df, datestrack_df, padsummary_df, dailysummary_df, ptdrug_df
+  ),
   left_join,
   by = "id"
 )
 
 ## One record per day in the hospital
 daily_all_df <- reduce(
-  list(allptevents_df, paddaily_df),
+  list(allptevents_df, paddaily_df, dailydata_df),
   left_join,
   by = c("id", "redcap_event_name")
 )
 
 ## One record per day after randomization, including post-discharge/death
 daily_int_df <- reduce(
-  list(randptevents_df, paddaily_df),
+  list(randptevents_df, paddaily_df, dailydata_df),
   left_join,
   by = c("id", "redcap_event_name")
 )
@@ -386,19 +405,38 @@ Due to the nature of clinical data collection, we had some missing values for AP
 
 #### SOFA (ICU admission + daily throughout intervention period)
 
-- Respiratory: If P/F ratio was not available, we used the lowest S/F ratio, per [Pandharipande et al](https://www.ncbi.nlm.nih.gov/pubmed/19242333).
-- Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
-- Liver, coagulation, cardiovascular, renal: If no values were available on a given day, we looked for a value on the closest day within three full days of the missing value (after or before). If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
+- Substitutions for specific components:
+    - Respiratory: If P/F ratio was not available, we used the lowest S/F ratio, per [Pandharipande et al](https://www.ncbi.nlm.nih.gov/pubmed/19242333).
+    - Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
+- Missing data at ICU admission:
 
-### Time on Mechanical Ventilation
+    Using only data from ICU admission, there are `r sum(is.na(ptsummary_all_df$sofa_adm_only))` consented patients and  `r sum(is.na(ptsummary_rand_df$sofa_adm_only))` randomized patients missing at least one SOFA component score. For these patients' missing components, we imputed the next available value within the following two calendar days. If none was available, we assumed a normal value (0 points). (This could happen either because there was no clinical reason to order labs, or because the patient was not consented within three days of ICU admission and thus no study data was collected in that period.)
+    
+- Missing data during the intervention period:
+    - We were unable to calculate SOFA scores using raw data on `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period (randomization + 13 days). *(Missingness is much higher after the official intervention/post-intervention periods, when patients were no longer being actively followed for daily data collection. However, in this analysis we are only concerned about the official 14-day study period.)*
+    - If the data required to calculate a given component was unavailable, we imputed the closest non-missing component score before *or* after the missing day, up to two full days away (missing day +/-2 days). If data was available X days both before *and* after the missing day, we prioritized past over future values.
+    - If, after this imputation, values are still missing, we assume that no available data indicates no clinical reason to suspect organ dysfunction and therefore impute a normal value for that component. Again, this applies to `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period.
+        
+### Medications
+
+- **Benzodiazepines** include midazolam, lorazepam, and/or diazepam. Doses are expressed in midazolam equivalents.
+- **Opioids** include fentanyl, morphine, and/or hydromorphone. Doses are expressed in fentanyl equivalents.
+- **Antipsychotics** include open-label haloperidol, open-label ziprasidone, quetiapine, aripiprazole, olanzapine (including in combination with fluoxetine), and/or risperidone. Doses are expressed in haloperidol equivalents.
+- All conversion formulas can be found in [this spreadsheet](https://docs.google.com/spreadsheets/d/1ZGfxAmTFxGgfzjwE0trrpKEn_21QDwCSGJIv-E5kiE4/edit?usp=sharing).
+
+### Mechanical Ventilation
 
 During the course of the study, patients could be on invasive mechanical ventilation (MV), noninvasive positive pressure support (NIPPV), both, or neither. For our purposes, "time on MV" describes the number of days each patient was on *either* type of MV beginning at the time of randomization, **including** time between discontinuation of MV and reinitiation or death, if that time is less than 48 hours. (In other words, if a patient was extubated at 12pm and died at 3pm, those final three hours are included in the total time on MV.)
+
+"Liberation from mechanical ventilation" indicates the first discontinuation of either type of MV which was followed by at least 48 hours alive without reinitiation of MV.
 
 ## Randomized vs Non-Randomized Patients
 
 Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
 
 ### `r table_nums("baseline_all")`
+
+**Note on the AUDIT:** This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
 
 ```{r baseline_all}
 ## Do things to make the table pretty: Factor version of rand. indicator, labels
@@ -429,6 +467,13 @@ label(ptsummary_all_df2$insurance) <- "Insurance"
 label(ptsummary_all_df2$bmi) <- "BMI"
 label(ptsummary_all_df2$home_antipsyc) <- "On antipsychotics prior to admission"
 label(ptsummary_all_df2$charlson_total) <- "Charlson Comorbidities Index"
+label(ptsummary_all_df2$iqcode_total_ph) <- "IQCODE total score"
+label(ptsummary_all_df2$adl_total_ph) <- "Katz Activities of Daily Living total score"
+label(ptsummary_all_df2$faq_total_ph) <- "Functional Activities Questionnaire total score"
+label(ptsummary_all_df2$audit_total_ph_complete) <-
+  "AUDIT total score; incomplete questions considered missing"
+label(ptsummary_all_df2$audit_total_ph_partial) <-
+  "AUDIT total score; incomplete questions considered normal"
 label(ptsummary_all_df2$frailty_f) <- "CSHA Clinical Frailty Score"
 label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
 label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission"
@@ -436,12 +481,14 @@ label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
 label(ptsummary_all_df2$apache_adm) <- "APACHE II at ICU admission"
 
 ## Formula we'll use for both demographic/admission tables
-admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + apache_adm + sofa_adm + cv_sofa_adm_f"
+admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + apache_adm + sofa_adm + cv_sofa_adm_f"
 
-html(summaryM(as.formula(paste(admit_formula_lhs, "randomized_f", sep = " ~ ")),
-              data = ptsummary_all_df2,
-              overall = TRUE),
-     exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both")
+my_html(
+  summaryM(as.formula(paste(admit_formula_lhs, "randomized_f", sep = " ~ ")),
+           data = ptsummary_all_df2,
+           overall = TRUE),
+  caption = "Demographic & ICU Admission Characteristics of Consented Patients"
+)
 
 ```
 
@@ -452,9 +499,11 @@ The following tables describe demographic and ICU admission characteristics (`r 
 ### `r table_nums("baseline_trt")`
 
 ```{r baseline_trt}
-html(summaryM(as.formula(paste(admit_formula_lhs, "trt", sep = " ~ ")),
-              data = subset(ptsummary_all_df2, randomized)),
-     exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both")
+my_html(
+  summaryM(as.formula(paste(admit_formula_lhs, "trt", sep = " ~ ")),
+           data = subset(ptsummary_all_df2, randomized)),
+  caption = "Demographic & ICU Admission Characteristics of Randomized Patients"
+)
 
 ```
 
@@ -476,17 +525,26 @@ ptsummary_all_df %>%
 
 ### `r table_nums("inhosp_trt")`
 
-"Study period" indicates the 14 days including and following the day of randomization. All time-to-event descriptions (eg, ICU length of stay) begin at the time of randomization.
+Unless otherwise specified, quantities in this table reflect the 14 days including and following randomization (the "study period"). Additional notes:
+
+- "Liberation from mechanical ventilation" variables apply only to patients who were on MV when randomized, or were placed on MV within the 24 hours following randomization.
+- All time-to-event descriptions (eg, ICU length of stay) begin at the time of randomization and go through the entire hospitalization (even if the patient remained hospitalized after the intervention period).
 
 ```{r inhosp_trt}
+## Which variables do we want for *all* drugs?
+medsum_vars <- c("ever_int", "days_exp_int", "total_exp_int", "mean_exp_int")
+
 inhosp_vars <- c(
   "ever_mv", "days_mv_exp", "mv_num", "int_num", "noninv_num",
-  "ever_mvlib", "daysto_mvlib_exp",
+  "on_mv_rand24", "ever_mvlib_rand24", "daysto_mvlib_exp",
   "sepsis", "stroke",
-  ## Insert drugs, SOI here
-  # amounts of benzos, opioids, propofol, dex, open label haldol and ziprasidone
-  # (overall and mean daily doses, days received)
-  # Mean, max SOFA
+  paste("benzo", medsum_vars, sep = "_"),
+  paste("opioid", medsum_vars, sep = "_"),
+  paste("propofol", medsum_vars, sep = "_"),
+  paste("halop", medsum_vars, sep = "_"),
+  paste("zipras", medsum_vars, sep = "_"),
+  paste("antipsyc", medsum_vars, sep = "_"),
+  "sofa_imp_max_int", "sofa_imp_min_int", "sofa_imp_mean_int",
   "ever_del_int", "del_int_exp", "ever_coma_int", "coma_int_exp",
   "ever_delcoma_int", "delcoma_int_exp", "dcfd_int_all",
   "icu_los", "icu_readmit_number", "hosp_los", "dc_status", "hospdis_loc"
@@ -495,44 +553,87 @@ inhosp_vars <- c(
 ## Create new dataset with variable labels, factors
 inhosp_desc_df <- ptsummary_rand_df %>%
   mutate(
-    ever_mv = factor(
-      as.numeric(ever_mv), levels = 1:0, labels = c("Yes", "No")
-    ),
-    ever_mvlib = factor(
-      as.numeric(ever_mvlib), levels = 1:0, labels = c("Yes", "No")
-    ),
-    ever_del_int = factor(
-      as.numeric(ever_del_int), levels = 1:0, labels = c("Yes", "No")
-    ),
-    ever_coma_int = factor(
-      as.numeric(ever_coma_int), levels = 1:0, labels = c("Yes", "No")
-    ),
-    ever_delcoma_int = factor(
-      as.numeric(ever_delcoma_int), levels = 1:0, labels = c("Yes", "No")
-    )
+    ever_mv = factor_tf(ever_mv),
+    on_mv_rand24 = factor_tf(on_mv_rand24),
+    ever_mvlib_rand24 = factor_tf(ever_mvlib_rand24),
+    benzo_ever_int = factor_tf(benzo_ever_int),
+    opioid_ever_int = factor_tf(opioid_ever_int),
+    propofol_ever_int = factor_tf(propofol_ever_int),
+    dex_ever_int = factor_tf(dex_ever_int),
+    halop_ever_int = factor_tf(halop_ever_int),
+    zipras_ever_int = factor_tf(zipras_ever_int),
+    antipsyc_ever_int = factor_tf(antipsyc_ever_int),
+    ever_del_int = factor_tf(ever_del_int),
+    ever_coma_int = factor_tf(ever_coma_int),
+    ever_delcoma_int = factor_tf(ever_delcoma_int)
   )
 label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type)"
 label(inhosp_desc_df$days_mv_exp) <- "Days on mechanical ventilation"
 label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type)"
 label(inhosp_desc_df$int_num) <- "Number of intubations"
 label(inhosp_desc_df$noninv_num) <- "Times NIPPV initiated"
-label(inhosp_desc_df$ever_mvlib) <- "Ever successfully liberated from MV"
+label(inhosp_desc_df$on_mv_rand24) <- "On MV at or within 24h of randomization"
+label(inhosp_desc_df$ever_mvlib_rand24) <-
+  "Ever successfully liberated from MV at randomization"
 label(inhosp_desc_df$daysto_mvlib_exp) <-
   "Days to successful liberation from MV"
 label(inhosp_desc_df$sepsis) <-
   "Met criteria for sepsis on or before Intervention Day 18"
 label(inhosp_desc_df$stroke) <- "Had a stroke during hospitalization"
-label(inhosp_desc_df$ever_del_int) <- "Experienced delirium during study period"
-label(inhosp_desc_df$del_int_exp) <- "Days of delirium during study period"
-label(inhosp_desc_df$ever_coma_int) <- "Experienced coma during study period"
-label(inhosp_desc_df$coma_int_exp) <- "Days of coma during study period"
-label(inhosp_desc_df$ever_delcoma_int) <-
-  "Experienced delirium and/or coma during study period"
-label(inhosp_desc_df$delcoma_int_exp) <-
-  "Days of delirium and/or coma during study period"
-label(inhosp_desc_df$dcfd_int_all) <-
-  "Delirium/coma-free days during study period"
-label(inhosp_desc_df$icu_los) <- "Total length of ICU stay (all admissions)"
+label(inhosp_desc_df$benzo_ever_int) <- "Received benzodiazepines"
+label(inhosp_desc_df$benzo_days_exp_int) <-
+  "Days received benzodiazepines, if at all"
+label(inhosp_desc_df$benzo_total_exp_int) <-
+  "Total dose of benzodiazepines, if any"
+label(inhosp_desc_df$benzo_mean_exp_int) <-
+  "Mean daily dose of benzodiazepines on days received"
+label(inhosp_desc_df$opioid_ever_int) <- "Received opioids"
+label(inhosp_desc_df$opioid_days_exp_int) <- "Days received opioids, if at all"
+label(inhosp_desc_df$opioid_total_exp_int) <- "Total dose of opioids, if any"
+label(inhosp_desc_df$opioid_mean_exp_int) <-
+  "Mean daily dose of opioids on days received"
+label(inhosp_desc_df$propofol_ever_int) <- "Received propofol"
+label(inhosp_desc_df$propofol_days_exp_int) <- "Days received propofol, if at all"
+label(inhosp_desc_df$propofol_total_exp_int) <- "Total dose of propofol, if any"
+label(inhosp_desc_df$propofol_mean_exp_int) <-
+  "Mean daily dose of propofol on days received"
+label(inhosp_desc_df$dex_ever_int) <- "Received dexmedetomidine"
+label(inhosp_desc_df$dex_days_exp_int) <- "Days received dexmedetomidine, if at all"
+label(inhosp_desc_df$dex_total_exp_int) <- "Total dose of dexmedetomidine, if any"
+label(inhosp_desc_df$dex_mean_exp_int) <-
+  "Mean daily dose of dexmedetomidine on days received"
+label(inhosp_desc_df$halop_ever_int) <- "Received open-label haloperidol"
+label(inhosp_desc_df$halop_days_exp_int) <-
+  "Days received open-label haloperidol, if at all"
+label(inhosp_desc_df$halop_total_exp_int) <-
+  "Total dose of open-label haloperidol, if any"
+label(inhosp_desc_df$halop_mean_exp_int) <-
+  "Mean daily dose of open-label haloperidol on days received"
+label(inhosp_desc_df$zipras_ever_int) <- "Received open-label ziprasidone"
+label(inhosp_desc_df$zipras_days_exp_int) <-
+  "Days received open-label ziprasidone, if at all"
+label(inhosp_desc_df$zipras_total_exp_int) <-
+  "Total dose of open-label ziprasidone, if any"
+label(inhosp_desc_df$zipras_mean_exp_int) <-
+  "Mean daily dose of open-label ziprasidone on days received"
+label(inhosp_desc_df$antipsyc_ever_int) <- "Received open-label antipsychotics"
+label(inhosp_desc_df$antipsyc_days_exp_int) <-
+  "Days received open-label antipsychotics, if at all"
+label(inhosp_desc_df$antipsyc_total_exp_int) <-
+  "Total dose of open-label antipsychotics, if any"
+label(inhosp_desc_df$antipsyc_mean_exp_int) <-
+  "Mean daily dose of open-label antipsychotics on days received"
+label(inhosp_desc_df$sofa_imp_max_int) <- "Highest daily SOFA"
+label(inhosp_desc_df$sofa_imp_min_int) <- "Lowest daily SOFA"
+label(inhosp_desc_df$sofa_imp_mean_int) <- "Mean daily SOFA"
+label(inhosp_desc_df$ever_del_int) <- "Experienced delirium"
+label(inhosp_desc_df$del_int_exp) <- "Days of delirium"
+label(inhosp_desc_df$ever_coma_int) <- "Experienced coma"
+label(inhosp_desc_df$coma_int_exp) <- "Days of coma"
+label(inhosp_desc_df$ever_delcoma_int) <- "Experienced delirium and/or coma"
+label(inhosp_desc_df$delcoma_int_exp) <- "Days of delirium and/or coma"
+label(inhosp_desc_df$dcfd_int_all) <- "Delirium/coma-free days"
+label(inhosp_desc_df$icu_los) <- "Total length of ICU stay (entire hospitalization)"
 label(inhosp_desc_df$icu_readmit_number) <-
   "Number of ICU readmissions during hospitalization"
 label(inhosp_desc_df$hosp_los) <- "Total length of hospitalization"
@@ -545,7 +646,10 @@ html(
     data = inhosp_desc_df,
     overall = TRUE
   ),
-  exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both"
+  exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both",
+  prmsd = TRUE, brmsd = TRUE, msdsize = mu$smaller2,
+  middle.bold = TRUE, outer.size = mu$smaller2, rowsep = TRUE,
+  caption = "Description of Intervention Period among Randomized Patients"
 )
 
 ```
