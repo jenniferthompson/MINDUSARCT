@@ -19,11 +19,17 @@ suppressPackageStartupMessages(library(knitr))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(forcats))
 suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(glue))
 suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(captioner))
 suppressPackageStartupMessages(library(rms))
+suppressPackageStartupMessages(library(naniar))
+suppressPackageStartupMessages(library(sparkline))
 suppressPackageStartupMessages(library(ggthemr)) ## Github only; cttobin/ggthemr
+suppressPackageStartupMessages(library(JTHelpers))
+  ## Github only; jenniferthompson/JTHelpers
 
 ## Hmisc setup for nicely printing summaryM output
 mu <- markupSpecs$html
@@ -81,17 +87,32 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
 }
 
 ## -- ggplot palette/custom theme ----------------------------------------------
-## Picked colors from/inspired by Flatly theme
+# ## Picked colors from/inspired by Flatly theme
+# palette_colors <- c(
+#   "dred"    = "#EA513B",
+#   "dgreen"  = "#00BE9D",
+#   "dblue"   = "#2595D6",
+#   "dyellow" = "#F89B2F",
+#   "lred"    = "#EF7A69",
+#   "lgreen"  = "#00F1C7",
+#   "lblue"   = "#4EAAE0",
+#   "lyellow" = "#FAB360",
+#   "dgray"   = "#2E3F4F",
+#   "lgray"   = "#92A3A3"
+# )
+
+## Started with Flatly theme colors, moved to some I liked better
 palette_colors <- c(
-  "dred"    = "#EA513B",
-  "dgreen"  = "#00BE9D",
-  "dblue"   = "#2595D6",
+  "dpurple" = "#242249",
+  "dred"    = "#B40F20",
+  "dgray"   = "#2E3F4F",
+  "dgreen"  = "#74A089",
+  "dblue"   = "#1D77AB",
   "dyellow" = "#F89B2F",
   "lred"    = "#EF7A69",
   "lgreen"  = "#00F1C7",
   "lblue"   = "#4EAAE0",
   "lyellow" = "#FAB360",
-  "dgray"   = "#2E3F4F",
   "lgray"   = "#92A3A3"
 )
 
@@ -136,7 +157,7 @@ theme_set(mindusa_theme())
 #     subtitle = "With iris data.",
 #     caption = "Everyone loves iris data."
 #   )
-
+# 
 # ggplot(data = iris, aes(x = Sepal.Length, y = Sepal.Width)) +
 #   geom_point(aes(colour = Petal.Length)) +
 #   labs(title = "Testing out continuous scale")
@@ -184,6 +205,13 @@ table_nums(
   caption = "Reasons for Study Drug Discontinuation due to 'Other'"
 )
 
+table_nums('package_info', caption = "Software Details")
+
+fig_nums(
+  name = "dcfds_unadj",
+  caption = "Delirium/Coma-Free Days by Treatment Group"
+)
+
 ```
 
 ```{r data_setup, results = "hide"}
@@ -199,7 +227,7 @@ load("analysisdata/rct.Rdata")
 rand_df <- ptstatus_df %>%
   filter(randomized) %>%
   left_join(trt_df, by = "id") %>%
-  select(id, trt)
+  dplyr::select(id, trt)
 
 ## Vector of IDs for all randomized patients
 rand_pts <- rand_df %>% pull(id)
@@ -208,18 +236,18 @@ rand_pts <- rand_df %>% pull(id)
 ## consented and not excluded
 ptsummary_all_df <- left_join(ptstatus_df, admission_df, by = "id") %>%
   filter(consented & !excluded_ever) %>%
-  select(-(screened:exc_other))
+  dplyr::select(-(screened:exc_other))
 
 ## Want to do a lot with all randomized patients
-ptsummary_rand_df <- ptsummary_all_df %>%
+ptsummary_df <- ptsummary_all_df %>%
   filter(randomized) %>%
   left_join(rand_df)
 
 ## -- Combine related datasets -------------------------------------------------
 ## One record per randomized patient
-ptsummary_rand_df <- reduce(
+ptsummary_df <- reduce(
   list(
-    ptsummary_rand_df, datestrack_df, padsummary_df, dailysummary_df, ptdrug_df
+    ptsummary_df, datestrack_df, padsummary_df, dailysummary_df, ptdrug_df
   ),
   left_join,
   by = "id"
@@ -243,9 +271,11 @@ daily_int_df <- reduce(
 
 # Screening, Consent, and Randomization
 
+<hr>
+
 Because this trial aims to describe the association between antipsychotics and treatment of delirium (rather than prevention), patients were required to be delirious prior to being randomized to study drug. In order to treat delirium immediately upon it being observed, however, patients (or their surrogates) were consented as soon as they met study inclusion criteria and were found not to meet exclusion criteria.
 
-Upon consent, patients could be randomized any time in the following five days, provided no exclusions were met within that time, the patient remained in the ICU, and they did eventually become delirious. Patients are considered "disqualified" if they left the ICU or the study (via discharge, death, or withdrawal) prior to experiencing delirium, or never experienced delirium in the five days following consent.
+Upon consent, patients could be randomized any time in the following five days, provided: no exclusions were met within that time; the patient remained in the ICU; and they did eventually become delirious. Patients are considered "disqualified" if they left the ICU or the study (via discharge, death, or withdrawal) prior to experiencing delirium, or never experienced delirium in the five days following consent.
 
 ```{r prep_screen_table}
 ## -- Create a data frame with rows = various categories of patients -----------
@@ -265,7 +295,7 @@ screen_ns <- ptstatus_df %>%
     dq_diedwd = ifelse(!disqualified, NA, dq_reason == "Died/withdrew before delirium")
   ) %>%
   ## Select the categories we want
-  select(screened, excluded_imm, approached, refused, consented, excluded_later,
+  dplyr::select(screened, excluded_imm, approached, refused, consented, excluded_later,
          disqualified, randomized, dq_nodel, dq_icudc, dq_diedwd,
          matches("^rand\\_")) %>%
   summarize_all(sum, na.rm = TRUE)
@@ -309,11 +339,11 @@ screen_table <- screen_ns %>%
     npct = ifelse(is.na(pctpts), format_comma(npts),
                   sprintf("%s (%s%%)", format_comma(npts), pctpts))
   ) %>%
-  select(status_label, npct)
+  dplyr::select(status_label, npct)
 
 ## When did screening take place? Find first and last month
 screening_months <- ptstatus_df %>%
-  select(screened, exc_month, exc_year, enroll_month, enroll_year) %>%
+  dplyr::select(screened, exc_month, exc_year, enroll_month, enroll_year) %>%
   mutate(screen_month = ifelse(!is.na(exc_month), exc_month, enroll_month),
          screen_year = ifelse(!is.na(exc_year), exc_year, enroll_year)) %>%
   filter(screened & !is.na(screen_month)) %>%
@@ -343,7 +373,7 @@ screen_table %>%
 
 ```
 
-Patients could have none, one, or two of the listed organ failures present at randomization; it is not necessarily expected that percentages add up to 100%.
+Patients could have none, one, or two of the listed organ failures present at randomization; percentages will not add up to 100%.
 
 ### `r table_nums("exclusions")`
 
@@ -364,7 +394,7 @@ exclusion_rsns <- paste0(
 
 exc_table <- ptstatus_df %>%
   ## Select only exclusion indicators (overall + specific exclusions)
-  select(id, matches("^excluded\\_"), one_of(exclusion_rsns)) %>%
+  dplyr::select(id, matches("^excluded\\_"), one_of(exclusion_rsns)) %>%
   
   ## Reshape to long format: one row per "time" of exclusion (ever, screening,
   ##  after consent)
@@ -404,7 +434,7 @@ exc_table <- ptstatus_df %>%
       TRUE ~ "Other exclusion"
     )
   ) %>%
-  select(exclusion, when, npct) %>%
+  dplyr::select(exclusion, when, npct) %>%
   spread(key = when, value = npct) %>%
   arrange(desc(as.numeric(gsub(",", "", gsub(" \\([0-9]+\\%\\)$", "", ever)))))
 
@@ -440,7 +470,7 @@ To save space, reasons for "other" exclusions are collapsed. Click on `Details` 
 ```{r exc_other_table}
 ptstatus_df %>%
   filter(exc_99_other) %>%
-  select(exc_other) %>%
+  dplyr::select(exc_other) %>%
   kable(format = "html", col.names = c("Explanation for 'other' exclusion"), align = c("l")) %>%
   mykablestyle
 
@@ -449,6 +479,8 @@ ptstatus_df %>%
 </details>
 
 # Descriptions of the Cohorts
+
+<hr>
 
 Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
 
@@ -537,7 +569,7 @@ To save space, reasons for "other" ICU admission among randomized patients are c
 ```{r icursn_other_table}
 ptsummary_all_df %>%
   filter(randomized & icu_rsn == "Other") %>%
-  select(icu_rsn_other) %>%
+  dplyr::select(icu_rsn_other) %>%
   kable(format = "html", col.names = c("Explanation for 'other' ICU admission reason"), align = c("l")) %>%
   mykablestyle
 
@@ -573,7 +605,7 @@ inhosp_vars <- c(
 )
 
 ## Create new dataset with variable labels, factors
-inhosp_desc_df <- ptsummary_rand_df %>%
+inhosp_desc_df <- ptsummary_df %>%
   mutate(
     ever_mv = factor_tf(ever_mv),
     on_mv_rand24 = factor_tf(on_mv_rand24),
@@ -679,7 +711,9 @@ html(
 
 # Description of the Intervention
 
-Once randomized, patients could receive study drug for treatment of delirium for up to 14 days, up to twice per day (with a third dose occasionally permitted in rare cases). Study drug could be held temporarily, either for delirium resolution or for other reasons, or permanently discontinued. `r table_nums("intervention_pt", display = "cite")` describes randomization, receipt of study drug, reasons for study drug hold or discontinuation, and status at the end of hospitalization for each of the three treatment groups. `r table_nums("intervention_dose", display = "cite")` describes all opportunities to receive study drug dose.
+<hr>
+
+Once randomized, patients could receive study drug for treatment of delirium for up to 14 days, up to twice per day (with a third dose in rare cases). Study drug could be held temporarily, either for delirium resolution or for other reasons, or permanently discontinued. `r table_nums("intervention_pt", display = "cite")` describes randomization, receipt of study drug, reasons for study drug hold or discontinuation, and status at the end of hospitalization for each of the three treatment groups. `r table_nums("intervention_dose", display = "cite")` describes all opportunities to receive study drug dose.
 
 In both tables, quantities are represented as either `N (%)` or as `median [25th, 75th percentiles]`, followed by `mean +/- standard deviation`.
 
@@ -696,7 +730,7 @@ Among patients with study drug temporarily held, the most common reasons were ov
 ```{r prep_rand_table}
 randtable_df <- rand_df %>%
   left_join(
-    select(ptstatus_df, id, randomized, died_inhosp, wd_inhosp, elig_fu),
+    dplyr::select(ptstatus_df, id, randomized, died_inhosp, wd_inhosp, elig_fu),
     by = "id"
   ) %>%
   ## Add study drug info
@@ -764,7 +798,7 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       mean_drug_daily_mean, mean_drug_daily_sd
     )
   ) %>%
-  select(trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
+  dplyr::select(trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
          mean_drug_daily, npct_held, matches("^npct\\_held\\_"), npct_permdc,
          matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig) %>%
   gather(key = table_row, value = table_string, -trt) %>%
@@ -816,7 +850,7 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       TRUE ~ "")
   ) %>%
   arrange(sort_order) %>%
-  select(-sort_order)
+  dplyr::select(-sort_order)
 
 ```
 
@@ -930,7 +964,7 @@ dose_table <- doses_df %>%
     funs(get_npct(., denom = doses_trt))
   ) %>%
   ## Transpose to one row per descriptor, with a column for each treatment group
-  select(trt, doses_trt, doses_given:doses_permdc, type_initial:amt_200,
+  dplyr::select(trt, doses_trt, doses_given:doses_permdc, type_initial:amt_200,
          desc_preqtc, held_qtc:held_other, rass_0:rass_5,
          permdc_nms:permdc_other) %>%
   gather(key = table_row, value = dose_value, -trt) %>%
@@ -1013,7 +1047,7 @@ dose_table <- doses_df %>%
     )
   ) %>%
   arrange(sort_order) %>%
-  select(-sort_order)
+  dplyr::select(-sort_order)
 
 ```
 
@@ -1036,11 +1070,11 @@ Explanations for study drug held (`r table_nums("dose_held_other", display = "ci
 ```{r prep_dose_other}
 other_held_table <- doses_df %>%
   filter(held_other) %>%
-  select(held_other_exp)
+  dplyr::select(held_other_exp)
 
 other_permdc_table <- doses_df %>%
   filter(permdc_other) %>%
-  select(permdc_other_exp)
+  dplyr::select(permdc_other_exp)
 
 ```
 
@@ -1066,7 +1100,337 @@ other_permdc_table %>%
 ```
 </details>
 
-# Notes on Variable Calculation
+# Exploration of Missing Data
+
+We examine all outcomes and covariates to determine how much missing data is present. In short, we have no missingness for our outcomes and very little for our covariates; therefore, we will perform complete case analysis only. Expand the `Details` section below for further information.
+
+```{r model_prep}
+## -- Create dataset with only outcomes, covariates ----------------------------
+## Create TTE outcome variables: If patient was not [X], gets hosp_los
+ptsummary_df <- ptsummary_df %>%
+  mutate(
+    tte_icudis = ifelse(!is.na(daysto_icudis), daysto_icudis, hosp_los)
+  )
+
+outcome_vars <- c(
+  "dcfd_int_nabad", "dcfd_int_nagood",
+  "del_int_all", "coma_int_all",
+  "death", "hosp_los",             ## Time to death
+  "icudis", "tte_icudis",          ## Time to final ICU discharge
+  "ever_mvlib", "daysto_mvlib_all" ## Time to liberation from MV
+)
+
+covariate_vars <- c(
+  "age_consent", "charlson_total", "iqcode_total_ph", "frailty",
+  "sofa_mod_imp_rand", "rass_rand", "trt"
+)
+
+model_df <- ptsummary_df %>%
+  dplyr::select(
+    id, study_site, on_mv_rand24, one_of(outcome_vars), one_of(covariate_vars)
+  ) %>%
+  ## TEMPORARILY TILL RAMEELA AND I DISCUSS: Create absolute value of RASS
+  mutate(abs_rass_rand = abs(rass_rand))
+
+## Set datadist to this data.frame
+dd <- datadist(model_df)
+options(datadist = "dd")
+
+## -- Create sparklines to show distributions of IQCODE, RASS ------------------
+barht_iqcode <- model_df %>%
+  mutate(iqcode_cuts = cut(iqcode_total_ph, breaks = seq(0, 5, 0.25))) %>%
+  group_by(iqcode_cuts) %>%
+  summarise(count = n())
+
+spark_iqcode <- sparkline(
+  barht_iqcode$count,
+  type = 'bar',
+  barColor = as.character(palette_colors["dred"]),
+  elementId = "spark-iqcode",
+  width = 50
+)
+
+barht_rass <- model_df %>%
+  group_by(abs_rass_rand) %>%
+  summarise(count = n())
+
+spark_rass <- sparkline(
+  barht_rass$count,
+  type = 'bar',
+  barColor = as.character(palette_colors["dred"]),
+  elementId = "spark-rass",
+  width = 35
+)
+
+## -- Create model RHS for multiple uses ---------------------------------------
+## How many knots for continuous covariates? Which ones are continuous?
+rcsknots <- 3
+cont_covars <- c("age_consent", "charlson_total", "frailty", "sofa_mod_imp_rand")
+notcont_covars <- setdiff(
+  gsub("rass_rand", "abs_rass_rand", covariate_vars, fixed = TRUE), cont_covars
+)
+
+mod_rhs <- map_chr(cont_covars, ~ sprintf("rcs(%s, %s)", ., rcsknots)) %>%
+  c(., notcont_covars) %>%
+  paste(collapse = " + ")
+
+```
+
+<details>
+
+```{r missing_allpts}
+gg_miss_var(
+  model_df %>%
+    dplyr::select(-id, -on_mv_rand24, -ever_mvlib, -daysto_mvlib_all),
+  show_pct = TRUE
+) +
+  scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
+  geom_hline(yintercept = 5, colour = "gray50", linetype = "dotted") +
+  labs(
+    title = "Outcome and Covariate Missingness for Most Models",
+    subtitle = "Includes all randomized patients"
+  )
+
+```
+
+IQCODE and RASS at randomization have the most missingness, but not in ways that appear to be related. In the plot below, red indicates missingness, blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
+
+```{r iqcode_rass_miss}
+ggplot(data = model_df) +
+  geom_miss_point(aes(x = iqcode_total_ph, y = abs_rass_rand),
+                  position = position_jitter(height = 0.2), alpha = 0.5)
+
+```
+
+```{r missing_mvpts}
+gg_miss_var(
+  model_df %>%
+    filter(on_mv_rand24) %>%
+    dplyr::select(ever_mvlib, daysto_mvlib_all, one_of(covariate_vars)),
+  show_pct = TRUE
+) +
+  scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
+  geom_hline(yintercept = 5, colour = "gray50", linetype = "dotted") +
+  labs(
+    title = "Outcome and Covariate Missingness for Liberation from MV Model",
+    subtitle = "Includes all patients on MV at or within 24h of randomization"
+  )
+
+```
+
+</details>
+
+# Primary Outcome: Delirium/Coma-Free Days
+
+<hr>
+
+To handle days with missing CAM and/or RASS, we calculated delirium/coma-free days (DCFDs) two ways, but use the most conservative approach (missing assumed to be worst outcome) as our primary outcome. Please see [Notes on Variable Calculation](#varcalc) for further rationale.
+
+## Unadjusted Analysis
+
+Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. As seen below, the distribution of DCFDs is quite non-normal; thus a nonparametric test provides more power and reliability.)* As detailed [below](#dcfds), we address days which are missing CAM and/or RASS in two different ways, assuming the worst (primary analysis) and assuming the best (secondary).
+
+```{r dcfds_unadj, results = "hide"}
+## -- Test DCFDs by treatment group --------------------------------------------
+dcfd_kw_nabad <- with(ptsummary_df, kruskal.test(x = dcfd_int_nabad, g = trt))
+dcfd_kw_nagood <- with(ptsummary_df, kruskal.test(x = dcfd_int_nagood, g = trt))
+
+## For caption: How many days are missing status which should have it?
+miss_mental <- sum(
+  is.na(
+    subset(
+      daily_int_df,
+      study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
+    )$mental_status
+  )
+)
+days_inhosp <- nrow(
+  subset(
+    daily_int_df,
+    study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
+  )
+)
+days_all <- nrow(subset(daily_int_df, study_day < 14))
+
+## -- Plot DCFDs by treatment group; include K-W results as subtitle -----------
+## Plan: Plot both DCFD variables at once using facet_grid();
+##   need some data management first
+dcfd_df <- ptsummary_df %>%
+  dplyr::select(id, trt, dcfd_int_nabad, dcfd_int_nagood) %>%
+  gather(key = dcfd_type, value = dcfd_value, dcfd_int_nabad:dcfd_int_nagood) %>%
+  mutate(
+    dcfd_type = factor(
+      ifelse(dcfd_type == "dcfd_int_nabad", 1, 2),
+      levels = 1:2,
+      labels = c("Missing days\nassigned worst value",
+                 "Missing days\nassigned best value")
+    )
+  )
+
+dcfd_plot <- ggplot(data = dcfd_df, aes(x = dcfd_value)) +
+  facet_grid(dcfd_type ~ trt) +
+  geom_histogram(aes(fill = trt), binwidth = 1) +
+  scale_x_continuous(name = "Delirium/Coma-Free Days", breaks = seq(0, 14, 2)) +
+  scale_y_continuous(name = "Patient Count") +
+  theme(legend.position = "none",
+        plot.caption = element_text(size = 10)) +
+  labs(
+    title = "Delirium/Coma-Free Days by Treatment Group",
+    subtitle = glue(
+      "Kruskal-Wallis tests:\n",
+      "Missing days assigned worst value: X2, ",
+      "{rndformat(dcfd_kw_nabad$statistic, 2)}; ",
+      "df, {dcfd_kw_nabad$parameter}; ",
+      "P, {formatp(dcfd_kw_nabad$p.value)}",
+      "\nMissing days assigned best value: X2, ",
+      "{rndformat(dcfd_kw_nagood$statistic, 2)}; ",
+      "df, {dcfd_kw_nagood$parameter}; ",
+      "P, {formatp(dcfd_kw_nagood$p.value)}"
+    ),
+    caption = glue(
+      "\n\nAmong in-hospital days, {rndformat((miss_mental / days_inhosp) * 100, 0)}% had insufficient CAM and/or RASS available to determine mental status;\namong all days in the intervention period (including those after death or discharge), this percentage is {rndformat((miss_mental / days_all) * 100, 0)}%."
+    )
+  )
+
+```
+
+### `r fig_nums("dcfds_unadj")`
+
+```{r print_dcfds_unadj, fig.width = 7.5, fig.height = 7.5}
+dcfd_plot
+
+```
+
+## Adjusted Analysis
+
+Using the same two versions of DCFDs, we perform multivariable regression analyses adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision. Due to the distribution of DCFDs, we use proportional odds logistic regression, which is robust to non-normal distributions and works well for ordered outcomes.
+
+### Covariates{#covariates}
+
+Covariates for all multivariable regression models include:
+
+- Age at study consent
+- Preexisting CI, via the IQCODE (performed via patient or surrogate questionnaire)
+- Preexisting frailty, via the CSHA Clinical Frailty Score
+- Preexisting comorbidities, via the Charlson Comorbidities Index
+- SOFA on the day of randomization, excluding the CNS component
+- Level of arousal at randomization, via the RASS closest to the time of randomization
+
+Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distributions of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) and the absolute value of RASS at randomization `r spark_rass` have too little variability to allow this flexibility.
+
+In addition, we adjust variances using Huber-White sandwich estimation clustered by study site. This will help account for unmeasured variability and correlation among patients within a given site.
+
+### Model Fitting
+
+```{r dcfds_adj, results = "hide"}
+dcfd_mod_nabad <- lrm(
+  as.formula(paste("dcfd_int_nabad ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+dcfd_mod_nagood <- lrm(
+  as.formula(paste("dcfd_int_nagood ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+```
+
+### Model Assumptions
+
+We graphically check our assumption of proportional odds, paying particular attention to treatment group. Something may be amiss if Y axis values (estimated coefficient at various cutoffs of our outcome) change substantially across the X axis, particularly if the effect changes direction (noted by the dotted line at 0). For further discussion, please see Harrell's *Regression Modeling Strategies*, 2nd ed, section 13.3.
+
+<details>
+
+```{r dcfds_assume}
+JTHelpers::rms_po_assume(
+  dcfd_mod_nabad,
+  cuts = seq(1, 12, 1),
+  modelData = model_df
+) +
+  labs(title = "PO assumption for DCFDs, missing assigned worst value") +
+  theme(axis.text = element_text(size = 8))
+
+JTHelpers::rms_po_assume(
+  dcfd_mod_nagood,
+  cuts = seq(1, 12, 1),
+  modelData = model_df
+) +
+  labs(title = "PO assumption for DCFDs, missing assigned best value") +
+  theme(axis.text = element_text(size = 8))
+
+```
+
+</details>
+
+### Model Results
+
+We show the odds ratios for DCFDs by treatment group, using placebo as our reference. Odds ratios higher than 1 are favorable, indicating higher odds of more "good" days alive and free of brain dysfunction.
+
+STILL IN PROGRESS YOU GUYS, AND TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+```{r dcfd_results}
+## Wrapper for rms_calc_comparisons that adds outcome variable as a column
+## (Only tested on lrm fits)
+lrm_comparisons_addoutcome <- function(rmsObj, ...){
+  outcome <- gsub("()", "", rmsObj$sformula[2], fixed = TRUE)
+  rms_calc_comparisons(rmsObj, ...) %>%
+    mutate(outcome = outcome)
+}
+
+## -- Calculate odds ratios for both treatments vs placebo, both model fits ----
+## Result = tidy data frame we can plot! Hooray!
+dcfd_ors <- map_df(
+  list(dcfd_mod_nabad, dcfd_mod_nagood),
+  lrm_comparisons_addoutcome,
+  df = model_df, vname = "trt", refVal = "C"
+) %>%
+  mutate(
+    comp.c = fct_rev(factor(comp.c)),
+    outcome = case_when(
+      outcome == "dcfd_int_nabad" ~ "Worst value",
+      TRUE ~ "Best value"
+    )
+  ) %>%
+  ## Keep only one row for reference group
+  distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
+
+ggplot(data = dcfd_ors, aes(y = effect, x = comp.c, colour = outcome)) +
+  ## Fake row to set up order properly
+  geom_point(shape = NA) +
+  ## Reference line at 1 (no effect)
+  geom_hline(yintercept = 1, linetype = "solid",
+             colour = palette_colors["lgray"], size = 2) +
+  ## Plot a point for control group
+  geom_point(shape = 15, colour = "black", size = 3,
+             data = dcfd_ors %>% filter(comp.c == "C")) +
+  ## Add ORs, CIs for treatment groups vs control
+  geom_pointrange(aes(ymin = lcl, ymax = ucl),
+                  position = position_dodge(width = 0.35),
+                  shape = 16, size = 1,
+                  data = dcfd_ors %>% filter(comp.c != "C")) +
+  scale_colour_discrete(name = "Missing mental status assigned") +
+  labs(
+    y = "Odds Ratio (95% Confidence Interval)"
+  ) +
+  theme(
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank()
+  ) +
+  coord_flip()
+
+#### TO DO MONDAY
+## Flip factor order of best/worst
+## Add p-values
+
+```
+
+# Notes on Variable Calculation{#varcalc}
+
+<hr>
 
 ## Severity of Illness{#soi}
 
@@ -1086,7 +1450,7 @@ Due to the nature of clinical data collection, we had some missing values for AP
     - Central nervous system: If no GCS was available, we used the lowest RASS available that day, per [Vasilevskis et al](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/), method C.
 - Missing data at ICU admission:
 
-    Using only data from ICU admission, there are `r sum(is.na(ptsummary_all_df$sofa_adm_only))` consented patients and  `r sum(is.na(ptsummary_rand_df$sofa_adm_only))` randomized patients missing at least one SOFA component score. For these patients' missing components, we imputed the next available value within the following two calendar days. If none was available, we assumed a normal value (0 points). (This could happen either because there was no clinical reason to order labs, or because the patient was not consented within three days of ICU admission and thus no study data was collected in that period.)
+    Using only data from ICU admission, there are `r sum(is.na(ptsummary_all_df$sofa_adm_only))` consented patients and  `r sum(is.na(ptsummary_df$sofa_adm_only))` randomized patients missing at least one SOFA component score. For these patients' missing components, we imputed the next available value within the following two calendar days. If none was available, we assumed a normal value (0 points). (This could happen either because there was no clinical reason to order labs, or because the patient was not consented within three days of ICU admission and thus no study data was collected in that period.)
     
 - Missing data during the intervention period:
     - We were unable to calculate SOFA scores using raw data on `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$sofa_raw))` patient-days during the study period (randomization + 13 days). *(Missingness is much higher after the official intervention/post-intervention periods, when patients were no longer being actively followed for daily data collection. However, in this analysis we are only concerned about the official 14-day study period.)*
@@ -1106,7 +1470,7 @@ During the course of the study, patients could be on invasive mechanical ventila
 
 "Liberation from mechanical ventilation" indicates the first discontinuation of either type of MV which was followed by at least 48 hours alive without reinitiation of MV.
 
-## Delirium/Coma-Free Days
+## Delirium/Coma-Free Days{#dcfds}
 
 This primary outcome variable is calculated over the 14 days including and immediately following randomization. It is defined as days alive and without brain dysfunction.
 
@@ -1117,3 +1481,23 @@ Therefore, we calculate DCFDs two ways:
 1. **Primary**: Assume all missing days are "bad" (have delirium, coma or death)
 2. **Secondary**: Assume all missing days are "good" (alive without brain dysfunction)
 
+# Software Details
+
+---
+
+`r devtools::session_info()$platform$version` was used for all analyses. `r table_nums('package_info', display = 'cite')` shows all add-on packages loaded.
+
+<details>
+
+#### `r table_nums('package_info')`
+
+```{r technical, results = 'asis'}
+devtools::session_info()$packages %>%
+  kable(
+    format = "html",
+    col.names = c("Package", "*", "Version", "Date", "Source")
+  ) %>%
+  mykablestyle(stripes = TRUE)
+
+```
+</details>
