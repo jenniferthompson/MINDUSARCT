@@ -1320,6 +1320,24 @@ Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our
 
 In addition, we adjust variances using Huber-White sandwich estimation clustered by study site. This will help account for unmeasured variability and correlation among patients within a given site.
 
+### Redundancy Analysis
+
+To make sure none of our covariates completely explain any of the others (resulting in collinearity), we perform a redundancy analysis, detailed below. No covariates suggest evidence of too-high collinearity.
+
+<details>
+
+```{r redundancy, results = "markup"}
+Hmisc::redun(
+  ~ age_consent + charlson_total + frailty + sofa_mod_imp_rand +
+    I(iqcode_total_ph) + I(abs_rass_rand) + trt,
+  data = model_df,
+  nk = rcsknots
+)
+
+```
+
+</details>
+
 ### Model Fitting
 
 ```{r dcfds_adj, results = "hide"}
@@ -1370,9 +1388,9 @@ JTHelpers::rms_po_assume(
 
 We show the odds ratios for DCFDs by treatment group, using placebo as our reference. Odds ratios higher than 1 are favorable, indicating higher odds of more "good" days alive and free of brain dysfunction.
 
-STILL IN PROGRESS YOU GUYS, AND TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-```{r dcfd_results}
+```{r dcfd_results, fig.width = 3, fig.height = 3}
 ## Wrapper for rms_calc_comparisons that adds outcome variable as a column
 ## (Only tested on lrm fits)
 lrm_comparisons_addoutcome <- function(rmsObj, ...){
@@ -1390,9 +1408,14 @@ dcfd_ors <- map_df(
 ) %>%
   mutate(
     comp.c = fct_rev(factor(comp.c)),
-    outcome = case_when(
-      outcome == "dcfd_int_nabad" ~ "Worst value",
-      TRUE ~ "Best value"
+    outcome = factor(
+      case_when(
+        outcome == "dcfd_int_nabad" ~ 1,
+        TRUE                        ~ 0
+        ),
+      levels = 1:0,
+      labels = c(glue("Worst value\nP: {formatp(anova(dcfd_mod_nabad)['trt', 'P'])}"),
+                 glue("Best value\nP: {formatp(anova(dcfd_mod_nagood)['trt', 'P'])}"))
     )
   ) %>%
   ## Keep only one row for reference group
@@ -1405,26 +1428,24 @@ ggplot(data = dcfd_ors, aes(y = effect, x = comp.c, colour = outcome)) +
   geom_hline(yintercept = 1, linetype = "solid",
              colour = palette_colors["lgray"], size = 2) +
   ## Plot a point for control group
-  geom_point(shape = 15, colour = "black", size = 3,
+  geom_point(shape = 15, colour = "black", size = 4,
              data = dcfd_ors %>% filter(comp.c == "C")) +
   ## Add ORs, CIs for treatment groups vs control
   geom_pointrange(aes(ymin = lcl, ymax = ucl),
-                  position = position_dodge(width = 0.35),
+                  position = position_dodge(width = 0.5),
                   shape = 16, size = 1,
                   data = dcfd_ors %>% filter(comp.c != "C")) +
   scale_colour_discrete(name = "Missing mental status assigned") +
   labs(
-    y = "Odds Ratio (95% Confidence Interval)"
+    title = "Treatment Group vs Delirium/Coma-Free Days",
+    y = "Odds Ratio (95% Confidence Interval)",
+    caption = "\nAdjusted analysis using proportional odds logistic regression.\nP-values are for the effect of treatment vs DCFDs, adjusted for confounders."
   ) +
   theme(
     axis.ticks.y = element_blank(),
     axis.title.y = element_blank()
   ) +
   coord_flip()
-
-#### TO DO MONDAY
-## Flip factor order of best/worst
-## Add p-values
 
 ```
 
