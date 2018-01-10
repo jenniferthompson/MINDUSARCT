@@ -235,6 +235,10 @@ rand_pts <- rand_df %>% pull(id)
 ## Want to describe demographics, ICU admission characteristics for all patients
 ## consented and not excluded
 ptsummary_all_df <- left_join(ptstatus_df, admission_df, by = "id") %>%
+  left_join(
+    dplyr::select(dailysummary_df, id, sofa_imp_consent, cv_sofa_consent),
+    by = "id"
+  ) %>%
   filter(consented & !excluded_ever) %>%
   dplyr::select(-(screened:exc_other))
 
@@ -530,12 +534,14 @@ label(ptsummary_all_df2$audit_total_ph_partial) <-
   "AUDIT total score; incomplete questions considered normal"
 label(ptsummary_all_df2$frailty_f) <- "CSHA Clinical Frailty Score"
 label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
-label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission"
+label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission (imputed data)"
 label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
+label(ptsummary_all_df2$sofa_imp_consent) <- "SOFA on day of consent (imputed data)"
+label(ptsummary_all_df2$cv_sofa_consent) <- "Cardiovascular SOFA on day of consent"
 label(ptsummary_all_df2$apache_adm) <- "APACHE II at ICU admission"
 
 ## Formula we'll use for both demographic/admission tables
-admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + apache_adm + sofa_adm + cv_sofa_adm_f"
+admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + apache_adm + sofa_adm + cv_sofa_adm_f + sofa_imp_consent + cv_sofa_consent"
 
 my_html(
   summaryM(as.formula(paste(admit_formula_lhs, "randomized_f", sep = " ~ ")),
@@ -589,9 +595,9 @@ Unless otherwise specified, quantities in this table reflect the 14 days includi
 medsum_vars <- c("ever_int", "days_exp_int", "total_exp_int", "mean_exp_int")
 
 inhosp_vars <- c(
-  "ever_mv", "days_mv_exp", "mv_num", "int_num", "noninv_num",
-  "on_mv_rand24", "ever_mvlib_rand24", "daysto_mvlib_exp",
-  "sepsis", "stroke",
+  "sofa_imp_rand", "cv_sofa_rand", "ever_mv", "days_mv_exp", "mv_num",
+  "int_num", "noninv_num", "on_mv_rand24", "ever_mvlib_rand24",
+  "daysto_mvlib_exp", "sepsis", "stroke",
   paste("benzo", medsum_vars, sep = "_"),
   paste("opioid", medsum_vars, sep = "_"),
   paste("propofol", medsum_vars, sep = "_"),
@@ -621,6 +627,8 @@ inhosp_desc_df <- ptsummary_df %>%
     ever_coma_int = factor_tf(ever_coma_int),
     ever_delcoma_int = factor_tf(ever_delcoma_int)
   )
+label(inhosp_desc_df$sofa_imp_rand) <- "SOFA on day of randomization (imputed data)"
+label(inhosp_desc_df$cv_sofa_rand) <- "Cardiovascular SOFA on day of randomization"
 label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type)"
 label(inhosp_desc_df$days_mv_exp) <- "Days on mechanical ventilation"
 label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type)"
