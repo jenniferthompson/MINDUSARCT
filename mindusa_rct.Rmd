@@ -125,7 +125,8 @@ mindusa_palette <- ggthemr::define_palette(
 )
 
 ## Set ggplot2 theme options directly
-mindusa_theme <- function(base_size = 13){
+basetext_size <- 13
+mindusa_theme <- function(base_size = basetext_size){
   theme_bw(base_size = base_size, base_family = "Lato") +
     theme(
       text = element_text(colour = as.character(palette_colors["dgray"])),
@@ -606,7 +607,7 @@ inhosp_vars <- c(
   paste("antipsyc", medsum_vars, sep = "_"),
   "sofa_imp_max_int", "sofa_imp_min_int", "sofa_imp_mean_int",
   "ever_del_int", "del_int_exp", "ever_coma_int", "coma_int_exp",
-  "ever_delcoma_int", "delcoma_int_exp", "dcfd_int_nabad", "dcfd_int_nagood",
+  "ever_delcoma_int", "delcoma_int_exp", "dcfd_int",
   "icu_los", "icu_readmit_number", "hosp_los", "dc_status", "hospdis_loc"
 )
 
@@ -694,8 +695,7 @@ label(inhosp_desc_df$ever_coma_int) <- "Experienced coma"
 label(inhosp_desc_df$coma_int_exp) <- "Days of coma"
 label(inhosp_desc_df$ever_delcoma_int) <- "Experienced delirium and/or coma"
 label(inhosp_desc_df$delcoma_int_exp) <- "Days of delirium and/or coma"
-label(inhosp_desc_df$dcfd_int_nabad) <- "Delirium/coma-free days (missing = bad)"
-label(inhosp_desc_df$dcfd_int_nagood) <- "Delirium/coma-free days (missing = good)"
+label(inhosp_desc_df$dcfd_int) <- "Delirium/coma-free days (missing days imputed)"
 label(inhosp_desc_df$icu_los) <- "Total length of ICU stay (entire hospitalization)"
 label(inhosp_desc_df$icu_readmit_number) <-
   "Number of ICU readmissions during hospitalization"
@@ -1108,6 +1108,18 @@ other_permdc_table %>%
 ```
 </details>
 
+## Safety Outcomes
+
+We had three primary safety outcomes: neuroleptic malignant syndrome (NMS); Torsades de pointes (Torsades); and extrapyramidal symptoms (EPS). Incidence of each was minimal.
+
+### NMS
+
+During the entire hospitalization, `r ` patients ever experienced NMS, for a total of `r ` days. 
+
+### Torsades de Pointes
+
+### EPS
+
 # Exploration of Missing Data
 
 We examine all outcomes and covariates to determine how much missing data is present. In short, we have no missingness for our outcomes and very little for our covariates; therefore, we will perform complete case analysis only. Expand the `Details` section below for further information.
@@ -1121,8 +1133,7 @@ ptsummary_df <- ptsummary_df %>%
   )
 
 outcome_vars <- c(
-  "dcfd_int_nabad", "dcfd_int_nagood",
-  "del_int_all", "coma_int_all",
+  "dcfd_int", "del_int_all", "coma_int_all",
   "death", "hosp_los",             ## Time to death
   "icudis", "tte_icudis",          ## Time to final ICU discharge
   "ever_mvlib", "daysto_mvlib_all" ## Time to liberation from MV
@@ -1232,6 +1243,10 @@ gg_miss_var(
 
 <hr>
 
+## Note on Mental Status Data
+
+
+
 To handle days with missing CAM and/or RASS, we calculated delirium/coma-free days (DCFDs) two ways, but use the most conservative approach (missing assumed to be worst outcome) as our primary outcome. Please see [Notes on Variable Calculation](#varcalc) for further rationale.
 
 ## Unadjusted Analysis
@@ -1240,8 +1255,7 @@ Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any diffe
 
 ```{r dcfds_unadj, results = "hide"}
 ## -- Test DCFDs by treatment group --------------------------------------------
-dcfd_kw_nabad <- with(ptsummary_df, kruskal.test(x = dcfd_int_nabad, g = trt))
-dcfd_kw_nagood <- with(ptsummary_df, kruskal.test(x = dcfd_int_nagood, g = trt))
+dcfd_kw <- with(ptsummary_df, kruskal.test(x = dcfd_int, g = trt))
 
 ## For caption: How many days are missing status which should have it?
 miss_mental <- sum(
@@ -1249,7 +1263,7 @@ miss_mental <- sum(
     subset(
       daily_int_df,
       study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
-    )$mental_status
+    )$mental_status_raw
   )
 )
 days_inhosp <- nrow(
@@ -1261,22 +1275,8 @@ days_inhosp <- nrow(
 days_all <- nrow(subset(daily_int_df, study_day < 14))
 
 ## -- Plot DCFDs by treatment group; include K-W results as subtitle -----------
-## Plan: Plot both DCFD variables at once using facet_grid();
-##   need some data management first
-dcfd_df <- ptsummary_df %>%
-  dplyr::select(id, trt, dcfd_int_nabad, dcfd_int_nagood) %>%
-  gather(key = dcfd_type, value = dcfd_value, dcfd_int_nabad:dcfd_int_nagood) %>%
-  mutate(
-    dcfd_type = factor(
-      ifelse(dcfd_type == "dcfd_int_nabad", 1, 2),
-      levels = 1:2,
-      labels = c("Missing days\nassigned worst value",
-                 "Missing days\nassigned best value")
-    )
-  )
-
-dcfd_plot <- ggplot(data = dcfd_df, aes(x = dcfd_value)) +
-  facet_grid(dcfd_type ~ trt) +
+dcfd_plot <- ggplot(data = daily_int_df, aes(x = dcfd_int)) +
+  facet_wrap(~ trt, nrow = 1) +
   geom_histogram(aes(fill = trt), binwidth = 1) +
   scale_x_continuous(name = "Delirium/Coma-Free Days", breaks = seq(0, 14, 2)) +
   scale_y_continuous(name = "Patient Count") +
@@ -1285,15 +1285,10 @@ dcfd_plot <- ggplot(data = dcfd_df, aes(x = dcfd_value)) +
   labs(
     title = "Delirium/Coma-Free Days by Treatment Group",
     subtitle = glue(
-      "Kruskal-Wallis tests:\n",
-      "Missing days assigned worst value: X2, ",
-      "{rndformat(dcfd_kw_nabad$statistic, 2)}; ",
-      "df, {dcfd_kw_nabad$parameter}; ",
-      "P, {formatp(dcfd_kw_nabad$p.value)}",
-      "\nMissing days assigned best value: X2, ",
-      "{rndformat(dcfd_kw_nagood$statistic, 2)}; ",
-      "df, {dcfd_kw_nagood$parameter}; ",
-      "P, {formatp(dcfd_kw_nagood$p.value)}"
+      "Kruskal-Wallis test:\n",
+      "X2, {rndformat(dcfd_kw$statistic, 2)}; ",
+      "df, {dcfd_kw$parameter}; ",
+      "P, {formatp(dcfd_kw$p.value)}"
     ),
     caption = glue(
       "\n\nAmong in-hospital days, {rndformat((miss_mental / days_inhosp) * 100, 0)}% had insufficient CAM and/or RASS available to determine mental status;\namong all days in the intervention period (including those after death or discharge), this percentage is {rndformat((miss_mental / days_all) * 100, 0)}%."
@@ -1349,15 +1344,8 @@ Hmisc::redun(
 ### Model Fitting
 
 ```{r dcfds_adj, results = "hide"}
-dcfd_mod_nabad <- lrm(
-  as.formula(paste("dcfd_int_nabad ~", mod_rhs)),
-  data = model_df,
-  x = TRUE, y = TRUE
-) %>%
-  robcov(cluster = model_df$study_site)
-
-dcfd_mod_nagood <- lrm(
-  as.formula(paste("dcfd_int_nagood ~", mod_rhs)),
+dcfd_mod <- lrm(
+  as.formula(paste("dcfd_int ~", mod_rhs)),
   data = model_df,
   x = TRUE, y = TRUE
 ) %>%
@@ -1373,19 +1361,11 @@ We graphically check our assumption of proportional odds, paying particular atte
 
 ```{r dcfds_assume}
 JTHelpers::rms_po_assume(
-  dcfd_mod_nabad,
+  dcfd_mod,
   cuts = seq(1, 12, 1),
   modelData = model_df
 ) +
-  labs(title = "PO assumption for DCFDs, missing assigned worst value") +
-  theme(axis.text = element_text(size = 8))
-
-JTHelpers::rms_po_assume(
-  dcfd_mod_nagood,
-  cuts = seq(1, 12, 1),
-  modelData = model_df
-) +
-  labs(title = "PO assumption for DCFDs, missing assigned best value") +
+  labs(title = "PO assumption for DCFDs") +
   theme(axis.text = element_text(size = 8))
 
 ```
@@ -1398,7 +1378,7 @@ We show the odds ratios for DCFDs by treatment group, using placebo as our refer
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-```{r dcfd_results, fig.width = 3, fig.height = 3}
+```{r dcfd_results, fig.width = 5, fig.height = 5}
 ## Wrapper for rms_calc_comparisons that adds outcome variable as a column
 ## (Only tested on lrm fits)
 lrm_comparisons_addoutcome <- function(rmsObj, ...){
@@ -1410,22 +1390,11 @@ lrm_comparisons_addoutcome <- function(rmsObj, ...){
 ## -- Calculate odds ratios for both treatments vs placebo, both model fits ----
 ## Result = tidy data frame we can plot! Hooray!
 dcfd_ors <- map_df(
-  list(dcfd_mod_nabad, dcfd_mod_nagood),
+  list(dcfd_mod),
   lrm_comparisons_addoutcome,
   df = model_df, vname = "trt", refVal = "C"
 ) %>%
-  mutate(
-    comp.c = fct_rev(factor(comp.c)),
-    outcome = factor(
-      case_when(
-        outcome == "dcfd_int_nabad" ~ 1,
-        TRUE                        ~ 0
-        ),
-      levels = 1:0,
-      labels = c(glue("Worst value\nP: {formatp(anova(dcfd_mod_nabad)['trt', 'P'])}"),
-                 glue("Best value\nP: {formatp(anova(dcfd_mod_nagood)['trt', 'P'])}"))
-    )
-  ) %>%
+  mutate(comp.c = fct_rev(factor(comp.c))) %>%
   ## Keep only one row for reference group
   distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
 
@@ -1451,7 +1420,8 @@ ggplot(data = dcfd_ors, aes(y = effect, x = comp.c, colour = outcome)) +
   ) +
   theme(
     axis.ticks.y = element_blank(),
-    axis.title.y = element_blank()
+    axis.title.y = element_blank(),
+    plot.caption = element_text(size = basetext_size * 0.7)
   ) +
   coord_flip()
 
@@ -1503,12 +1473,31 @@ During the course of the study, patients could be on invasive mechanical ventila
 
 This primary outcome variable is calculated over the 14 days including and immediately following randomization. It is defined as days alive and without brain dysfunction.
 
-We currently have `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status))` in-hospital patient-days during the intervention period which do not have enough CAM and/or RASS information to reliably determine mental status. In addition, we have `r sum(is.na(subset(daily_int_df, study_status == "Withdrawn" & study_day < 14)$mental_status))` in-hospital days where the patient had withdrawn from the study and was not assessed.
+### Determining Mental Status Using CAM and RASS
 
-Therefore, we calculate DCFDs two ways:
+We determined mental status for a given *assessment* using the following criteria:
 
-1. **Primary**: Assume all missing days are "bad" (have delirium, coma or death)
-2. **Secondary**: Assume all missing days are "good" (alive without brain dysfunction)
+1. **Comatose**: RASS -4 or -5, **or** RASS missing and CAM Unable to Assess
+1. **Delirious**: RASS missing or >= -3, and CAM Positive
+1. **Normal**: RASS missing or >= -3, and CAM Negative
+
+Patients could have multiple assessments on a given study day. On a given *day*, a patient was considered delirious if any assessment was considered delirious; comatose if no assessments met criteria for delirium and at least one was considered comatose; and normal if no assessments met criteria for delirium or coma, and at least one was considered normal.
+
+### Handling Missing Data
+
+Among all consented patients, `r sum(is.na(daily_all_df$mental_status_raw))` (`r round(mean(is.na(daily_all_df$mental_status_raw)) * 100)`%) in-hospital patient-days have insufficient information to determine mental status (due to missing data or study withdrawal).
+
+Among randomized patients during the intervention period, `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw))` (`r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`%) of patient-days have missing mental status, again due either to missing data or study withdrawal.
+
+Mental status can change quickly; therefore simple imputation methods like last observation carried forward could be inaccurate. Since we are fortunate to have strong covariate data, we performed single imputation using polytomous logistic regression, including the following variables as covariates in the imputation.
+
+- **Baseline**: Age at consent; gender; BMI; education; level of proficiency in English; insurance; home antipsychotic use; Charlson comorbidities index; CSHA Clinical Frailty Score; APACHE II APS
+- **Daily**:
+    - Medications (clonazepam, dexmedetomidine, propofol, remifentanil, antipsychotics, benzodiazepines, opioids [IV and PO], antibiotics, anxiolytics, statins)
+    - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin)
+    - Any mental status data available the day of, the day before, and the day after the missing day
+
+All summary variables (delirium/coma-free days, delirium duration, and coma duration) are calculated using available and imputed mental status.
 
 # Software Details
 
