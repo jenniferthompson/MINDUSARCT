@@ -267,7 +267,11 @@ daily_all_df <- reduce(
 
 ## One record per day after randomization, including post-discharge/death
 daily_int_df <- reduce(
-  list(randptevents_df, paddaily_df, dailydata_df),
+  list(
+    randptevents_df %>% left_join(trt_df, by = "id"),
+    paddaily_df,
+    dailydata_df
+  ),
   left_join,
   by = c("id", "redcap_event_name")
 )
@@ -1126,17 +1130,11 @@ We examine all outcomes and covariates to determine how much missing data is pre
 
 ```{r model_prep}
 ## -- Create dataset with only outcomes, covariates ----------------------------
-## Create TTE outcome variables: If patient was not [X], gets hosp_los
-ptsummary_df <- ptsummary_df %>%
-  mutate(
-    tte_icudis = ifelse(!is.na(daysto_icudis), daysto_icudis, hosp_los)
-  )
-
 outcome_vars <- c(
   "dcfd_int", "del_int_all", "coma_int_all",
-  "death", "hosp_los",             ## Time to death
-  "icudis", "tte_icudis",          ## Time to final ICU discharge
-  "ever_mvlib", "daysto_mvlib_all" ## Time to liberation from MV
+  "tte_death_30", "event_death_30",   ## Time to death
+  "tte_icudis_30", "event_icudis_30", ## Time to final, successful ICU discharge
+  "tte_mvlib_30", "event_mvlib_30"    ## Time to liberation from MV
 )
 
 covariate_vars <- c(
@@ -1200,7 +1198,7 @@ mod_rhs <- map_chr(cont_covars, ~ sprintf("rcs(%s, %s)", ., rcsknots)) %>%
 ```{r missing_allpts}
 gg_miss_var(
   model_df %>%
-    dplyr::select(-id, -on_mv_rand24, -ever_mvlib, -daysto_mvlib_all),
+    dplyr::select(-id, -on_mv_rand24, -tte_mvlib_30, -event_mvlib_30),
   show_pct = TRUE
 ) +
   scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
@@ -1225,7 +1223,7 @@ ggplot(data = model_df) +
 gg_miss_var(
   model_df %>%
     filter(on_mv_rand24) %>%
-    dplyr::select(ever_mvlib, daysto_mvlib_all, one_of(covariate_vars)),
+    dplyr::select(event_mvlib_30, tte_mvlib_30, one_of(covariate_vars)),
   show_pct = TRUE
 ) +
   scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
@@ -1243,15 +1241,11 @@ gg_miss_var(
 
 <hr>
 
-## Note on Mental Status Data
-
-
-
-To handle days with missing CAM and/or RASS, we calculated delirium/coma-free days (DCFDs) two ways, but use the most conservative approach (missing assumed to be worst outcome) as our primary outcome. Please see [Notes on Variable Calculation](#varcalc) for further rationale.
+**Note**: We use single imputation to reduce bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the intervention period without sufficient RASS and/or CAM information to determine mental status. Please see [Notes on Variable Calculation](#dcfds) for further rationale.
 
 ## Unadjusted Analysis
 
-Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. As seen below, the distribution of DCFDs is quite non-normal; thus a nonparametric test provides more power and reliability.)* As detailed [below](#dcfds), we address days which are missing CAM and/or RASS in two different ways, assuming the worst (primary analysis) and assuming the best (secondary).
+Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. As seen below, the distribution of DCFDs is quite non-normal; thus a nonparametric test provides more power and reliability.)*
 
 ```{r dcfds_unadj, results = "hide"}
 ## -- Test DCFDs by treatment group --------------------------------------------
@@ -1275,7 +1269,7 @@ days_inhosp <- nrow(
 days_all <- nrow(subset(daily_int_df, study_day < 14))
 
 ## -- Plot DCFDs by treatment group; include K-W results as subtitle -----------
-dcfd_plot <- ggplot(data = daily_int_df, aes(x = dcfd_int)) +
+dcfd_plot <- ggplot(data = ptsummary_df, aes(x = dcfd_int)) +
   facet_wrap(~ trt, nrow = 1) +
   geom_histogram(aes(fill = trt), binwidth = 1) +
   scale_x_continuous(name = "Delirium/Coma-Free Days", breaks = seq(0, 14, 2)) +
