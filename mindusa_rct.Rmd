@@ -216,65 +216,9 @@ fig_nums(
 ```
 
 ```{r data_setup, results = "hide"}
-## -- General data prep: -------------------------------------------------------
-## - Combine one-record-per-pt datasets
-## - Restrict datasets to only consented/only randomized patients
-
 ## Analysis datasets are stored in an .Rdata file, originally created and stored
 ##  by create_rctdata.R in ../MINDUSADataMgmt.
 load("analysisdata/rct.Rdata")
-
-## Create data frame of all randomized patients + treatment assignment
-rand_df <- ptstatus_df %>%
-  filter(randomized) %>%
-  left_join(trt_df, by = "id") %>%
-  dplyr::select(id, trt)
-
-## Vector of IDs for all randomized patients
-rand_pts <- rand_df %>% pull(id)
-
-## Want to describe demographics, ICU admission characteristics for all patients
-## consented and not excluded
-ptsummary_all_df <- left_join(ptstatus_df, admission_df, by = "id") %>%
-  left_join(
-    dplyr::select(dailysummary_df, id, sofa_imp_consent, cv_sofa_consent),
-    by = "id"
-  ) %>%
-  filter(consented & !excluded_ever) %>%
-  dplyr::select(-(screened:exc_other))
-
-## Want to do a lot with all randomized patients
-ptsummary_df <- ptsummary_all_df %>%
-  filter(randomized) %>%
-  left_join(rand_df)
-
-## -- Combine related datasets -------------------------------------------------
-## One record per randomized patient
-ptsummary_df <- reduce(
-  list(
-    ptsummary_df, datestrack_df, padsummary_df, dailysummary_df, ptdrug_df
-  ),
-  left_join,
-  by = "id"
-)
-
-## One record per day in the hospital
-daily_all_df <- reduce(
-  list(allptevents_df, paddaily_df, dailydata_df),
-  left_join,
-  by = c("id", "redcap_event_name")
-)
-
-## One record per day after randomization, including post-discharge/death
-daily_int_df <- reduce(
-  list(
-    randptevents_df %>% left_join(trt_df, by = "id"),
-    paddaily_df,
-    dailydata_df
-  ),
-  left_join,
-  by = c("id", "redcap_event_name")
-)
 
 ```
 
@@ -1114,15 +1058,57 @@ other_permdc_table %>%
 
 ## Safety Outcomes
 
-We had three primary safety outcomes: neuroleptic malignant syndrome (NMS); Torsades de pointes (Torsades); and extrapyramidal symptoms (EPS). Incidence of each was minimal.
+Our three primary safety outcomes are neuroleptic malignant syndrome (NMS); Torsades de pointes (Torsades); and extrapyramidal symptoms (EPS). Incidence of each was minimal and is described below.
 
 ### NMS
 
-During the entire hospitalization, `r ` patients ever experienced NMS, for a total of `r ` days. 
+```{r nms}
+## How many patients experienced NMS at all? during intervention?
+n_rand_nms_ih <- sum_na(ptsummary_df$ever_nms_ih)
+n_rand_nms_int <- sum_na(ptsummary_df$ever_nms_int)
+
+## In an ideal, reproducible world, we'd code text to account for all plausible
+## scenarios, but we have a deadline and both the above are zero so we're just
+## going to go with that because that data will not change at this point.
+
+```
+
+No randomized patients ever experienced NMS during the study (during or outside the intervention phase).
 
 ### Torsades de Pointes
 
+During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced Torsades de pointes. Both instances were recorded as Serious Adverse Events; descriptions of both AEs are included below, with potentially identifying details redacted.
+
+```{r torsades, results = "hide"}
+torsades_df %>%
+  kable(
+    format = "html",
+    col.names = c("ID", "Trt", "Study Phase", "Serious?", "Description")
+  ) %>%
+  mykablestyle()
+
+```
+
 ### EPS
+
+To describe and determine the presence of extrapyramidal symptoms (EPS), we used a modified version of the [Simpson-Angus Score](http://onlinelibrary.wiley.com/doi/10.1111/j.1600-0447.1970.tb02066.x/epdf) which included elbow and wrist rigidity, glabellar tap, resting tremor, and salivation. Patients were considered to have an official diagnosis of EPS if at least three out of these five symptoms had a score of 3 or higher on a given day; patients whose glabellar tap reflex could not be assessed were assigned a symptom score of 0. Details for the `r sum_na(ptsummary_df$ever_eps_int)` randomized patients who met this criteria at least once during the intervention period are shown below.
+
+```{r eps}
+ptsummary_df %>%
+  filter(ever_eps_int) %>%
+  dplyr::select(
+    id, trt, days_eps_int, eps_score_mean_exp_int, ever_held_eps, times_held_eps
+  ) %>%
+  kable(
+    format = "html",
+    col.names = c(
+      "ID", "Trt", "Days met EPS criteria", "Overall EPS Score when Criteria Met",
+      "Study drug held for EPS?", "Doses held for EPS"
+    )
+  ) %>%
+  mykablestyle()
+
+```
 
 # Exploration of Missing Data
 
