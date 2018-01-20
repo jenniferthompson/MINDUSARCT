@@ -165,6 +165,261 @@ theme_set(mindusa_theme())
 
 ```
 
+```{r orm_functions}
+################################################################################
+## Functions in this chunk are written by Qi Liu in conjunction with Liu et al:
+## Liu Q, Shepherd BE, Li C, Harrell FE. Modeling continuous response variables
+##   using ordinal regression. Statistics in Medicine 2017; 36: 4316-4335.
+##
+## At the time of analysis, source code can be found at
+##   http://biostat.mc.vanderbilt.edu/wiki/pub/Main/ArchivedAnalyses/orm_code.r
+## My only changes are to formatting/white space.
+################################################################################
+
+##-- Estimate conditional mean and its standard error for orm model ------------
+mean.orm <- function(mod, new.data, se=TRUE){
+  if(is.null(mod$yunique)) {
+    stop("Need to set x=TRUE and y=TRUE for orm") 
+  } else{
+    order.y <- mod$yunique
+    n.alpha <- length(order.y)-1
+    xb <- as.matrix(new.data)%*%matrix(coef(mod)[colnames(new.data)])
+    m.alpha <- mod$coef[1:n.alpha]
+    lb <- t(outer(m.alpha, xb, "+")[,,1])
+    m.s <- mod$trans$cumprob(lb)
+    m.f <-
+      t(apply(m.s, 1, FUN = function(x) c(1,x[1:n.alpha]) - c(x[1:n.alpha], 0)))
+    m.mean <- apply(m.f, 1, FUN = function(x) sum(x*order.y))
+    
+    if(se){
+      if(mod$family == "logistic"){
+        mod$trans$deriv <- function(x) exp(-x)/(1+exp(-x))^2
+      }
+     
+      dmean.dalpha <-
+        t(apply(mod$trans$deriv(lb),
+                1,
+                FUN = function(x){
+                  x*(order.y[2:length(order.y)] - order.y[1:n.alpha])
+                }
+        ))
+      dmean.dbeta <- apply(dmean.dalpha, 1, sum)*as.matrix(new.data)
+      dmean.dtheta <- cbind(dmean.dalpha, dmean.dbeta)   
+      mean.var <-diag(dmean.dtheta%*%solve(mod$info.matrix)%*%t(dmean.dtheta))
+      mean.se <- sqrt(mean.var)   
+      result <- cbind(m.mean, mean.se)
+      ci <- t(apply(result,
+                    1,
+                    FUN = function(x){
+                      c(x[1]- qnorm(0.975)*x[2], x[1]+ qnorm(0.975)*x[2])
+                    }))
+      result <- cbind(result, ci)
+      colnames(result) <- c("est", "se", "lb", "ub")
+    } else{
+      result <- matrix(m.mean)
+      colnames(result) <- c("est")
+    }
+    
+    return(result)
+  } 
+}
+
+## -- Estimate conditional quantiles and confidence intervals for orm model ----
+quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
+  
+  quantile <- matrix(NA, nrow=dim(new.data)[1], ncol=length(probs))
+  order.y <- mod$yunique
+  #n.alpha <- length(order.y)-1
+  xb <- as.matrix(new.data)%*%matrix(coef(mod)[colnames(new.data)])
+  alpha <- mod$coef[1:(length(unique(order.y))-1)]
+  lb <- t(outer(alpha, xb, "+")[,,1])
+  m.cdf <- 1- mod$trans$cumprob(lb)
+  m.cdf <- cbind(0, m.cdf, 1)
+  for(i in 1:length(probs)){
+    try({
+      index.1 <-
+        apply(m.cdf, 1, FUN = function(x){ max(which(x <= probs[i]))[1]} )
+      index.2 <-
+        apply(m.cdf, 1, FUN = function(x){ min(which(x >= probs[i]))[1]} )
+      
+      index.y1 <- ifelse(index.1>length(order.y), Inf, order.y[index.1])
+      index.y2 <- ifelse(index.2>length(order.y), Inf, order.y[index.2])
+      
+      index.y1.cdf <-
+        ifelse(index.1 == 0, 0, m.cdf[cbind(1:dim(new.data)[1], index.1)])
+      
+      index.y2.cdf <- ifelse(index.2>length(order.y),
+                             1,
+                             m.cdf[cbind(1:dim(new.data)[1], index.2)])
+      
+      quantile[,i] <-
+        ifelse(
+          index.1 == index.2,
+          index.y1,
+          (index.y2-index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i]-index.y1.cdf) + index.y1)
+      quantile[, i] <-
+        ifelse(is.infinite(quantile[,i]), max(order.y), quantile[, i])
+    })
+  }
+  result <- quantile
+  
+  if(se){
+    if(mod$family == "logistic"){
+      mod$trans$deriv <- function(x) exp(-x)/(1+exp(-x))^2
+    }
+    
+    quantile.lb <- quantile.ub <-
+      matrix(NA, nrow = dim(new.data)[1], ncol = length(probs))
+    
+    lb.se <- matrix(NA, ncol = dim(lb)[2], nrow = dim(new.data)[1])
+    var <- as.matrix(solve(mod$info.matrix))
+    
+    for(i in 1:dim(lb)[2]){
+      var.i <- var[c(i, which(names(coef(mod)) %in% colnames(new.data))), 
+                   c(i, which(names(coef(mod)) %in% colnames(new.data)))]
+      
+      dcdf.dtheta <- cbind(-mod$trans$deriv(lb[,i]),  
+                           -mod$trans$deriv(lb[,i])*as.matrix(new.data) )
+      dlb.dtheta <- as.matrix(cbind(1, new.data))
+      lb.se[,i] <- sqrt(diag(dlb.dtheta%*%var.i%*% t(dlb.dtheta)))
+    }
+    
+    ci.lb <- sapply(
+      1:dim(lb)[2],
+      FUN = function(i){
+        1- mod$trans$cumprob(lb[, i] +qnorm(0.975)*lb.se[, i])
+      }
+    )
+    ci.ub <- sapply(
+      1:dim(lb)[2],
+      FUN = function(i) { 1- mod$trans$cumprob(lb[, i] -qnorm(0.975)*lb.se[, i])}
+    )
+    ci.lb <- matrix(ci.lb, nrow = dim(new.data)[1])
+    ci.ub <- matrix(ci.ub, nrow = dim(new.data)[1])
+    
+    ci.lb <- cbind(0, ci.lb, 1)
+    ci.ub <- cbind(0, ci.ub, 1)
+    
+    for(i in 1: length(probs)){
+      try({
+        index.1 <- apply(ci.lb, 1, FUN=function(x){ max(which(x<=probs[i]))[1]} )
+        index.2 <- apply(ci.lb, 1, FUN=function(x){ min(which(x>=probs[i]))[1]} )
+ 
+        index.y1 <- ifelse(index.1>length(order.y), Inf, order.y[index.1])
+        index.y2 <- ifelse(index.2>length(order.y),Inf,order.y[index.2])
+        
+        index.y1.cdf <- ifelse(index.1==0, 0, ci.lb[cbind(1:dim(new.data)[1], index.1)])
+        
+        index.y2.cdf <- ifelse(
+          index.2 > length(order.y), 1, ci.lb[cbind(1:dim(new.data)[1], index.2)]
+        )
+
+        quantile.lb[,i] <- ifelse(
+          index.1 == index.2,
+          index.y1,
+          (index.y2-index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i]-index.y1.cdf) + index.y1
+        )
+        quantile.lb[, i] <-
+          ifelse(is.infinite(quantile.lb[,i]), max(order.y), quantile.lb[, i])
+        
+        index.1 <- apply(ci.ub, 1, FUN=function(x){ max(which(x<=probs[i]))[1]} )
+        index.2 <- apply(ci.ub, 1, FUN=function(x){ min(which(x>=probs[i]))[1]} )
+        
+        index.y1 <- ifelse(index.1>length(order.y), Inf, order.y[index.1])
+        index.y2 <- ifelse(index.2>length(order.y),Inf,order.y[index.2])
+        
+        index.y1.cdf <- ifelse(
+          index.1 == 0, 0, ci.ub[cbind(1:dim(new.data)[1], index.1)]
+        )
+        
+        index.y2.cdf <- ifelse(
+          index.2 > length(order.y), 1, ci.ub[cbind(1:dim(new.data)[1], index.2)]
+        )
+        
+        quantile.ub[,i] <- ifelse(
+          index.1 == index.2,
+          index.y1, 
+          (index.y2-index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i]-index.y1.cdf) + index.y1
+        ) 
+        quantile.ub[, i] <-
+          ifelse(is.infinite(quantile.ub[,i]), max(order.y), quantile.ub[, i])
+      })
+    }
+    
+    result <- list(quantile = quantile,
+                   lb = quantile.ub,
+                   ub = quantile.lb)
+  }
+  
+  return(result)
+}
+
+
+## -- Estimate conditional CDF and its standard error for orm models -----------
+cdf.orm <- function(mod, new.data, at.y = 0, se = TRUE){
+  if(is.null(mod$yunique)) {
+    stop("Need to set x=TRUE and y=TRUE for orm") 
+  } else{
+    order.y <- mod$yunique
+    xb <- as.matrix(new.data)%*%matrix(coef(mod)[colnames(new.data)])
+    
+    index <- sapply(
+      at.y,
+      FUN = function(x){
+        if(x < min(order.y)[1]) result <- Inf 
+        else if(x == min(order.y)[1]) result <- 1
+        else if(x >= max(order.y)[1]) result <- -Inf
+        else which(order.y >= x)[1]-1
+      }
+    )
+    
+    m.alpha <- mod$coef[index]
+    m.alpha <- ifelse(is.infinite(index), index, m.alpha)
+    if(length(at.y) == 1){
+      lb <- as.matrix(outer(m.alpha, xb, "+")[,,1])
+    } else lb <- t(outer(m.alpha, xb, "+")[,,1])
+    m.cdf <- 1- mod$trans$cumprob(lb)
+    
+    if(se){
+      if(mod$family == "logistic") mod$trans$deriv <- function(x) exp(-x)/(1+exp(-x))^2
+      cdf.se <- matrix(NA, ncol = length(at.y), nrow = dim(new.data)[1])
+      lb.se <- matrix(NA, ncol = length(at.y), nrow = dim(new.data)[1])
+      
+      var <- as.matrix(solve(mod$info.matrix))
+      
+      for(i in 1:length(at.y)) {
+        var.i <- var[c(index[i], which(names(coef(mod)) %in% colnames(new.data))), 
+                     c(index[i], which(names(coef(mod)) %in% colnames(new.data)))]
+        dcdf.dtheta <- cbind(-mod$trans$deriv(lb[,i]),  
+                             -mod$trans$deriv(lb[,i])*as.matrix(new.data) )
+        dlb.dtheta <- as.matrix(cbind(1, new.data))
+        cdf.se[,i] <- sqrt(diag(dcdf.dtheta %*% var.i%*% t(dcdf.dtheta)))
+        lb.se[, i] <- sqrt(diag(dlb.dtheta%*%var.i%*% t(dlb.dtheta)))
+      }
+      
+      ci.lb <- sapply(
+        1:length(at.y),
+        FUN=function(i) { 1- mod$trans$cumprob(lb[, i] +qnorm(0.975)*lb.se[, i])}
+      )
+      ci.ub <- sapply(
+        1:length(at.y),
+        FUN=function(i) { 1- mod$trans$cumprob(lb[, i] -qnorm(0.975)*lb.se[, i])}
+      )
+
+      result <- list(est = m.cdf,
+                     se = cdf.se,
+                     lb = ci.lb,
+                     ub = ci.ub)
+    } else{
+      result <- list(est = m.cdf)
+    }
+    
+    return(result)
+  } 
+}
+
+```
+
 ```{r captions, results = "hide"}
 ## -- Table and figure captions ------------------------------------------------
 table_nums <- captioner(prefix = "Table")
@@ -1125,57 +1380,86 @@ outcome_vars <- c(
 
 covariate_vars <- c(
   "age_consent", "charlson_total", "iqcode_total_ph", "frailty",
-  "sofa_mod_imp_rand", "rass_rand", "trt"
+  "sofa_mod_imp_rand", "arousal_rand", "trt"
 )
 
 model_df <- ptsummary_df %>%
   dplyr::select(
-    id, study_site, on_mv_rand24, one_of(outcome_vars), one_of(covariate_vars)
+    id, study_site, on_mv_rand24, rass_rand,
+    one_of(outcome_vars), one_of(covariate_vars)
   ) %>%
-  ## TEMPORARILY TILL RAMEELA AND I DISCUSS: Create absolute value of RASS
-  mutate(abs_rass_rand = abs(rass_rand))
+  ## Create category for level of arousal at randomization,
+  ##   using RASS closest to time of randomization within 5 hours
+  mutate(
+    arousal_rand = factor(
+      case_when(
+        is.na(rass_rand) ~ as.numeric(NA),
+        rass_rand %in% c(-3) ~ 1,
+        rass_rand %in% c(-2, -1) ~ 2,
+        rass_rand %in% c(0) ~ 3,
+        TRUE ~ 4
+      ),
+      levels = 1:4,
+      labels = c("Deeply sedated", "Lightly sedated", "Normal", "Agitated")
+    )
+  )
 
 ## Set datadist to this data.frame
 dd <- datadist(model_df)
 options(datadist = "dd")
 
-## -- Create sparklines to show distributions of IQCODE, RASS ------------------
-barht_iqcode <- model_df %>%
-  mutate(iqcode_cuts = cut(iqcode_total_ph, breaks = seq(0, 5, 0.25))) %>%
-  group_by(iqcode_cuts) %>%
-  summarise(count = n())
+## -- Create sparklines to show distributions ----------------------------------
+create_spark <- function(
+  vname,                                 ## variable name; must be in df
+  vbreaks = NULL,                        ## breaks to bin data, if desired
+  spark_id = sprintf("spark-%s", vname), ## name of sparkline element
+  spark_width = 50,                      ## sparkline width
+  df = model_df                          ## data.frame to use
+){
+  if(is.null(vbreaks)){
+    df$vcuts <- df[, vname]
+  } else{
+    df$vcuts <- cut(df[, vname], breaks = vbreaks)
+  }
+  
+  barhts <- df %>%
+    group_by(vcuts) %>%
+    summarise(count = n())
+  
+  sparkline(
+    barhts$count,
+    type = "bar",
+    barColor = as.character(palette_colors["dred"]),
+    elementId = spark_id,
+    width = spark_width
+  )
+}
 
-spark_iqcode <- sparkline(
-  barht_iqcode$count,
-  type = 'bar',
-  barColor = as.character(palette_colors["dred"]),
-  elementId = "spark-iqcode",
-  width = 50
+spark_iqcode <- create_spark(
+  "iqcode_total_ph",
+  vbreaks = seq(0, 5, 0.25),
+  spark_id = "spark-iqcode"
 )
 
-barht_rass <- model_df %>%
-  group_by(abs_rass_rand) %>%
-  summarise(count = n())
-
-spark_rass <- sparkline(
-  barht_rass$count,
-  type = 'bar',
-  barColor = as.character(palette_colors["dred"]),
-  elementId = "spark-rass",
-  width = 35
+spark_dcfd <- create_spark(
+  "dcfd_int",
+  # vbreaks = seq(-1, 14, 1),
+  spark_id = "spark-dcfd",
+  spark_width = 50
 )
 
 ## -- Create model RHS for multiple uses ---------------------------------------
 ## How many knots for continuous covariates? Which ones are continuous?
 rcsknots <- 3
 cont_covars <- c("age_consent", "charlson_total", "frailty", "sofa_mod_imp_rand")
-notcont_covars <- setdiff(
-  gsub("rass_rand", "abs_rass_rand", covariate_vars, fixed = TRUE), cont_covars
-)
+notcont_covars <- setdiff(covariate_vars, cont_covars)
 
 mod_rhs <- map_chr(cont_covars, ~ sprintf("rcs(%s, %s)", ., rcsknots)) %>%
   c(., notcont_covars) %>%
   paste(collapse = " + ")
+
+## For testing purposes: RHS, no splines
+mod_rhs_lin <- paste(covariate_vars, collapse = " + ")
 
 ```
 
@@ -1184,7 +1468,7 @@ mod_rhs <- map_chr(cont_covars, ~ sprintf("rcs(%s, %s)", ., rcsknots)) %>%
 ```{r missing_allpts}
 gg_miss_var(
   model_df %>%
-    dplyr::select(-id, -on_mv_rand24, -tte_mvlib_30, -event_mvlib_30),
+    dplyr::select(-id, -rass_rand, -on_mv_rand24, -tte_mvlib_30, -event_mvlib_30),
   show_pct = TRUE
 ) +
   scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
@@ -1196,28 +1480,12 @@ gg_miss_var(
 
 ```
 
-IQCODE and RASS at randomization have the most missingness, but not in ways that appear to be related. In the plot below, red indicates missingness, blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
+IQCODE and level of arousal at randomization are the only covariates with missing data; the amount is still quite minimal (<2%), and it is not missing in ways that appear to be related. In the plot below, red indicates missingness, blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
 
 ```{r iqcode_rass_miss}
 ggplot(data = model_df) +
-  geom_miss_point(aes(x = iqcode_total_ph, y = abs_rass_rand),
+  geom_miss_point(aes(x = iqcode_total_ph, y = rass_rand),
                   position = position_jitter(height = 0.2), alpha = 0.5)
-
-```
-
-```{r missing_mvpts}
-gg_miss_var(
-  model_df %>%
-    filter(on_mv_rand24) %>%
-    dplyr::select(event_mvlib_30, tte_mvlib_30, one_of(covariate_vars)),
-  show_pct = TRUE
-) +
-  scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
-  geom_hline(yintercept = 5, colour = "gray50", linetype = "dotted") +
-  labs(
-    title = "Outcome and Covariate Missingness for Liberation from MV Model",
-    subtitle = "Includes all patients on MV at or within 24h of randomization"
-  )
 
 ```
 
@@ -1231,7 +1499,7 @@ gg_miss_var(
 
 ## Unadjusted Analysis
 
-Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. As seen below, the distribution of DCFDs is quite non-normal; thus a nonparametric test provides more power and reliability.)*
+Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. The distribution of DCFDs is quite non-normal `r spark_dcfd`; thus a nonparametric test provides more power and reliability.)*
 
 ```{r dcfds_unadj, results = "hide"}
 ## -- Test DCFDs by treatment group --------------------------------------------
@@ -1279,7 +1547,7 @@ dcfd_plot <- ggplot(data = ptsummary_df, aes(x = dcfd_int)) +
 
 ### `r fig_nums("dcfds_unadj")`
 
-```{r print_dcfds_unadj, fig.width = 7.5, fig.height = 7.5}
+```{r print_dcfds_unadj, fig.width = 7.5, fig.height = 4}
 dcfd_plot
 
 ```
@@ -1299,7 +1567,7 @@ Covariates for all multivariable regression models include:
 - SOFA on the day of randomization, excluding the CNS component
 - Level of arousal at randomization, via the RASS closest to the time of randomization
 
-Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distributions of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) and the absolute value of RASS at randomization `r spark_rass` have too little variability to allow this flexibility.
+Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distribution of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) has too little variability to allow this flexibility.
 
 In addition, we adjust variances using Huber-White sandwich estimation clustered by study site. This will help account for unmeasured variability and correlation among patients within a given site.
 
@@ -1312,7 +1580,7 @@ To make sure none of our covariates completely explain any of the others (result
 ```{r redundancy, results = "markup"}
 Hmisc::redun(
   ~ age_consent + charlson_total + frailty + sofa_mod_imp_rand +
-    I(iqcode_total_ph) + I(abs_rass_rand) + trt,
+    I(iqcode_total_ph) + arousal_rand + trt,
   data = model_df,
   nk = rcsknots
 )
@@ -1324,7 +1592,18 @@ Hmisc::redun(
 ### Model Fitting
 
 ```{r dcfds_adj, results = "hide"}
-dcfd_mod <- lrm(
+## Primary model fit using rms::orm(), because Liu & Shepherd have some nice
+##  functions for getting means, etc from this. My function to check PO
+##  assumption assumes rms::lrm() fit; one day I should make this flexible, but
+##  for now, fit it twice. Results are identical when both use default options.
+dcfd_mod <- orm(
+  as.formula(paste("dcfd_int ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+dcfd_mod_lrm <- lrm(
   as.formula(paste("dcfd_int ~", mod_rhs)),
   data = model_df,
   x = TRUE, y = TRUE
@@ -1341,7 +1620,7 @@ We graphically check our assumption of proportional odds, paying particular atte
 
 ```{r dcfds_assume}
 JTHelpers::rms_po_assume(
-  dcfd_mod,
+  dcfd_mod_lrm,
   cuts = seq(1, 12, 1),
   modelData = model_df
 ) +
@@ -1358,7 +1637,7 @@ We show the odds ratios for DCFDs by treatment group, using placebo as our refer
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-```{r dcfd_results, fig.width = 5, fig.height = 5}
+```{r dcfd_ors, fig.width = 5, fig.height = 3}
 ## Wrapper for rms_calc_comparisons that adds outcome variable as a column
 ## (Only tested on lrm fits)
 lrm_comparisons_addoutcome <- function(rmsObj, ...){
@@ -1372,13 +1651,13 @@ lrm_comparisons_addoutcome <- function(rmsObj, ...){
 dcfd_ors <- map_df(
   list(dcfd_mod),
   lrm_comparisons_addoutcome,
-  df = model_df, vname = "trt", refVal = "C"
+  df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
 ) %>%
   mutate(comp.c = fct_rev(factor(comp.c))) %>%
   ## Keep only one row for reference group
   distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
 
-ggplot(data = dcfd_ors, aes(y = effect, x = comp.c, colour = outcome)) +
+ggplot(data = dcfd_ors, aes(y = effect, x = comp.c)) +
   ## Fake row to set up order properly
   geom_point(shape = NA) +
   ## Reference line at 1 (no effect)
@@ -1388,22 +1667,82 @@ ggplot(data = dcfd_ors, aes(y = effect, x = comp.c, colour = outcome)) +
   geom_point(shape = 15, colour = "black", size = 4,
              data = dcfd_ors %>% filter(comp.c == "C")) +
   ## Add ORs, CIs for treatment groups vs control
-  geom_pointrange(aes(ymin = lcl, ymax = ucl),
-                  position = position_dodge(width = 0.5),
-                  shape = 16, size = 1,
-                  data = dcfd_ors %>% filter(comp.c != "C")) +
-  scale_colour_discrete(name = "Missing mental status assigned") +
+  geom_pointrange(
+    aes(ymin = lcl, ymax = ucl),
+    position = position_dodge(width = 0.5),
+    shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
+    data = dcfd_ors %>% filter(comp.c != "C")
+  ) +
   labs(
     title = "Treatment Group vs Delirium/Coma-Free Days",
+    subtitle = glue(
+      "P: {formatp(anova(dcfd_mod)['trt', 'P'])}"
+    ),
     y = "Odds Ratio (95% Confidence Interval)",
-    caption = "\nAdjusted analysis using proportional odds logistic regression.\nP-values are for the effect of treatment vs DCFDs, adjusted for confounders."
+    caption = "\nAdjusted analysis using proportional odds logistic regression."
   ) +
   theme(
+    legend.position = "none",
     axis.ticks.y = element_blank(),
     axis.title.y = element_blank(),
     plot.caption = element_text(size = basetext_size * 0.7)
   ) +
   coord_flip()
+
+```
+
+We also show the estimated median DCFDs (and 95% confidence interval) for a "typical" patient in each treatment group, with all covariate values set at the median or mode of our population.
+
+```{r dcfd_medians}
+## -- Use Liu's function to calculate conditional median, CI -------------------
+## First: create newdata with median, mode values
+## We can use datadist() to our advantage here. In the $limits element, the
+##  second value for each variable is `Adjust to` and is by default the median
+##  or mode.
+
+pred_df_org <- map_dfc(
+  setdiff(covariate_vars, "trt"),
+  ~ as.data.frame(rep(dd$limits[2, .], times = length(levels(model_df$trt))))
+) %>%
+  set_names(setdiff(covariate_vars, "trt")) %>%
+  bind_cols(data.frame(trt = levels(model_df$trt)))
+
+pred_df_num <- pred_df_org %>%
+  ## All columns need to be numeric because quantile.orm uses matrix algebra
+  mutate_at(vars("arousal_rand", "trt"), as.numeric)
+
+quantile.orm(
+  mod = dcfd_mod,
+  new.data = pred_df_org
+)
+
+quantile.orm(
+  mod = dcfd_mod,
+  new.data = pred_df_num
+)
+
+## Getting a nonconformability error; could this be due to factor variables?
+## Save some things to an Rdata for Bryan
+
+save(dcfd_mod, pred_df_org, pred_df_num, file = "quantile_orm_test.Rdata")
+
+## Try using a model with only numeric, linear covariates, just in case
+numeric_covars <- c("age_consent", "charlson_total", "iqcode_total_ph",
+                    "frailty", "sofa_mod_imp_rand")
+dcfd_linmod <- orm(
+  as.formula(paste("dcfd_int", mod_rhs_lin, sep = " ~ ")),
+  data = model_df,
+  x = TRUE, y = TRUE
+)
+
+pred_df_num <- map_dfc(
+  numeric_covars,
+  ~ as.data.frame(rep(dd$limits[2, .], times = length(levels(model_df$trt))))
+) %>%
+  set_names(numeric_covars)
+
+
+quantile.orm(dcfd_linmod, pred_df_num)
 
 ```
 
