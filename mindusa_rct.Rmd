@@ -227,13 +227,13 @@ mean.orm <- function(mod, new.data, se=TRUE){
 ## -- Estimate conditional quantiles and confidence intervals for orm model ----
 quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
   
-  quantile <- matrix(NA, nrow=dim(new.data)[1], ncol=length(probs))
+  quantile <- matrix(NA, nrow = dim(new.data)[1], ncol = length(probs))
   order.y <- mod$yunique
   #n.alpha <- length(order.y)-1
-  xb <- as.matrix(new.data)%*%matrix(coef(mod)[colnames(new.data)])
-  alpha <- mod$coef[1:(length(unique(order.y))-1)]
-  lb <- t(outer(alpha, xb, "+")[,,1])
-  m.cdf <- 1- mod$trans$cumprob(lb)
+  xb <- as.matrix(new.data) %*% matrix(coef(mod)[colnames(new.data)])
+  alpha <- mod$coef[1:(length(unique(order.y)) - 1)]
+  lb <- t(outer(alpha, xb, "+")[, , 1])
+  m.cdf <- 1 - mod$trans$cumprob(lb)
   m.cdf <- cbind(0, m.cdf, 1)
   for(i in 1:length(probs)){
     try({
@@ -242,21 +242,21 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
       index.2 <-
         apply(m.cdf, 1, FUN = function(x){ min(which(x >= probs[i]))[1]} )
       
-      index.y1 <- ifelse(index.1>length(order.y), Inf, order.y[index.1])
-      index.y2 <- ifelse(index.2>length(order.y), Inf, order.y[index.2])
+      index.y1 <- ifelse(index.1 > length(order.y), Inf, order.y[index.1])
+      index.y2 <- ifelse(index.2 > length(order.y), Inf, order.y[index.2])
       
       index.y1.cdf <-
         ifelse(index.1 == 0, 0, m.cdf[cbind(1:dim(new.data)[1], index.1)])
       
-      index.y2.cdf <- ifelse(index.2>length(order.y),
+      index.y2.cdf <- ifelse(index.2 > length(order.y),
                              1,
                              m.cdf[cbind(1:dim(new.data)[1], index.2)])
       
-      quantile[,i] <-
+      quantile[, i] <-
         ifelse(
           index.1 == index.2,
           index.y1,
-          (index.y2-index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i]-index.y1.cdf) + index.y1)
+          (index.y2 - index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i] - index.y1.cdf) + index.y1)
       quantile[, i] <-
         ifelse(is.infinite(quantile[,i]), max(order.y), quantile[, i])
     })
@@ -265,7 +265,7 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
   
   if(se){
     if(mod$family == "logistic"){
-      mod$trans$deriv <- function(x) exp(-x)/(1+exp(-x))^2
+      mod$trans$deriv <- function(x) exp(-x)/(1 + exp(-x))^2
     }
     
     quantile.lb <- quantile.ub <-
@@ -279,20 +279,22 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
                    c(i, which(names(coef(mod)) %in% colnames(new.data)))]
       
       dcdf.dtheta <- cbind(-mod$trans$deriv(lb[,i]),  
-                           -mod$trans$deriv(lb[,i])*as.matrix(new.data) )
+                           -mod$trans$deriv(lb[,i]) * as.matrix(new.data))
       dlb.dtheta <- as.matrix(cbind(1, new.data))
-      lb.se[,i] <- sqrt(diag(dlb.dtheta%*%var.i%*% t(dlb.dtheta)))
+      lb.se[, i] <- sqrt(diag(dlb.dtheta %*% var.i %*% t(dlb.dtheta)))
     }
     
     ci.lb <- sapply(
       1:dim(lb)[2],
       FUN = function(i){
-        1- mod$trans$cumprob(lb[, i] +qnorm(0.975)*lb.se[, i])
+        1- mod$trans$cumprob(lb[, i] + qnorm(0.975) * lb.se[, i])
       }
     )
     ci.ub <- sapply(
       1:dim(lb)[2],
-      FUN = function(i) { 1- mod$trans$cumprob(lb[, i] -qnorm(0.975)*lb.se[, i])}
+      FUN = function(i){
+        1- mod$trans$cumprob(lb[, i] -qnorm(0.975) * lb.se[, i])
+      }
     )
     ci.lb <- matrix(ci.lb, nrow = dim(new.data)[1])
     ci.ub <- matrix(ci.ub, nrow = dim(new.data)[1])
@@ -306,9 +308,10 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
         index.2 <- apply(ci.lb, 1, FUN=function(x){ min(which(x>=probs[i]))[1]} )
  
         index.y1 <- ifelse(index.1>length(order.y), Inf, order.y[index.1])
-        index.y2 <- ifelse(index.2>length(order.y),Inf,order.y[index.2])
+        index.y2 <- ifelse(index.2>length(order.y), Inf, order.y[index.2])
         
-        index.y1.cdf <- ifelse(index.1==0, 0, ci.lb[cbind(1:dim(new.data)[1], index.1)])
+        index.y1.cdf <-
+          ifelse(index.1==0, 0, ci.lb[cbind(1:dim(new.data)[1], index.1)])
         
         index.y2.cdf <- ifelse(
           index.2 > length(order.y), 1, ci.lb[cbind(1:dim(new.data)[1], index.2)]
@@ -317,16 +320,18 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
         quantile.lb[,i] <- ifelse(
           index.1 == index.2,
           index.y1,
-          (index.y2-index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i]-index.y1.cdf) + index.y1
+          (index.y2 - index.y1)/(index.y2.cdf - index.y1.cdf) * (probs[i] - index.y1.cdf) + index.y1
         )
         quantile.lb[, i] <-
-          ifelse(is.infinite(quantile.lb[,i]), max(order.y), quantile.lb[, i])
+          ifelse(is.infinite(quantile.lb[, i]), max(order.y), quantile.lb[, i])
         
-        index.1 <- apply(ci.ub, 1, FUN=function(x){ max(which(x<=probs[i]))[1]} )
-        index.2 <- apply(ci.ub, 1, FUN=function(x){ min(which(x>=probs[i]))[1]} )
+        index.1 <-
+          apply(ci.ub, 1, FUN=function(x){ max(which(x <= probs[i]))[1]} )
+        index.2 <-
+          apply(ci.ub, 1, FUN=function(x){ min(which(x >= probs[i]))[1]} )
         
-        index.y1 <- ifelse(index.1>length(order.y), Inf, order.y[index.1])
-        index.y2 <- ifelse(index.2>length(order.y),Inf,order.y[index.2])
+        index.y1 <- ifelse(index.1 > length(order.y), Inf, order.y[index.1])
+        index.y2 <- ifelse(index.2 > length(order.y), Inf, order.y[index.2])
         
         index.y1.cdf <- ifelse(
           index.1 == 0, 0, ci.ub[cbind(1:dim(new.data)[1], index.1)]
@@ -339,10 +344,10 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
         quantile.ub[,i] <- ifelse(
           index.1 == index.2,
           index.y1, 
-          (index.y2-index.y1)/(index.y2.cdf - index.y1.cdf)*(probs[i]-index.y1.cdf) + index.y1
+          (index.y2 - index.y1)/(index.y2.cdf - index.y1.cdf) * (probs[i] - index.y1.cdf) + index.y1
         ) 
         quantile.ub[, i] <-
-          ifelse(is.infinite(quantile.ub[,i]), max(order.y), quantile.ub[, i])
+          ifelse(is.infinite(quantile.ub[, i]), max(order.y), quantile.ub[, i])
       })
     }
     
@@ -353,7 +358,6 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
   
   return(result)
 }
-
 
 ## -- Estimate conditional CDF and its standard error for orm models -----------
 cdf.orm <- function(mod, new.data, at.y = 0, se = TRUE){
@@ -460,6 +464,8 @@ table_nums(
   name = "dose_permdc_other",
   caption = "Reasons for Study Drug Discontinuation due to 'Other'"
 )
+table_nums(name = "dcfd_orci", caption = "Adjusted Odds Ratios (95% CI), DCFDs")
+table_nums(name = "dcfd_meds", caption = "Adjusted Medians (95% CI), DCFDs")
 
 table_nums('package_info', caption = "Software Details")
 
@@ -679,7 +685,10 @@ To save space, reasons for "other" exclusions are collapsed. Click on `Details` 
 ptstatus_df %>%
   filter(exc_99_other) %>%
   dplyr::select(exc_other) %>%
-  kable(format = "html", col.names = c("Explanation for 'other' exclusion"), align = c("l")) %>%
+  kable(
+    format = "html",
+    col.names = c("Explanation for 'other' exclusion"), align = c("l")
+  ) %>%
   mykablestyle
 
 ```
@@ -780,7 +789,11 @@ To save space, reasons for "other" ICU admission among randomized patients are c
 ptsummary_all_df %>%
   filter(randomized & icu_rsn == "Other") %>%
   dplyr::select(icu_rsn_other) %>%
-  kable(format = "html", col.names = c("Explanation for 'other' ICU admission reason"), align = c("l")) %>%
+  kable(
+    format = "html",
+    col.names = c("Explanation for 'other' ICU admission reason"),
+    align = c("l")
+  ) %>%
   mykablestyle
 
 ```
@@ -1067,7 +1080,11 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
 
 ```{r print_rand_table}
 rand_table %>%
-  kable(format = "html", col.names = c("", LETTERS[1:3]), align = c("l", rep("r", 3))) %>%
+  kable(
+    format = "html",
+    col.names = c("", LETTERS[1:3]),
+    align = c("l", rep("r", 3))
+  ) %>%
   mykablestyle %>%
   group_rows("Randomized Patients", 2, 10) %>%
   group_rows("Reasons Study Drug Temporarily Held", 11, 18) %>%
@@ -1264,7 +1281,11 @@ dose_table <- doses_df %>%
 
 ```{r print_dose_table}
 dose_table %>%
-  kable(format = "html", col.names = c("", LETTERS[1:3]), align = c("l", rep("r", 3))) %>%
+  kable(
+    format = "html",
+    col.names = c("", LETTERS[1:3]),
+    align = c("l", rep("r", 3))
+  ) %>%
   mykablestyle %>%
   group_rows("All Dose Opportunities", 2, 4) %>%
   group_rows("Doses Given", 5, 16) %>%
@@ -1294,7 +1315,11 @@ other_permdc_table <- doses_df %>%
 <details>
 ```{r print_dose_held_other}
 other_held_table %>%
-  kable(format = "html", col.names = c("Explanation for 'other' study drug hold"), align = c("l")) %>%
+  kable(
+    format = "html",
+    col.names = c("Explanation for 'other' study drug hold"),
+    align = c("l")
+  ) %>%
   mykablestyle(stripes = TRUE)
 
 ```
@@ -1305,7 +1330,11 @@ other_held_table %>%
 <details>
 ```{r print_dose_permdc_other}
 other_permdc_table %>%
-  kable(format = "html", col.names = c("Explanation for 'other' study drug discontinuation"), align = c("l")) %>%
+  kable(
+    format = "html",
+    col.names = c("Explanation for 'other' study drug discontinuation"),
+    align = c("l")
+  ) %>%
   mykablestyle(stripes = TRUE)
 
 ```
@@ -1526,7 +1555,7 @@ days_all <- nrow(subset(daily_int_df, study_day < 14))
 dcfd_plot <- ggplot(data = ptsummary_df, aes(x = dcfd_int)) +
   facet_wrap(~ trt, nrow = 1) +
   geom_histogram(aes(fill = trt), binwidth = 1) +
-  scale_x_continuous(name = "Delirium/Coma-Free Days", breaks = seq(0, 14, 2)) +
+  scale_x_continuous(name = "Delirium/Coma-Free Days", breaks = seq(0, 13, 2)) +
   scale_y_continuous(name = "Patient Count") +
   theme(legend.position = "none",
         plot.caption = element_text(size = 10)) +
@@ -1554,7 +1583,7 @@ dcfd_plot
 
 ## Adjusted Analysis
 
-Using the same two versions of DCFDs, we perform multivariable regression analyses adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision. Due to the distribution of DCFDs, we use proportional odds logistic regression, which is robust to non-normal distributions and works well for ordered outcomes.
+We perform multivariable regression analyses to explore the association between treatment group and DCFDs while adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision. Due to the distribution of DCFDs, we use proportional odds logistic regression, which is robust to non-normal distributions and works well for ordered outcomes.
 
 ### Covariates{#covariates}
 
@@ -1633,9 +1662,11 @@ JTHelpers::rms_po_assume(
 
 ### Model Results
 
-We show the odds ratios for DCFDs by treatment group, using placebo as our reference. Odds ratios higher than 1 are favorable, indicating higher odds of more "good" days alive and free of brain dysfunction.
+We show the odds ratios (using placebo as reference) and adjusted medians for DCFDs by treatment group. Odds ratios higher than 1 are favorable, indicating higher odds of more "good" days alive and free of brain dysfunction. Medians are adjusted to the median/mode values of all covariates, so that each represents the expected median number of DCFDs for a patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population. All results are shown visually, with tables included for exact numbers if desired.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+#### Adjusted Odds Ratios
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
 ## Wrapper for rms_calc_comparisons that adds outcome variable as a column
@@ -1691,60 +1722,165 @@ ggplot(data = dcfd_ors, aes(y = effect, x = comp.c)) +
 
 ```
 
-We also show the estimated median DCFDs (and 95% confidence interval) for a "typical" patient in each treatment group, with all covariate values set at the median or mode of our population.
+<details>
+```{r table_dcfd_ors}
+dcfd_ors_table <- dcfd_ors %>%
+  mutate(
+    comparison = glue("{comp.c} vs {ref.c}"),
+    or_ci = glue(
+      "{rndformat(effect)}",
+      " ({rndformat(lcl)}, ",
+      "{rndformat(ucl)})"
+    )
+  ) %>%
+  arrange(desc(ref), comp) %>%
+  dplyr::select(comparison, or_ci)
 
-```{r dcfd_medians}
-## -- Use Liu's function to calculate conditional median, CI -------------------
-## First: create newdata with median, mode values
-## We can use datadist() to our advantage here. In the $limits element, the
-##  second value for each variable is `Adjust to` and is by default the median
-##  or mode.
-
-pred_df_org <- map_dfc(
-  setdiff(covariate_vars, "trt"),
-  ~ as.data.frame(rep(dd$limits[2, .], times = length(levels(model_df$trt))))
-) %>%
-  set_names(setdiff(covariate_vars, "trt")) %>%
-  bind_cols(data.frame(trt = levels(model_df$trt)))
-
-pred_df_num <- pred_df_org %>%
-  ## All columns need to be numeric because quantile.orm uses matrix algebra
-  mutate_at(vars("arousal_rand", "trt"), as.numeric)
-
-quantile.orm(
-  mod = dcfd_mod,
-  new.data = pred_df_org
-)
-
-quantile.orm(
-  mod = dcfd_mod,
-  new.data = pred_df_num
-)
-
-## Getting a nonconformability error; could this be due to factor variables?
-## Save some things to an Rdata for Bryan
-
-save(dcfd_mod, pred_df_org, pred_df_num, file = "quantile_orm_test.Rdata")
-
-## Try using a model with only numeric, linear covariates, just in case
-numeric_covars <- c("age_consent", "charlson_total", "iqcode_total_ph",
-                    "frailty", "sofa_mod_imp_rand")
-dcfd_linmod <- orm(
-  as.formula(paste("dcfd_int", mod_rhs_lin, sep = " ~ ")),
-  data = model_df,
-  x = TRUE, y = TRUE
-)
-
-pred_df_num <- map_dfc(
-  numeric_covars,
-  ~ as.data.frame(rep(dd$limits[2, .], times = length(levels(model_df$trt))))
-) %>%
-  set_names(numeric_covars)
-
-
-quantile.orm(dcfd_linmod, pred_df_num)
+dcfd_ors_table %>%
+  kable(
+    format = "html",
+    col.names = c("Comparison", "Odds Ratio (95% CI)"),
+    align = c("l", "r")
+  ) %>%
+  mykablestyle()
 
 ```
+</details>
+
+#### Adjusted Medians
+
+```{r dcfd_medians, fig.width = 5, fig.height = 3}
+## -- Use Liu's function (see chunk orm_functions) to calculate conditional ----
+## -- median, CI ---------------------------------------------------------------
+## First step: create newdata with median, mode values
+## We can use datadist() to our advantage here. In the $limits element, the
+##  second value for each variable is `Adjust to` and is by default the median
+##  or mode. We'll also need to manually include the values for any associated
+##  spline terms.
+
+## First: Get locations of knots for all continuous covariates
+knot_locations <- set_names(
+  map(
+    cont_covars,
+    ~ rcspline.eval(model_df[, .], nk = rcsknots, knots.only = TRUE)
+  ),
+  cont_covars
+)
+
+## Function to get value(s) of each covariate
+##   (median/mode, plus any spline terms)
+get_adjvals <- function(
+  vname,                      ## string; variable name (must be in dd)
+  ddist,                      ## datadist() object
+  use_rcs = TRUE,             ## whether to include spline terms
+  knot_locs = knot_locations  ## locations of knots for variable vname
+){
+  ## We'll return every result as a data.frame with reasonable names,
+  ##  so it can be easily cbinded later
+  
+  ## base_value = "Adjust to" value for vname
+  base_value <- ddist$limits[2, vname]
+  
+  ## If we're using splines in this model, and variable is in our list of
+  ## variables we use with splines (that's in the global env SORRY), use
+  ## rcspline.eval() to extract both original and spline term values
+  if(use_rcs && vname %in% cont_covars){
+    df <- rcspline.eval(
+      base_value, knots = pluck(knot_locs, vname), inclx = TRUE
+    ) %>%
+      as.data.frame()
+    
+    ## Set reasonable column names: eg, "age", "age_2"
+    names(df) <- map_chr(1:ncol(df), ~ paste(vname, ., sep = "_")) %>%
+      str_replace("\\_1", "")
+  } else{
+    ## If variable doesn't use splines, return base_value as a data.frame
+    df <- set_names(as.data.frame(base_value), vname)
+  }
+  
+  return(df)
+}
+
+## Create data frame with a single row, excluding treatment values
+##  (we'll add those later)
+pred_df_org <- map_dfc(
+  setdiff(c(cont_covars, notcont_covars), "trt"),
+  get_adjvals,
+  ddist = dd
+)
+
+## Repeat those values by row; # rows = # different treatments
+pred_df <- rep(list(pred_df_org), length(levels(model_df$trt))) %>%
+  bind_rows() %>%
+  ## Add treatment levels
+  bind_cols(trt = levels(model_df$trt)) %>%
+  ## Create a model.matrix object, then leave out the intercept
+  ##   model.matrix() handles dummy variables for categoricals nicely
+  model.matrix(
+    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
+    .
+  ) %>%
+  as.data.frame() %>%
+  dplyr::select(-1) %>%
+  ## colnames must be the same as names(coef(model))
+  set_names(str_subset(names(coef(dcfd_mod)), "^[^y>=]"))
+
+## Finally! Get actual adjusted medians + bounds for each treatment group;
+##  set these in a data.frame
+dcfd_adjmeds <- quantile.orm(mod = dcfd_mod, new.data = pred_df) %>%
+  ## Each quantity initially stored as a matrix, in case we want multiple
+  ##   quantiles (we don't); need to be numeric
+  map(as.numeric) %>%
+  bind_cols(data.frame(trt = levels(model_df$trt)), .)
+
+## Now we plot them!
+ggplot(data = dcfd_adjmeds, aes(y = quantile, x = forcats::fct_rev(trt))) +
+  geom_pointrange(
+    aes(ymin = lb, ymax = ub),
+    shape = 16, size = 1, colour = as.character(palette_colors["dred"])
+  ) +
+  scale_y_continuous(limits = c(0, 13), breaks = seq(0, 13, 2)) +
+  labs(
+    title = "Adjusted Median DCFDs by Treatment",
+    subtitle = glue(
+      "P: {formatp(anova(dcfd_mod)['trt', 'P'])}"
+    ),
+    y = "Adjusted Median (95% Confidence Interval)",
+    caption = "\nAdjusted analysis using proportional odds logistic regression."
+  ) +
+  theme(
+    legend.position = "none",
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    plot.caption = element_text(size = basetext_size * 0.7)
+  ) +
+  coord_flip()
+
+
+```
+
+<details>
+```{r table_dcfd_adjmeds}
+dcfd_adjmeds_table <- dcfd_adjmeds %>%
+  mutate(
+    med_ci = glue(
+      "{rndformat(quantile)} ",
+      "({rndformat(lb)}, ",
+      "{rndformat(ub)})"
+    )
+  ) %>%
+  dplyr::select(trt, med_ci)
+
+dcfd_adjmeds_table %>%
+  kable(
+    format = "html",
+    col.names = c("Treatment", "Adjusted Median (95% CI)"),
+    align = c("c", "r")
+  ) %>%
+  mykablestyle()
+
+```
+</details>
 
 # Notes on Variable Calculation{#varcalc}
 
