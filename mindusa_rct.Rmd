@@ -27,6 +27,7 @@ suppressPackageStartupMessages(library(captioner))
 suppressPackageStartupMessages(library(rms))
 suppressPackageStartupMessages(library(naniar))
 suppressPackageStartupMessages(library(sparkline))
+suppressPackageStartupMessages(library(survminer))
 suppressPackageStartupMessages(library(ggthemr)) ## Github only; cttobin/ggthemr
 suppressPackageStartupMessages(library(JTHelpers))
   ## Github only; jenniferthompson/JTHelpers
@@ -1883,6 +1884,95 @@ dcfd_adjmeds_table %>%
 
 ```
 </details>
+
+## Time to Death within 30 Days
+
+We explore the association between treatment and time to death from all causes within the 30 days following randomization. All randomized patients are included.
+
+**Censoring and time to event:**
+
+- The `r nrow(subset(ptsummary_df, is.na(death) & !is.na(tte_death_30)))` patients who withdrew from the study prior to day 30 with no known death status are censored at the time of withdrawal.
+- Patients who survived the entire 30-day period are censored at day 31.
+- Patients who died within the 30-day period are assigned a time value of `time of death - time of randomization`.
+
+### Unadjusted Analysis
+
+Our primary unadjusted analysis uses a Kaplan-Meier curve and log-rank test to look for differences between treatment groups in time to all-cause death.
+
+```{r unadj_death_30}
+## -- Create Surv, survfit objects for time to death within 30 days ------------
+surv_death_30 <-
+  with(model_df, Surv(time = tte_death_30, event = event_death_30))
+sf_death_30 <- survfit(surv_death_30 ~ trt, data = model_df)
+
+## -- Log-rank test ------------------------------------------------------------
+logrank_death_30 <- survdiff(surv_death_30 ~ trt, data = model_df)
+
+## P-value is not stored with logrank object;
+##   extract/calculate test statistic, df, P
+
+## df will be the same for all TTE models
+df_tte <- length(levels(model_df$trt)) - 1
+
+chisq_death_30 <- logrank_death_30$chisq
+pval_death_30 <- 1 - pchisq(chisq_death_30, df = df_tte)
+
+## -- Kaplan-Meier curves for time to death within 30 days ---------------------
+km_death_30 <- survminer::ggsurvplot(
+  sf_death_30, ## survfit() object
+  ## CIs
+  conf.int = TRUE, conf.int.alpha = 0.20,
+  ## Show N, cumulative events every 5 days; color text by trt
+  break.time.by = 5, risk.table = "nrisk_cumevents",
+  risk.table.fontsize = 3, risk.table.col = "strata", tables.height = 0.35,
+  legend.labs = gsub("trt=", "", names(sf_death_30$strata)),
+  ## Use specified themes, colors
+  palette = as.character(palette_colors[c("dred", "dgray", "dgreen")]),
+  ggtheme = mindusa_theme(), tables.theme = mindusa_theme()
+)
+
+## More finely control plot options
+km_death_30$plot <- km_death_30$plot +
+  ## Change Y axis to % labels, not proportion
+  scale_y_continuous(
+    name = "Percent Alive",
+    breaks = seq(0, 1, 0.25),
+    labels = paste0(seq(0, 1, 0.25) * 100, "%")
+  ) +
+  labs(
+    title = "Kaplan-Meier Curve, 30-Day All-Cause Mortality",
+    ## Add log-rank test results to subtitle
+    subtitle = glue(
+      "Log-rank test for difference between treatments: ",
+      "X2, {rndformat(chisq_death_30, 1)}; ",
+      "df, {df_tte}; ",
+      "P, {formatp(pval_death_30)}"
+    )
+  ) +
+  ## Place legend in bottom lefthand corner, vertically so full trt names fit
+  theme(
+    ## X axis label will be at the bottom of the table; no need to duplicate
+    axis.title.x = element_blank(),
+    legend.position = c(0, 0),
+    legend.background = element_blank(),
+    legend.title = element_blank(),
+    legend.justification = c(0, 0),
+    legend.direction = "vertical"
+  )
+
+## Add labels to nrisk table
+km_death_30$table <- km_death_30$table +
+  labs(title = "Number at risk (cumulative number of deaths)") +
+  xlab("Days after Randomization") +
+  ylab("") +
+  theme(plot.title = element_text(size = basetext_size * 0.8))
+
+```
+
+```{r print_unadj_death_30}
+km_death_30
+
+```
 
 # Notes on Variable Calculation{#varcalc}
 
