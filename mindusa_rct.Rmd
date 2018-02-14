@@ -1520,13 +1520,15 @@ ggplot(data = model_df) +
 
 </details>
 
-# Primary Outcome: Delirium/Coma-Free Days
+# Primary Outcomes
 
 <hr>
 
+## Delirium/Coma-Free Days
+
 **Note**: We use single imputation to reduce bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the intervention period without sufficient RASS and/or CAM information to determine mental status. Please see [Notes on Variable Calculation](#dcfds) for further rationale.
 
-## Unadjusted Analysis
+### Unadjusted Analysis
 
 Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. The distribution of DCFDs is quite non-normal `r spark_dcfd`; thus a nonparametric test provides more power and reliability.)*
 
@@ -1574,18 +1576,18 @@ dcfd_plot <- ggplot(data = ptsummary_df, aes(x = dcfd_int)) +
 
 ```
 
-### `r fig_nums("dcfds_unadj")`
+###### `r fig_nums("dcfds_unadj")`
 
 ```{r print_dcfds_unadj, fig.width = 7.5, fig.height = 4}
 dcfd_plot
 
 ```
 
-## Adjusted Analysis
+### Adjusted Analysis
 
 We perform multivariable regression analyses to explore the association between treatment group and DCFDs while adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision. Due to the distribution of DCFDs, we use proportional odds logistic regression, which is robust to non-normal distributions and works well for ordered outcomes.
 
-### Covariates{#covariates}
+#### Covariates{#covariates}
 
 Covariates for all multivariable regression models include:
 
@@ -1600,7 +1602,7 @@ Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our
 
 In addition, we adjust variances using Huber-White sandwich estimation clustered by study site. This will help account for unmeasured variability and correlation among patients within a given site.
 
-### Redundancy Analysis
+#### Redundancy Analysis
 
 To make sure none of our covariates completely explain any of the others (resulting in collinearity), we perform a redundancy analysis, detailed below. No covariates suggest evidence of too-high collinearity.
 
@@ -1618,7 +1620,7 @@ Hmisc::redun(
 
 </details>
 
-### Model Fitting
+#### Model Fitting
 
 ```{r dcfds_adj, results = "hide"}
 ## Primary model fit using rms::orm(), because Liu & Shepherd have some nice
@@ -1641,7 +1643,7 @@ dcfd_mod_lrm <- lrm(
 
 ```
 
-### Model Assumptions
+#### Model Assumptions
 
 We graphically check our assumption of proportional odds, paying particular attention to treatment group. Something may be amiss if Y axis values (estimated coefficient at various cutoffs of our outcome) change substantially across the X axis, particularly if the effect changes direction (noted by the dotted line at 0). For further discussion, please see Harrell's *Regression Modeling Strategies*, 2nd ed, section 13.3.
 
@@ -1660,13 +1662,13 @@ JTHelpers::rms_po_assume(
 
 </details>
 
-### Model Results
+#### Model Results
 
 We show the odds ratios (using placebo as reference) and adjusted medians for DCFDs by treatment group. Odds ratios higher than 1 are favorable, indicating higher odds of more "good" days alive and free of brain dysfunction. Medians are adjusted to the median/mode values of all covariates, so that each represents the expected median number of DCFDs for a patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population. All results are shown visually, with tables included for exact numbers if desired.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-#### Adjusted Odds Ratios
+##### Adjusted Odds Ratios
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
 ## Wrapper for rms_calc_comparisons that adds outcome variable as a column
@@ -1747,7 +1749,7 @@ dcfd_ors_table %>%
 ```
 </details>
 
-#### Adjusted Medians
+##### Adjusted Medians
 
 ```{r dcfd_medians, fig.width = 5, fig.height = 3}
 ## -- Use Liu's function (see chunk orm_functions) to calculate conditional ----
