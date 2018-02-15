@@ -164,6 +164,14 @@ theme_set(mindusa_theme())
 #   geom_point(aes(colour = Petal.Length)) +
 #   labs(title = "Testing out continuous scale")
 
+## -- Wrapper for rms_calc_comparisons; adds outcome variable as a column ------
+## (Tested on lrm, cph fits)
+rms_comparisons_addoutcome <- function(rmsObj, ...){
+  outcome <- gsub("()", "", rmsObj$sformula[2], fixed = TRUE)
+  rms_calc_comparisons(rmsObj, ...) %>%
+    mutate(outcome = outcome)
+}
+
 ```
 
 ```{r orm_functions}
@@ -1672,19 +1680,11 @@ TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 ##### Adjusted Odds Ratios
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
-## Wrapper for rms_calc_comparisons that adds outcome variable as a column
-## (Only tested on lrm fits)
-lrm_comparisons_addoutcome <- function(rmsObj, ...){
-  outcome <- gsub("()", "", rmsObj$sformula[2], fixed = TRUE)
-  rms_calc_comparisons(rmsObj, ...) %>%
-    mutate(outcome = outcome)
-}
-
 ## -- Calculate odds ratios for both treatments vs placebo, both model fits ----
 ## Result = tidy data frame we can plot! Hooray!
 dcfd_ors <- map_df(
   list(dcfd_mod),
-  lrm_comparisons_addoutcome,
+  rms_comparisons_addoutcome,
   df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
 ) %>%
   mutate(comp.c = fct_rev(factor(comp.c))) %>%
@@ -1745,7 +1745,8 @@ dcfd_ors_table %>%
     col.names = c("Comparison", "Odds Ratio (95% CI)"),
     align = c("l", "r")
   ) %>%
-  mykablestyle()
+  mykablestyle() %>%
+  row_spec(3, color = palette_colors["lgray"])
 
 ```
 </details>
@@ -1897,9 +1898,9 @@ We explore the association between treatment and time to death from all causes w
 
 ### Unadjusted Analysis
 
-Our primary unadjusted analysis uses a Kaplan-Meier curve and log-rank test to look for differences between treatment groups in time to all-cause death.
+Our unadjusted analysis describes survival using Kaplan-Meier curves and tests for differences among treatment groups in time to death within 30 days using the log-rank test.
 
-```{r unadj_death_30}
+```{r death_30_unadj}
 ## -- Create Surv, survfit objects for time to death within 30 days ------------
 surv_death_30 <-
   with(model_df, Surv(time = tte_death_30, event = event_death_30))
@@ -1983,15 +1984,141 @@ km_death_30$table <- km_death_30$table +
 
 ```
 
-```{r plot_unadj_death_30, fig.width = 7.5, fig.height = 6}
+```{r death_30_km, fig.width = 7.5, fig.height = 6}
 km_death_30$plot
 
 ```
 
-```{r table_unadj_death_30, fig.width = 7.5, fig.height = 2}
+```{r death_30_nrisk, fig.width = 7.5, fig.height = 2}
 km_death_30$table
 
 ```
+
+### Adjusted Analysis
+
+We perform multivariable regression analyses using a Cox proportional hazards model to explore the association between treatment group and time to death while adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision.
+
+#### Model Fitting
+
+```{r death_30_adj, results = "hide"}
+death_30_mod <- cph(
+  as.formula(paste("surv_death_30 ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+```
+
+#### Model Assumptions
+
+```{r death_30_assume}
+## -- Check proportional hazard assumption -------------------------------------
+death_30_zph <- cox.zph(death_30_mod, transform = 'log')
+
+## Extract p-value for global PH assumption; create reproducible statement
+death_30_phtest <- death_30_zph$table["GLOBAL", "p"]
+death_30_phtext <- ifelse(
+  death_30_phtest < 0.05,
+  glue("The global test for proportional hazards indicates the assumption is not fully met (p {formatp(death_30_phtest)}); please see the figures below for further detail."),
+  glue("The global test for proportional hazards indicates no major concern (p = {formatp(death_30_phtest)}); please see the figures below for further detail.")
+)
+
+```
+
+We graphically check our assumption of proportional hazards, paying particular attention to treatment group and looking for generally flat lines in each panel. `r death_30_phtext`
+
+<details>
+
+```{r death_30_assumeplot}
+par(mfrow = c(2, 3))
+plot(death_30_zph, col = 'red', lwd = 2)
+abline(v = 0, lty = 2, col = 'gray')
+par(mfrow = c(1, 1))
+
+```
+
+</details>
+
+#### Model Results
+
+We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **lower** than 1 are favorable, indicating lower likelihood of death at any given time point within 30 days of randomization.
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Adjusted Hazard Ratios
+
+```{r death_30_hrs, fig.width = 5, fig.height = 3}
+## -- Calculate odds ratios for both treatments vs placebo, both model fits ----
+## Result = tidy data frame we can plot! Hooray!
+death_30_hrs <- map_df(
+  list(death_30_mod),
+  rms_comparisons_addoutcome,
+  df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
+) %>%
+  mutate(comp.c = fct_rev(factor(comp.c))) %>%
+  ## Keep only one row for reference group
+  distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
+
+ggplot(data = death_30_hrs, aes(y = effect, x = comp.c)) +
+  ## Fake row to set up order properly
+  geom_point(shape = NA) +
+  ## Reference line at 1 (no effect)
+  geom_hline(yintercept = 1, linetype = "solid",
+             colour = palette_colors["lgray"], size = 2) +
+  ## Plot a point for control group
+  geom_point(shape = 15, colour = "black", size = 4,
+             data = death_30_hrs %>% filter(comp.c == "C")) +
+  ## Add ORs, CIs for treatment groups vs control
+  geom_pointrange(
+    aes(ymin = lcl, ymax = ucl),
+    position = position_dodge(width = 0.5),
+    shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
+    data = death_30_hrs %>% filter(comp.c != "C")
+  ) +
+  labs(
+    title = "Treatment Group vs All-Cause Death",
+    subtitle = glue(
+      "P: {formatp(anova(death_30_mod)['trt', 'P'])}"
+    ),
+    y = "Hazard Ratio (95% Confidence Interval)",
+    caption = "\nIncludes deaths within 30 days of randomization.\nAdjusted analysis using Cox proportional hazards model."
+  ) +
+  theme(
+    legend.position = "none",
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    plot.caption = element_text(size = basetext_size * 0.7)
+  ) +
+  coord_flip()
+
+```
+
+<details>
+```{r table_death_30_hrs}
+death_30_table <- death_30_hrs %>%
+  mutate(
+    comparison = glue("{comp.c} vs {ref.c}"),
+    hr_ci = glue(
+      "{rndformat(effect)} ",
+      "({rndformat(lcl)}, ",
+      "{rndformat(ucl)})"
+    )
+  ) %>%
+  arrange(desc(ref), comp) %>%
+  dplyr::select(comparison, hr_ci)
+
+death_30_table %>%
+  kable(
+    format = "html",
+    col.names = c("Comparison", "Hazard Ratio (95% CI)"),
+    align = c("l", "r")
+  ) %>%
+  mykablestyle() %>%
+  row_spec(3, color = palette_colors["lgray"])
+
+```
+</details>
 
 # Notes on Variable Calculation{#varcalc}
 
