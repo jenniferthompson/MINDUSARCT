@@ -35,7 +35,7 @@ suppressPackageStartupMessages(library(JTHelpers))
 ## Hmisc setup for nicely printing summaryM output
 mu <- markupSpecs$html
 
-## Helper functions
+## -- General helper functions (summary stats, formatting/printing) ------------
 factor_tf <-
   function(x){ factor(as.numeric(x), levels = 1:0, labels = c("Yes", "No")) }
 format_comma <- partial(format, big.mark = ",")
@@ -85,6 +85,116 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
     full_width = FALSE,
     ...
   )
+}
+
+## -- Modeling/results helper functions ----------------------------------------
+## Wrapper for rms_calc_comparisons; adds outcome variable as a column
+## (Tested on lrm, cph fits)
+rms_comparisons_addoutcome <- function(rmsObj, ...){
+  outcome <- gsub("()", "", rmsObj$sformula[2], fixed = TRUE)
+  rms_calc_comparisons(rmsObj, ...) %>%
+    mutate(outcome = outcome)
+}
+
+## Calculate ratios for both treatments vs placebo;
+##   result = tidy data frame we can plot! Hooray!
+trt_ratios <- function(mod){
+  map_df(
+    list(mod),
+    rms_comparisons_addoutcome,
+    df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
+  ) %>%
+    mutate(comp.c = fct_rev(factor(comp.c))) %>%
+    ## Keep only one row for reference group
+    distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
+}
+
+## Plot results of trt_ratios
+## - Treatment on Y axis
+## - Point estimates + CIs for ziprasidone, haloperidol vs placebo on X axis
+## - Black square for placebo
+plot_trt_ratios <- function(
+  ratio_df,     ## data.frame w/ one row per treatment, likely from trt_ratios()
+                ## columns include effect, lcl, ucl, comp.c, ref.c
+  outcome_text, ## Text describing outcome (eg, "Delirium/Coma-Free Days")
+  extra_text = "", ## Additional text to include on the second line of caption
+  mod           ## rms model object from which P for trt will be extracted
+){
+  ## Extract X axis label from model type: orm/lrm = odds, cph = hazard
+  if(inherits(mod, "cph")){
+    ratio_type <- "Hazard"
+    model_type <- "Cox proportional hazards"
+  } else{
+    ratio_type <- "Odds"
+    model_type <- "proportional odds logistic"
+  }
+  
+  ggplot(data = ratio_df, aes(y = effect, x = comp.c)) +
+    ## Fake row to set up order properly
+    geom_point(shape = NA) +
+    ## Reference line at 1 (no effect)
+    geom_hline(yintercept = 1, linetype = "solid",
+               colour = palette_colors["lgray"], size = 2) +
+    ## Plot a point for control group
+    geom_point(shape = 15, colour = "black", size = 4,
+               data = ratio_df %>% filter(comp.c == "C")) +
+    ## Add ratios, CIs for treatment groups vs control
+    geom_pointrange(
+      aes(ymin = lcl, ymax = ucl),
+      position = position_dodge(width = 0.5),
+      shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
+      data = ratio_df %>% filter(comp.c != "C")
+    ) +
+    labs(
+      title = glue("Treatment Group vs {outcome_text}"),
+      subtitle = glue("P: {formatp(anova(mod)['trt', 'P'])}"),
+      y = glue("{ratio_type} Ratio (95% Confidence Interval)"),
+      caption = glue(
+        "\nAdjusted analysis using {model_type} regression.\n{extra_text}"
+      )
+    ) +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      plot.caption = element_text(size = basetext_size * 0.7)
+    ) +
+    coord_flip()
+}
+
+## Tabular results of POLR, Cox models: Ratios for each treatment group
+table_trt_ratios <- function(
+  ratio_df, ## data.frame w/ one row per treatment, likely from trt_ratios()
+            ## columns include effect, lcl, ucl, comp.c, ref.c
+  ratio_type = c("Hazard", "Odds") ## Type of ratio (hazard or odds)
+){
+  ## Set ratio_type to default if not specified
+  ##  (Primary outcomes include more Cox models than POLR models)
+  ratio_type <- match.arg(ratio_type)
+  
+  ratio_df %>%
+    ## Create character strings for prettier tables
+    mutate(
+      comparison = glue("{comp.c} vs {ref.c}"),
+      effect_ci = glue(
+        "{rndformat(effect)} ",
+        "({rndformat(lcl)}, ",
+        "{rndformat(ucl)})"
+      )
+    ) %>%
+    ## Arrange in consistent order
+    arrange(desc(ref), comp) %>%
+    ## Only want newly created character columns
+    dplyr::select(comparison, effect_ci) %>%
+    ## Printing options: HTML format, set column names/alignment
+    kable(
+      format = "html",
+      col.names = c("Comparison", glue("{ratio_type} Ratio (95% CI)")),
+      align = c("l", "r")
+    ) %>%
+    mykablestyle() %>%
+    ## Include "placebo vs placebo" row for clarity, but gray out
+    row_spec(3, color = palette_colors["lgray"])
 }
 
 ## -- ggplot palette/custom theme ----------------------------------------------
@@ -163,14 +273,6 @@ theme_set(mindusa_theme())
 # ggplot(data = iris, aes(x = Sepal.Length, y = Sepal.Width)) +
 #   geom_point(aes(colour = Petal.Length)) +
 #   labs(title = "Testing out continuous scale")
-
-## -- Wrapper for rms_calc_comparisons; adds outcome variable as a column ------
-## (Tested on lrm, cph fits)
-rms_comparisons_addoutcome <- function(rmsObj, ...){
-  outcome <- gsub("()", "", rmsObj$sformula[2], fixed = TRUE)
-  rms_calc_comparisons(rmsObj, ...) %>%
-    mutate(outcome = outcome)
-}
 
 ```
 
@@ -1418,7 +1520,7 @@ outcome_vars <- c(
 
 covariate_vars <- c(
   "age_consent", "charlson_total", "iqcode_total_ph", "frailty",
-  "sofa_mod_imp_rand", "arousal_rand", "trt"
+  "sofa_mod_imp_rand", "trt"
 )
 
 model_df <- ptsummary_df %>%
@@ -1441,6 +1543,9 @@ model_df <- ptsummary_df %>%
       labels = c("Deeply sedated", "Lightly sedated", "Normal", "Agitated")
     )
   )
+
+## Add newly created arousal_rand to covariate_vars
+covariate_vars <- c(covariate_vars, "arousal_rand")
 
 ## Set datadist to this data.frame
 dd <- datadist(model_df)
@@ -1518,7 +1623,7 @@ gg_miss_var(
 
 ```
 
-IQCODE and level of arousal at randomization are the only covariates with missing data; the amount is still quite minimal (<2%), and it is not missing in ways that appear to be related. In the plot below, red indicates missingness, blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
+IQCODE and level of arousal at randomization are the only covariates with missing data; the amount is still quite minimal (<2%), and these variables are not missing in ways that appear to be related. In the plot below, red indicates missingness and blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
 
 ```{r iqcode_rass_miss}
 ggplot(data = model_df) +
@@ -1680,73 +1785,20 @@ TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 ##### Adjusted Odds Ratios
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
-## -- Calculate odds ratios for both treatments vs placebo, both model fits ----
-## Result = tidy data frame we can plot! Hooray!
-dcfd_ors <- map_df(
-  list(dcfd_mod),
-  rms_comparisons_addoutcome,
-  df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
-) %>%
-  mutate(comp.c = fct_rev(factor(comp.c))) %>%
-  ## Keep only one row for reference group
-  distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
+## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
+dcfd_ors <- trt_ratios(mod = dcfd_mod)
 
-ggplot(data = dcfd_ors, aes(y = effect, x = comp.c)) +
-  ## Fake row to set up order properly
-  geom_point(shape = NA) +
-  ## Reference line at 1 (no effect)
-  geom_hline(yintercept = 1, linetype = "solid",
-             colour = palette_colors["lgray"], size = 2) +
-  ## Plot a point for control group
-  geom_point(shape = 15, colour = "black", size = 4,
-             data = dcfd_ors %>% filter(comp.c == "C")) +
-  ## Add ORs, CIs for treatment groups vs control
-  geom_pointrange(
-    aes(ymin = lcl, ymax = ucl),
-    position = position_dodge(width = 0.5),
-    shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
-    data = dcfd_ors %>% filter(comp.c != "C")
-  ) +
-  labs(
-    title = "Treatment Group vs Delirium/Coma-Free Days",
-    subtitle = glue(
-      "P: {formatp(anova(dcfd_mod)['trt', 'P'])}"
-    ),
-    y = "Odds Ratio (95% Confidence Interval)",
-    caption = "\nAdjusted analysis using proportional odds logistic regression."
-  ) +
-  theme(
-    legend.position = "none",
-    axis.ticks.y = element_blank(),
-    axis.title.y = element_blank(),
-    plot.caption = element_text(size = basetext_size * 0.7)
-  ) +
-  coord_flip()
+plot_trt_ratios(
+  ratio_df = dcfd_ors,
+  "Delirium/Coma-Free Days",
+  mod = dcfd_mod
+)
 
 ```
 
 <details>
 ```{r table_dcfd_ors}
-dcfd_ors_table <- dcfd_ors %>%
-  mutate(
-    comparison = glue("{comp.c} vs {ref.c}"),
-    or_ci = glue(
-      "{rndformat(effect)}",
-      " ({rndformat(lcl)}, ",
-      "{rndformat(ucl)})"
-    )
-  ) %>%
-  arrange(desc(ref), comp) %>%
-  dplyr::select(comparison, or_ci)
-
-dcfd_ors_table %>%
-  kable(
-    format = "html",
-    col.names = c("Comparison", "Odds Ratio (95% CI)"),
-    align = c("l", "r")
-  ) %>%
-  mykablestyle() %>%
-  row_spec(3, color = palette_colors["lgray"])
+table_trt_ratios(ratio_df = dcfd_ors, ratio_type = "Odds")
 
 ```
 </details>
@@ -2049,73 +2101,24 @@ TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 ##### Adjusted Hazard Ratios
 
 ```{r death_30_hrs, fig.width = 5, fig.height = 3}
-## -- Calculate odds ratios for both treatments vs placebo, both model fits ----
-## Result = tidy data frame we can plot! Hooray!
-death_30_hrs <- map_df(
-  list(death_30_mod),
-  rms_comparisons_addoutcome,
-  df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
-) %>%
-  mutate(comp.c = fct_rev(factor(comp.c))) %>%
-  ## Keep only one row for reference group
-  distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
+## -- Calculate, plot hazard ratios for both treatments vs placebo -------------
+death_30_hrs <- trt_ratios(death_30_mod)
 
-ggplot(data = death_30_hrs, aes(y = effect, x = comp.c)) +
-  ## Fake row to set up order properly
-  geom_point(shape = NA) +
-  ## Reference line at 1 (no effect)
-  geom_hline(yintercept = 1, linetype = "solid",
-             colour = palette_colors["lgray"], size = 2) +
-  ## Plot a point for control group
-  geom_point(shape = 15, colour = "black", size = 4,
-             data = death_30_hrs %>% filter(comp.c == "C")) +
-  ## Add ORs, CIs for treatment groups vs control
-  geom_pointrange(
-    aes(ymin = lcl, ymax = ucl),
-    position = position_dodge(width = 0.5),
-    shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
-    data = death_30_hrs %>% filter(comp.c != "C")
-  ) +
-  labs(
-    title = "Treatment Group vs All-Cause Death",
-    subtitle = glue(
-      "P: {formatp(anova(death_30_mod)['trt', 'P'])}"
-    ),
-    y = "Hazard Ratio (95% Confidence Interval)",
-    caption = "\nIncludes deaths within 30 days of randomization.\nAdjusted analysis using Cox proportional hazards model."
-  ) +
-  theme(
-    legend.position = "none",
-    axis.ticks.y = element_blank(),
-    axis.title.y = element_blank(),
-    plot.caption = element_text(size = basetext_size * 0.7)
-  ) +
-  coord_flip()
+plot_trt_ratios(
+  ratio_df = death_30_hrs,
+  outcome_text = "All-Cause Death",
+  extra_text = glue(
+    "Includes deaths within 30 days of randomization.\n",
+    "Patients who withdrew & revoked access to PHI are censored on the day of withdrawal."
+  ),
+  mod = death_30_mod
+)
 
 ```
 
 <details>
 ```{r table_death_30_hrs}
-death_30_table <- death_30_hrs %>%
-  mutate(
-    comparison = glue("{comp.c} vs {ref.c}"),
-    hr_ci = glue(
-      "{rndformat(effect)} ",
-      "({rndformat(lcl)}, ",
-      "{rndformat(ucl)})"
-    )
-  ) %>%
-  arrange(desc(ref), comp) %>%
-  dplyr::select(comparison, hr_ci)
-
-death_30_table %>%
-  kable(
-    format = "html",
-    col.names = c("Comparison", "Hazard Ratio (95% CI)"),
-    align = c("l", "r")
-  ) %>%
-  mykablestyle() %>%
-  row_spec(3, color = palette_colors["lgray"])
+table_trt_ratios(ratio_df = death_30_hrs)
 
 ```
 </details>
