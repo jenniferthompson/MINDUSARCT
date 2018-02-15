@@ -1964,15 +1964,22 @@ km_death_30$plot <- km_death_30$plot +
 km_death_30$table <- km_death_30$table +
   labs(title = "Number at risk (cumulative number of deaths)") +
   xlab("Days after Randomization") +
-  ylab("placeholder text\n") +
-  theme(plot.title = element_text(size = basetext_size * 0.8),
-        axis.title.y = element_text(color = "white"),
-        legend.position = "none")
+  scale_y_discrete(
+    name = "placeholder text\n",
+    labels = paste0("  ", rev(levels(model_df$trt)))
+  ) +
+  theme(
+    plot.title = element_text(size = basetext_size * 0.8),
+    axis.title.y = element_text(color = "white"),
+    legend.position = "none",
+    panel.grid = element_blank()
+  )
 
 ## Printing this plot with just print(km_death_30) is causing a blank page, a la
 ## this SO post. No great solution found yet. Printing the pieces separately and
 ## trying to make them line up manually is the best I've got.
 ## https://stackoverflow.com/questions/42479112/survival-plots-with-survminer-blank-plot
+## Seems to be an issue with html_notebook; html_document doesn't have this.
 
 ```
 
