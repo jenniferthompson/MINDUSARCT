@@ -192,7 +192,7 @@ table_trt_ratios <- function(
       col.names = c("Comparison", glue("{ratio_type} Ratio (95% CI)")),
       align = c("l", "r")
     ) %>%
-    mykablestyle() %>%
+    mykablestyle(position = "left") %>%
     ## Include "placebo vs placebo" row for clarity, but gray out
     row_spec(3, color = palette_colors["lgray"])
 }
@@ -683,7 +683,7 @@ last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
 
 `r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`.
 
-### `r table_nums("screening")`
+#### `r table_nums("screening")`
 
 ```{r print_screen_table}
 screen_table %>%
@@ -700,7 +700,7 @@ screen_table %>%
 
 Patients could have none, one, or two of the listed organ failures present at randomization; percentages will not add up to 100%.
 
-### `r table_nums("exclusions")`
+#### `r table_nums("exclusions")`
 
 ```{r prep_exclusions}
 ## Some exclusions aren't relevant for our purposes here:
@@ -787,7 +787,7 @@ exc_table %>%
 
 ```
 
-### `r table_nums("exc_other")`
+##### `r table_nums("exc_other")`
 
 To save space, reasons for "other" exclusions are collapsed. Click on `Details` below to view them.
 
@@ -816,7 +816,7 @@ Our study design was such that a substantial number of patients gave consent to 
 
 Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
 
-### `r table_nums("baseline_all")`
+#### `r table_nums("baseline_all")`
 
 **Note on the AUDIT:** This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
 
@@ -880,7 +880,7 @@ my_html(
 
 The following tables describe demographic and ICU admission characteristics (`r table_nums("baseline_trt", display = "cite")`) and in-hospital characteristics (`r table_nums("inhosp_trt", display = "cite")`) of all randomized patients.
 
-### `r table_nums("baseline_trt")`
+#### `r table_nums("baseline_trt")`
 
 ```{r baseline_trt}
 my_html(
@@ -891,7 +891,7 @@ my_html(
 
 ```
 
-### `r table_nums("icursn_other")`
+##### `r table_nums("icursn_other")`
 
 To save space, reasons for "other" ICU admission among randomized patients are collapsed. Click on `Details` below to view them.
 
@@ -911,7 +911,7 @@ ptsummary_all_df %>%
 
 </details>
 
-### `r table_nums("inhosp_trt")`
+#### `r table_nums("inhosp_trt")`
 
 Unless otherwise specified, quantities in this table reflect the 14 days including and following randomization (the "study period"). Additional notes:
 
@@ -1060,7 +1060,7 @@ In both tables, quantities are represented as either `N (%)` or as `median [25th
 
 Among patients with study drug temporarily held, the most common reasons were oversedation and "other." Study drug was most often discontinued by request of the patient, family, or medical team.
 
-### `r table_nums("intervention_pt")`
+#### `r table_nums("intervention_pt")`
 
 ```{r prep_rand_table}
 randtable_df <- rand_df %>%
@@ -1211,7 +1211,7 @@ rand_table %>%
 
 Oversedation was the most common reason for temporary hold by far; actual RASSes at the time of dose administration are listed in `r table_nums("intervention_dose", display = "cite")`. Refusal (patient, family, or medical team) was the most common reason for permanent discontinuation.
 
-### `r table_nums("intervention_dose")`
+#### `r table_nums("intervention_dose")`
 
 ```{r prep_dose_table}
 ## How many total doses in each treatment group?
@@ -1421,7 +1421,7 @@ other_permdc_table <- doses_df %>%
 
 ```
 
-### `r table_nums("dose_held_other")`
+##### `r table_nums("dose_held_other")`
 
 <details>
 ```{r print_dose_held_other}
@@ -1436,7 +1436,7 @@ other_held_table %>%
 ```
 </details>
 
-### `r table_nums("dose_permdc_other")`
+##### `r table_nums("dose_permdc_other")`
 
 <details>
 ```{r print_dose_permdc_other}
@@ -1472,7 +1472,7 @@ No randomized patients ever experienced NMS during the study (during or outside 
 
 ### Torsades de Pointes
 
-During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced Torsades de pointes. Both instances were recorded as Serious Adverse Events; descriptions of both AEs are included below, with potentially identifying details redacted.
+During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced torsades de pointes. Both instances were recorded as Serious Adverse Events; descriptions of both AEs are included below, with potentially identifying details redacted.
 
 ```{r torsades, results = "hide"}
 torsades_df %>%
@@ -1716,25 +1716,9 @@ Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our
 
 In addition, we adjust variances using Huber-White sandwich estimation clustered by study site. This will help account for unmeasured variability and correlation among patients within a given site.
 
-#### Redundancy Analysis
+#### Model Fitting, Checks and Assumptions {.tabset}
 
-To make sure none of our covariates completely explain any of the others (resulting in collinearity), we perform a redundancy analysis, detailed below. No covariates suggest evidence of too-high collinearity.
-
-<details>
-
-```{r redundancy, results = "markup"}
-Hmisc::redun(
-  ~ age_consent + charlson_total + frailty + sofa_mod_imp_rand +
-    I(iqcode_total_ph) + arousal_rand + trt,
-  data = model_df,
-  nk = rcsknots
-)
-
-```
-
-</details>
-
-#### Model Fitting
+##### Model Fitting
 
 ```{r dcfds_adj, results = "hide"}
 ## Primary model fit using rms::orm(), because Liu & Shepherd have some nice
@@ -1757,11 +1741,23 @@ dcfd_mod_lrm <- lrm(
 
 ```
 
-#### Model Assumptions
+##### Redundancy Analysis
+
+To make sure none of our covariates completely explain any of the others (resulting in collinearity), we perform a redundancy analysis, detailed below. No covariates suggest evidence of too-high collinearity.
+
+```{r redundancy, results = "markup"}
+Hmisc::redun(
+  ~ age_consent + charlson_total + frailty + sofa_mod_imp_rand +
+    I(iqcode_total_ph) + arousal_rand + trt,
+  data = model_df,
+  nk = rcsknots
+)
+
+```
+
+##### Assumptions
 
 We graphically check our assumption of proportional odds, paying particular attention to treatment group. Something may be amiss if Y axis values (estimated coefficient at various cutoffs of our outcome) change substantially across the X axis, particularly if the effect changes direction (noted by the dotted line at 0). For further discussion, please see Harrell's *Regression Modeling Strategies*, 2nd ed, section 13.3.
-
-<details>
 
 ```{r dcfds_assume}
 JTHelpers::rms_po_assume(
@@ -1773,8 +1769,6 @@ JTHelpers::rms_po_assume(
   theme(axis.text = element_text(size = 8))
 
 ```
-
-</details>
 
 #### Model Results
 
@@ -1938,7 +1932,7 @@ dcfd_adjmeds_table %>%
     col.names = c("Treatment", "Adjusted Median (95% CI)"),
     align = c("c", "r")
   ) %>%
-  mykablestyle()
+  mykablestyle(position = "left")
 
 ```
 
@@ -2054,7 +2048,9 @@ km_death_30$table
 
 We perform multivariable regression analyses using a Cox proportional hazards model to explore the association between treatment group and time to death while adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision.
 
-#### Model Fitting
+#### Model Fitting and Assumptions {.tabset}
+
+##### Model Fitting
 
 ```{r death_30_adj, results = "hide"}
 death_30_mod <- cph(
@@ -2066,7 +2062,7 @@ death_30_mod <- cph(
 
 ```
 
-#### Model Assumptions
+##### Assumptions
 
 ```{r death_30_assume}
 ## -- Check proportional hazard assumption -------------------------------------
@@ -2084,8 +2080,6 @@ death_30_phtext <- ifelse(
 
 We graphically check our assumption of proportional hazards, paying particular attention to treatment group and looking for generally flat lines in each panel. `r death_30_phtext`
 
-<details>
-
 ```{r death_30_assumeplot}
 par(mfrow = c(2, 3))
 plot(death_30_zph, col = 'red', lwd = 2)
@@ -2093,8 +2087,6 @@ abline(v = 0, lty = 2, col = 'gray')
 par(mfrow = c(1, 1))
 
 ```
-
-</details>
 
 #### Model Results {.tabset}
 
