@@ -1782,7 +1782,9 @@ We show the odds ratios (using placebo as reference) and adjusted medians for DC
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-##### Adjusted Odds Ratios
+##### Adjusted Odds Ratios {.tabset}
+
+###### Visual Form
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
 ## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
@@ -1796,14 +1798,16 @@ plot_trt_ratios(
 
 ```
 
-<details>
+###### Tabular Form
+
 ```{r table_dcfd_ors}
 table_trt_ratios(ratio_df = dcfd_ors, ratio_type = "Odds")
 
 ```
-</details>
 
-##### Adjusted Medians
+##### Adjusted Medians {.tabset}
+
+###### Visual Form
 
 ```{r dcfd_medians, fig.width = 5, fig.height = 3}
 ## -- Use Liu's function (see chunk orm_functions) to calculate conditional ----
@@ -1915,7 +1919,8 @@ ggplot(data = dcfd_adjmeds, aes(y = quantile, x = forcats::fct_rev(trt))) +
 
 ```
 
-<details>
+###### Tabular Form
+
 ```{r table_dcfd_adjmeds}
 dcfd_adjmeds_table <- dcfd_adjmeds %>%
   mutate(
@@ -1936,7 +1941,6 @@ dcfd_adjmeds_table %>%
   mykablestyle()
 
 ```
-</details>
 
 ## Time to Death within 30 Days
 
@@ -1993,7 +1997,7 @@ km_death_30$plot <- km_death_30$plot +
     labels = paste0(seq(0, 1, 0.25) * 100, "%")
   ) +
   labs(
-    title = "Kaplan-Meier Curve, 30-Day All-Cause Mortality",
+    title = "Kaplan-Meier Curve, 30-Day All-Cause Death",
     ## Add log-rank test results to subtitle
     subtitle = glue(
       "Log-rank test for difference between treatments: ",
@@ -2092,13 +2096,13 @@ par(mfrow = c(1, 1))
 
 </details>
 
-#### Model Results
+#### Model Results {.tabset}
 
 We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **lower** than 1 are favorable, indicating lower likelihood of death at any given time point within 30 days of randomization.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-##### Adjusted Hazard Ratios
+##### Visual Form
 
 ```{r death_30_hrs, fig.width = 5, fig.height = 3}
 ## -- Calculate, plot hazard ratios for both treatments vs placebo -------------
@@ -2116,12 +2120,12 @@ plot_trt_ratios(
 
 ```
 
-<details>
+##### Tabular Form
+
 ```{r table_death_30_hrs}
 table_trt_ratios(ratio_df = death_30_hrs)
 
 ```
-</details>
 
 # Notes on Variable Calculation{#varcalc}
 
