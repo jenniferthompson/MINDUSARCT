@@ -28,6 +28,7 @@ suppressPackageStartupMessages(library(rms))
 suppressPackageStartupMessages(library(naniar))
 suppressPackageStartupMessages(library(sparkline))
 suppressPackageStartupMessages(library(survminer))
+suppressPackageStartupMessages(library(cmprsk))
 suppressPackageStartupMessages(library(ggthemr)) ## Github only; cttobin/ggthemr
 suppressPackageStartupMessages(library(JTHelpers))
   ## Github only; jenniferthompson/JTHelpers
@@ -88,6 +89,26 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
 }
 
 ## -- Modeling/results helper functions ----------------------------------------
+## Graphically check proportional hazards assumption; mod_zph is class cox.zph
+plot_ph_assume <- function(mod_zph){
+  par(mfrow = c(3, 3))
+  plot(mod_zph, col = 'red', lwd = 2)
+  abline(v = 0, lty = 2, col = 'gray')
+  par(mfrow = c(1, 1))
+}
+
+## Extract p-value for global PH assumption; create reproducible statement
+text_ph_assume <- function(mod_zph){
+  global_phtest <- mod_zph$table["GLOBAL", "p"]
+  global_phtext <- ifelse(
+    global_phtest < 0.05,
+    glue("The global test for proportional hazards indicates the assumption is not fully met (p {formatp(global_phtest)}); please see the figures below for further detail."),
+    glue("The global test for proportional hazards indicates no major concern (p = {formatp(global_phtest)}); please see the figures below for further detail.")
+  )
+  
+  return(global_phtext)
+}
+
 ## Wrapper for rms_calc_comparisons; adds outcome variable as a column
 ## (Tested on lrm, cph fits)
 rms_comparisons_addoutcome <- function(rmsObj, ...){
@@ -1514,8 +1535,8 @@ We examine all outcomes and covariates to determine how much missing data is pre
 outcome_vars <- c(
   "dcfd_int", "del_int_all", "coma_int_all",
   "tte_death_30", "event_death_30",   ## Time to death
-  "tte_icudis_30", "event_icudis_30", ## Time to final, successful ICU discharge
-  "tte_mvlib_30", "event_mvlib_30"    ## Time to liberation from MV
+  "tte_icudis_30", "ftype_icudis_30", ## Time to final, successful ICU discharge
+  "tte_mvlib_30", "ftype_mvlib_30"    ## Time to liberation from MV
 )
 
 covariate_vars <- c(
@@ -1611,7 +1632,7 @@ mod_rhs_lin <- paste(covariate_vars, collapse = " + ")
 ```{r missing_allpts}
 gg_miss_var(
   model_df %>%
-    dplyr::select(-id, -rass_rand, -on_mv_rand24, -tte_mvlib_30, -event_mvlib_30),
+    dplyr::select(-id, -rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30),
   show_pct = TRUE
 ) +
   scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
@@ -1936,7 +1957,7 @@ dcfd_adjmeds_table %>%
 
 ```
 
-## Time to Death within 30 Days
+## Time to Death
 
 We explore the association between treatment and time to death from all causes within the 30 days following randomization. All randomized patients are included.
 
@@ -2069,28 +2090,20 @@ death_30_mod <- cph(
 death_30_zph <- cox.zph(death_30_mod, transform = 'log')
 
 ## Extract p-value for global PH assumption; create reproducible statement
-death_30_phtest <- death_30_zph$table["GLOBAL", "p"]
-death_30_phtext <- ifelse(
-  death_30_phtest < 0.05,
-  glue("The global test for proportional hazards indicates the assumption is not fully met (p {formatp(death_30_phtest)}); please see the figures below for further detail."),
-  glue("The global test for proportional hazards indicates no major concern (p = {formatp(death_30_phtest)}); please see the figures below for further detail.")
-)
+death_30_phtext <- text_ph_assume(death_30_zph)
 
 ```
 
 We graphically check our assumption of proportional hazards, paying particular attention to treatment group and looking for generally flat lines in each panel. `r death_30_phtext`
 
 ```{r death_30_assumeplot}
-par(mfrow = c(2, 3))
-plot(death_30_zph, col = 'red', lwd = 2)
-abline(v = 0, lty = 2, col = 'gray')
-par(mfrow = c(1, 1))
+plot_ph_assume(death_30_zph)
 
 ```
 
 #### Model Results {.tabset}
 
-We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **lower** than 1 are favorable, indicating lower likelihood of death at any given time point within 30 days of randomization.
+We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **lower** than 1 are favorable, indicating lower likelihood of death at any given time point within 30 days of randomization given that the patient has survived up to that point.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -2118,6 +2131,346 @@ plot_trt_ratios(
 table_trt_ratios(ratio_df = death_30_hrs)
 
 ```
+
+## Time to Successful ICU Discharge
+
+We explore the relationship between treatment group and successful ICU discharge, defined as the final ICU discharge from the study hospitalization, followed by at least 48 hours alive. Patients who die prior to ICU discharge are obviously unable to experience that outcome. We could censor patients at the time of death; however, traditional survival analysis assumes that censoring is independent of the outcome, which is clearly not the case here. Rather, we use a competing risks survival model to look at the hazard and cumulative incidence of both ICU discharge and death.
+
+**Censoring and time to events:**
+
+- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 < 31))` patients prior to the end of the 30-day period; two withdrew from the study with no access permitted to PHI. One was discharged prior at time 29.x days, but died on day 30.x; this patient is censored at the time of discharge, since s/he experienced neither outcome of interest during the time period, but died prior to the 31 days assigned to all patients who survived the entire 30 days.
+- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 == 31))` patients at day 31 who survived the entire 30-day period but remained in the ICU on day 30.
+- We assign patients who died within the 30-day period a time value of `time of death - time of randomization` and a "failure type" of death; we assign patients who were successfully discharged within the 30-day period a time value of `time of discharge - time of randomization` and a "failure type" of ICU discharge.
+
+### Unadjusted Analyses
+
+A simple Kaplan-Meier curve would be misleading in the case of competing risks, because it does not take into account patients who died. Rather, we present cumulative incidence plots by treatment group for both ICU discharge and death, unadjusted for any covariates.
+
+```{r cuminc_icudc_unadj, fig.height = 5}
+## Fit cumulative incidence functions, no covariates except treatments
+icudis_30_cif_unadj <- with(model_df, {
+  cuminc(
+    ftime = tte_icudis_30,
+    fstatus = ftype_icudis_30,
+    group = trt,
+    cencode = "Censored"
+  )
+})
+
+## Create strings for test results
+icudis_30_tests_unadj <- icudis_30_cif_unadj$Tests %>%
+  ## Coerce to tbl_df; as_tibble makes it easy to keep rownames as new variable
+  as_tibble(rownames = "subdist") %>%
+  glue_data(
+    "{subdist}: X2, {rndformat(stat, 2)}; df, {df}; P, {formatp(pv)}"
+  )
+
+ggcompetingrisks(icudis_30_cif_unadj, conf.int = TRUE, ggtheme = mindusa_theme()) +
+  scale_color_manual(
+    name = "",
+    values = c(
+      as.character(palette_colors["lgray"]),
+      as.character(palette_colors["dred"])
+    ),
+    labels = c("Death", "ICU Discharge")
+  ) +
+  scale_fill_manual(
+    name = "",
+    values = c(
+      as.character(palette_colors["lgray"]),
+      as.character(palette_colors["dred"])
+    ),
+    labels = c("Death", "ICU Discharge")
+  ) +
+  scale_y_continuous(
+    limits = 0:1,
+    breaks = seq(0, 1, 0.2),
+    labels = paste0(seq(0, 1, 0.2) * 100, "%")
+  ) +
+  labs(
+    title = "Cumulative Incidence of Successful ICU Discharge",
+    subtitle = glue(
+      "Competing risk of death prior to discharge\n\n",
+      "Tests for difference between treatments:\n",
+      "{paste(icudis_30_tests_unadj, collapse = '\n')}"
+    ),
+    x = "Days after Randomization",
+    y = "Cumulative Probability",
+    caption = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
+  )
+
+```
+
+### Adjusted Analyses
+
+```{r explore_competingrisks}
+################################################################################
+## Competing risks are new to me, and using splines and wanting group-added-  ##
+## last tests makes things difficult. The cmprsk package seems to be standard ##
+## for competing risks; the survival package is classic for time-to-event     ##
+## outcomes; and the rms package has some really nice features for splines    ##
+## and results summaries. Let's see if we can get them all to give us the     ##
+## same results using a model with only linear terms!                         ##
+################################################################################
+
+## -- Previously defined objects: ----------------------------------------------
+## - mod_rhs_lin: "age_consent + charlson_total + iqcode_total_ph + frailty + sofa_mod_imp_rand + trt + arousal_rand"
+## - covariate_vars: character vector with all variables included in mod_rhs_lin
+## - tte_icudis_30: time to ICU discharge, death, or censoring
+## - ftype_icudis_30: can be Censored, ICU Discharge, or Death
+## - model_df: data.frame with all variables for all regression analyses
+
+## -- cmprsk package -----------------------------------------------------------
+## Prep: crr() requires matrix of covariate values; doesn't take model formulas
+## Extract these from model_df, restricting to complete cases
+icudis_30_df <- model_df %>%
+  dplyr::select(id, one_of(covariate_vars), tte_icudis_30, ftype_icudis_30)
+icudis_30_df <- icudis_30_df[complete.cases(icudis_30_df), ]
+
+## Use model.matrix to create a... model matrix; remove the intercept
+icudis_30_modmatrix <-
+  model.matrix(as.formula(sprintf("~ %s", mod_rhs_lin)), icudis_30_df)[, -1]
+
+# > head(icudis_30_modmatrix)
+#   age_consent charlson_total iqcode_total_ph frailty sofa_mod_imp_rand trtB trtC
+# 1    48.59411              4          3.0000       4                 9    0    1
+# 2    58.63929              4          3.0000       6                 4    1    0
+# 3    66.20945              8          3.1250       6                 7    1    0
+# 4    48.76386              4          3.1875       3                15    0    0
+# 5    49.17454              0          3.0000       2                 6    0    1
+# 6    41.06776              3          3.0625       6                12    1    0
+#   arousal_randLightly sedated arousal_randNormal arousal_randAgitated
+# 1                           1                  0                    0
+# 2                           1                  0                    0
+# 3                           0                  0                    1
+# 4                           1                  0                    0
+# 5                           0                  1                    0
+# 6                           1                  0                    0
+
+## Fit competing risks regression using cmprsk
+icudis_30_crr <- crr(
+  ftime = icudis_30_df$tte_icudis_30,     ## failure time variable
+  fstatus = icudis_30_df$ftype_icudis_30, ## failure type variable
+  cov1 = icudis_30_modmatrix,             ## model matrix created above
+  failcode = "ICU Discharge",             ## failure type of *interest*
+  cencode = "Censored"                    ## censoring indicator
+)
+
+## HRs, CIs for ICU discharge
+# > print(summary(icudis_30_crr)$coef, digits = 4)
+#                                  coef exp(coef) se(coef)       z p-value
+# age_consent                 -0.009663    0.9904 0.003569 -2.7076 6.8e-03
+# charlson_total               0.016782    1.0169 0.023418  0.7167 4.7e-01
+# iqcode_total_ph              0.082576    1.0861 0.138195  0.5975 5.5e-01
+# frailty                     -0.079739    0.9234 0.039671 -2.0100 4.4e-02
+# sofa_mod_imp_rand           -0.109252    0.8965 0.016178 -6.7532 1.4e-11
+# trtB                         0.032778    1.0333 0.116178  0.2821 7.8e-01
+# trtC                        -0.007354    0.9927 0.122361 -0.0601 9.5e-01
+# arousal_randLightly sedated  0.089067    1.0932 0.111930  0.7957 4.3e-01
+# arousal_randNormal           0.455087    1.5763 0.169115  2.6910 7.1e-03
+# arousal_randAgitated         0.256523    1.2924 0.181392  1.4142 1.6e-01
+
+## Makes sense - patients who were normal at baseline have a much higher hazard
+## of discharge than patients deeply sedated, for example; HR for higher
+## modified SOFA indicates a lower hazard of discharge; etc
+
+## -- survival package ---------------------------------------------------------
+## survival::finegray() creates a dataset meant for use with Fine-Gray competing
+## risks models. Many thanks to this StackExchange post for making me aware!
+## https://stats.stackexchange.com/questions/212312/add-categorical-variable-in-crr-of-package-cmprsk
+
+## Setup: Create a Surv object with our complete case dataset
+icudis_30_Surv <- with(icudis_30_df, {
+  Surv(
+    time = tte_icudis_30,    ## End time variable
+    event = ftype_icudis_30, ## Failure type variable
+    type = "mstate"          ## Censoring type = multistate (this would be
+                             ##   assumed b/c ftype_icudis_30 is a factor, but
+                             ##   why not be explicit?)
+  )
+})
+
+## Create dataset built for Fine-Gray approach, specifying ICU discharge as our
+## event of interest
+icudis_30_fg <- finegray(
+  icudis_30_Surv ~ .,      ## dataset should include Surv object + all variables
+  data = icudis_30_df,     ## complete case dataset
+  etype = "ICU Discharge", ## event of interest
+  ## Don't really need these, but were helpful when I was spot-checking
+  id = id,
+  count = "fgcount"
+)
+
+## Fit model with usual coxph() syntax; only difference is the use of weights,
+## created for us by finegray() and included as a variable in icudis_30_fg
+icudis_30_coxph <- coxph(
+  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_lin)),
+  data = icudis_30_fg,
+  weights = fgwt
+)
+
+## HRs, CIs for ICU discharge
+# > print(summary(icudis_30_coxph)$coef, digits = 4)
+#                                  coef exp(coef) se(coef)        z  Pr(>|z|)
+# age_consent                 -0.009664    0.9904 0.003695 -2.61522 8.917e-03
+# charlson_total               0.016788    1.0169 0.022293  0.75307 4.514e-01
+# iqcode_total_ph              0.082539    1.0860 0.144711  0.57037 5.684e-01
+# frailty                     -0.079729    0.9234 0.040596 -1.96396 4.953e-02
+# sofa_mod_imp_rand           -0.109252    0.8965 0.015951 -6.84923 7.425e-12
+# trtB                         0.032775    1.0333 0.120221  0.27262 7.851e-01
+# trtC                        -0.007329    0.9927 0.122320 -0.05992 9.522e-01
+# arousal_randLightly sedated  0.089071    1.0932 0.114187  0.78004 4.354e-01
+# arousal_randNormal           0.455061    1.5763 0.181815  2.50287 1.232e-02
+# arousal_randAgitated         0.256547    1.2925 0.183423  1.39867 1.619e-01
+
+## -- rms package --------------------------------------------------------------
+## rms::cph() is a wrapper around survival::coxph(), with some added
+## functionality and consistency with other rms model functions. Therefore we
+## should be able to use nearly the same code as coxph, get the same results,
+## but in a way we expect from rms.
+icudis_30_cph <- cph(
+  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_lin)),
+  data = icudis_30_fg,
+  weights = fgwt
+)
+
+## Lots of tweaks to default summary.rms output to get consistent units with
+##  other two options
+tmp <- summary(
+  icudis_30_cph,
+  age_consent = c(50, 51),
+  charlson_total = c(1, 2),
+  iqcode_total_ph = c(3, 4),
+  frailty = c(3, 4),
+  sofa_mod_imp_rand = c(6, 7),
+  arousal_rand = "Deeply sedated"
+) %>%
+  ## Get summary.rms() output in a format that's easy to compare with others
+  as_tibble(rownames = "var") %>%
+  dplyr::select(var, Effect, "S.E.", Type) %>%
+  set_names(c("var", "coef", "se", "type")) %>%
+  ## For whatever reason, summary.rms() returns the numeric columns as matrices.
+  ## We need them to be numeric. This is harder than it should be.
+  ## mutate_at doesn't accept matrix inputs. SAD FACE. But we have purrr!
+  ## This marks the first time I have found a use for purrr vs mutate methods.
+  map_if(.p = ~ inherits(., "matrix"), .f = as.numeric) %>%
+  ## Using map_if() splits into a list; put it back together
+  bind_cols() %>%
+  mutate(
+    var = ifelse(type == 2, dplyr::lag(var), var),
+    exp_coef = ifelse(type == 1, lead(coef), NA)
+  ) %>%
+  filter(type == 1) %>%
+  dplyr::select(var, coef, exp_coef, se)
+
+## Note: summary.rms() doesn't return that many decimal places.
+
+# > print(tmp, digits = 4)
+# # A tibble: 10 x 4
+#    var                                               coef exp_coef      se
+#    <chr>                                            <dbl>    <dbl>   <dbl>
+#  1 age_consent                                   -0.00966    0.990 0.00370
+#  2 charlson_total                                 0.0168     1.02  0.0223 
+#  3 iqcode_total_ph                                0.0825     1.09  0.145  
+#  4 frailty                                       -0.0797     0.923 0.0406 
+#  5 sofa_mod_imp_rand                             -0.109      0.897 0.0160 
+#  6 trt - B:A                                      0.0328     1.03  0.120  
+#  7 trt - C:A                                     -0.00733    0.993 0.122  
+#  8 arousal_rand - Lightly sedated:Deeply sedated  0.0891     1.09  0.114  
+#  9 arousal_rand - Normal:Deeply sedated           0.455      1.58  0.182  
+# 10 arousal_rand - Agitated:Deeply sedated         0.257      1.29  0.183
+
+```
+
+#### Model Fitting and Assumptions {.tabset}
+
+##### Model Fitting
+
+```{r icudis_30_adj}
+## -- Fit competing risks model using survival::finegray(), rms::cph() ---------
+## Note: I tested three separate methods to make sure results were consistent:
+## cmprsk, survival, and rms. Results in this gist:
+## https://gist.github.com/jenniferthompson/c66d1aa6060d3e8919ea917f7aa94288
+
+## -- Create Surv object -------------------------------------------------------
+icudis_30_Surv <- with(model_df, {
+  Surv(time = tte_icudis_30, event = ftype_icudis_30, type = "mstate")
+})
+
+## -- Create dataset specifically for Fine-Gray method of competing risks ------
+icudis_30_fg <- finegray(
+  ## Use **linear** RHS here; we'll fit spline terms within model formula itself
+  as.formula(paste("icudis_30_Surv ~", mod_rhs_lin)),
+  data = model_df,
+  etype = "ICU Discharge",
+  id = id,
+  count = "fgcount"
+)
+
+## -- Fit actual model, using variables/weights from finegray() ----------------
+icudis_30_mod <- cph(
+  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs)),
+  data = icudis_30_fg,
+  weights = fgwt,
+  x = TRUE, y = TRUE
+)
+
+```
+
+##### Assumptions
+
+```{r icudis_30_assume}
+## -- Check proportional hazard assumption -------------------------------------
+icudis_30_zph <- cox.zph(icudis_30_mod, transform = 'log')
+
+## Extract p-value for global PH assumption; create reproducible statement
+icudis_30_phtext <- text_ph_assume(icudis_30_zph)
+
+```
+
+We graphically check our assumption of proportional hazards for the ICU discharge subdistribution, paying particular attention to treatment group and looking for generally flat lines in each panel. `r icudis_30_phtext`
+
+```{r icudis_30_assumeplot}
+plot_ph_assume(icudis_30_zph)
+
+```
+
+#### Model Results {.tabset}
+
+We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **higher** than 1 are favorable; for example, an HR of 1.5 for haloperidol vs placebo indicates that, on average, patients in the haloperidol group have 1.5 times the likelihood of successful ICU discharge vs those in the placebo group at any given time point, given that they remain alive and in the ICU.
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Visual Form
+
+```{r icudis_30_hrs, fig.width = 5, fig.height = 3.5}
+## -- Calculate, plot hazard ratios for both treatments vs placebo -------------
+icudis_30_hrs <- trt_ratios(icudis_30_mod)
+
+plot_trt_ratios(
+  ratio_df = icudis_30_hrs,
+  outcome_text = "Successful ICU Discharge",
+  extra_text = glue(
+    "\n\n",
+    '"Successful": final ICU discharge within 30 days of randomization, ',
+    "followed by at least 48 hours alive.\n",
+    "Patients who withdrew & revoked access to PHI ",
+    "are censored on the day of withdrawal.\n",
+    "Deaths prior to ICU discharge are accounted for using competing risks."
+  ),
+  mod = icudis_30_mod
+) +
+  theme(plot.caption = element_text(size = basetext_size * 0.6))
+
+```
+
+##### Tabular Form
+
+```{r table_icudis_30_hrs}
+table_trt_ratios(ratio_df = icudis_30_hrs)
+
+```
+
 
 # Notes on Variable Calculation{#varcalc}
 
