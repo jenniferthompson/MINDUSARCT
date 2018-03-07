@@ -613,6 +613,9 @@ fig_nums(
 ##  by create_rctdata.R in ../MINDUSADataMgmt.
 load("analysisdata/rct.Rdata")
 
+## How many patients were randomized?
+n_rand <- length(rand_pts)
+
 ```
 
 # Screening, Consent, and Randomization
@@ -1526,7 +1529,7 @@ ptsummary_df %>%
 
 ```
 
-# Exploration of Missing Data
+# Exploration of Missing Data & Potential Redundancy{#exploration}
 
 We examine all outcomes and covariates to determine how much missing data is present. In short, we have no missingness for our outcomes and very little for our covariates; therefore, we will perform complete case analysis only. Expand the `Details` section below for further information.
 
@@ -1567,6 +1570,23 @@ model_df <- ptsummary_df %>%
 
 ## Add newly created arousal_rand to covariate_vars
 covariate_vars <- c(covariate_vars, "arousal_rand")
+
+## Add indicator for complete covariate data
+model_df$comp_covars <- rowSums(is.na(model_df[, covariate_vars])) == 0
+## How many randomized patients have complete covariate data?
+n_rand_comp <- sum_na(model_df$comp_covars)
+
+## What % of patients are missing at least one covariate/outcome?
+## (This does *not* include variables related to liberation from MV, as that
+## would introduce artificial missingness)
+pts_missany <- model_df %>%
+  dplyr::select(-rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30) %>%
+  miss_case_table() %>%
+  filter(n_missing_in_case > 0) %>%
+  summarise(
+    nmiss = sum_na(n_cases),
+    pctmiss = sum_na(percent)
+  )
 
 ## Set datadist to this data.frame
 dd <- datadist(model_df)
@@ -1655,17 +1675,179 @@ ggplot(data = model_df) +
 
 </details>
 
+To make sure none of our covariates completely explain any of the others
+(resulting in collinearity), we perform a redundancy analysis, detailed below.
+No covariates suggest evidence of too-high collinearity.
+
+```{r redundancy, results = "markup"}
+Hmisc::redun(
+  ~ age_consent + charlson_total + frailty + sofa_mod_imp_rand +
+    I(iqcode_total_ph) + arousal_rand + trt,
+  data = model_df,
+  nk = rcsknots
+)
+
+```
+
+# Statistical Methods{#methods}
+
+<hr>
+
+## Unadjusted Analyses{#unadjusted}
+
+### In-Hospital Continuous Outcomes
+
+We analyze continuous outcomes (delirium/coma-free days, delirium duration, and
+coma duration) using the Kruskal-Wallis test. These outcomes are not normally
+distributed (see each section for further details); therefore, the assumptions
+for a parametric ANOVA would be violated, and results would be unreliable. The
+nonparametric Kruskal-Wallis test does not assume that the outcome has a
+specific distribution, and thus provides more power and reliability in the case
+of a non-normal distribution.
+
+### 30-Day Time to Event Outcomes
+
+We describe and test for differences in time to death using Kaplan-Meier curves
+and the log-rank test, respectively. Our other time-to-event outcomes, ICU and
+hospital discharge and liberation from mechanical ventilation, have a competing
+risk of death, meaning that patients who die do not have the opportunity to
+experience the outcome. Traditional survival analysis assumes that that the
+reason for censoring is independent of the outcome; here, that is not the case.
+Kaplan-Meier curves would be misleading in these scenarios, because they do not
+take this "competing risk" into account. Therefore, we describe together the
+cumulative incidences of both the outcome of interest and death, along with
+score tests for the difference between groups in the subdistribution of
+interest. Generally, the `[insert value]` patients who withdrew in the hospital
+and revoked access to PHI are censored at the time of withdrawal; we censor at
+31 days anyone who has experienced neither death nor the outcome of interest by
+30 days. More details on censoring are provided with each analysis.
+
+## Adjusted Analyses{#adjusted}
+
+### Multivariable Modeling
+
+We perform multivariable regression analyses to explore the association between
+treatment group and our outcome variables while adjusting for potential baseline
+confounders. Though these covariates should be balanced between treatment groups
+thanks to randomization, adjustment increases our power and precision. We
+performed a redundancy analysis[^rms] to ensure that no covariates completely
+explain any of the others (resulting in collinearity); see [above](#exploration).
+No covariates suggest evidence of too-high collinearity.
+
+[^rms]: Harrell, Frank E. (2015) *Regression Modeling Strategies.* New York, NY: Springer.
+
+In addition, we adjust all coefficient variances using Huber-White sandwich
+estimation, clustered by study site. This will help account for unmeasured
+variability and correlation among patients within a given site.
+
+### In-Hospital Continuous Outcomes
+
+We use proportional odds logistic regression for continuous outcomes
+(delirium/coma-free days, delirium duration, and coma duration); this method
+assumes an ordinal outcome but does not assume that it follows a specific
+statistical distribution.
+
+### 30-Day Time to Event Outcomes
+
+We use Cox proportional hazards regression for mortality. For all other time to
+event outcomes (ICU and hospital discharge and liberation from mechanical
+ventilation), we use competing risks regression[^fg], treating death as our
+competing risk. Generally, the `[insert value]` patients who withdrew in the
+hospital and revoked access to PHI are censored at the time of withdrawal; we
+censor at 31 days anyone who has experienced neither death nor the outcome of
+interest by 30 days. More details on censoring are provided with each analysis.
+
+[^fg]: Fine, J., & Gray, R. (1999). A Proportional Hazards Model for the Subdistribution of a Competing Risk. *Journal of the American Statistical Association*, 94(446), 496-509. doi:10.2307/2670170
+
+### Model Assumptions{#assumptions}
+
+We check proportional odds and proportional hazards assumptions graphically for
+each model. When checking the proportional odds assumption, something may be
+amiss if Y axis values (estimated coefficient at various cutoffs of our outcome)
+change substantially across the X axis, particularly if the effect changes
+direction (noted by the dotted line at 0). For further discussion, please see
+Harrell's *Regression Modeling Strategies*, section 13.3.[^rms]
+
+For the proportional hazard assumption, we are looking for fairly flat
+associations between beta coefficients (Y axis) and time (X axis), which would
+indicate that the hazard remains constant over time.
+
+### Covariates{#covariates}
+
+All multivariable models are adjusted for the following baseline covariates, in
+addition to treatment group:
+
+- Age at study consent
+- Preexisting CI, via the IQCODE (performed via patient or surrogate questionnaire)
+- Preexisting frailty, via the CSHA Clinical Frailty Score
+- Preexisting comorbidities, via the Charlson Comorbidities Index
+- SOFA on the day of randomization, excluding the CNS component
+- Level of arousal at randomization, via the RASS closest to the time of randomization
+
+Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distribution of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) has too little variability to allow this flexibility.
+
+## Missing Data
+
+We have very little missing covariate or outcome data (see [above](#exploration)
+for further details); therefore, we use complete case analysis for all
+in-hospital and 30-day outcomes. From models which would include all `r n_rand` randomized patients (all except liberation from mechanical ventilation),
+complete case analysis excludes `r pts_missany %>% pull(nmiss)` (`r rndformat(pts_missany %>% pull(pctmiss), 0)`%).
+
+We do use single imputation for missing mental status on a daily basis, to
+reduce potential bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the
+intervention period without sufficient RASS and/or CAM information to determine
+mental status. Please see [Notes on Variable Calculation](#dcfds) for further
+rationale and details.
+
+## Software Summary
+
+We used `r R.version$version.string` for all analyses. Full package details can
+be found [below](#software); specific packages used for major components include:
+
+```{r main_pkgs}
+## Join table indicating purposes for major packages we want to highlight
+pkg_uses <- tribble(
+  ~ package, ~ reason,
+  # "naniar",    "Missing data exploration",
+  "cmprsk",    "Competing risks survival analysis",
+  "survival",  "General survival analysis",
+  "survminer", "Presentation of survival data",
+  "rms",       "Multivariable regression"
+)
+
+devtools::session_info()$packages %>%
+  filter(package %in% pkg_uses$package) %>%
+  left_join(pkg_uses, by = "package") %>%
+  dplyr::select(package, version, date, source, reason) %>%
+  kable(
+    format = "html",
+    col.names = c("Package", "Version", "Updated", "Source", "Used for"),
+    align = c("l", "r", "r", "c")
+  ) %>%
+  mykablestyle()
+
+```
+
 # Primary Outcomes
 
 <hr>
 
 ## Delirium/Coma-Free Days
 
-**Note**: We use single imputation to reduce bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the intervention period without sufficient RASS and/or CAM information to determine mental status. Please see [Notes on Variable Calculation](#dcfds) for further rationale.
+***Note**: We use single imputation to reduce potential bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the
+intervention period without sufficient RASS and/or CAM information to determine
+mental status. Please see [Notes on Variable Calculation](#dcfds) for further
+rationale.*
 
 ### Unadjusted Analysis
 
-Our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of DCFDs between the three treatment groups. *(The Kruskal-Wallis test is a nonparametric test analogous to the parametric ANOVA. The distribution of DCFDs is quite non-normal `r spark_dcfd`; thus a nonparametric test provides more power and reliability.)*
+Due to the non-normal distribution of DCFDs `r spark_dcfd`, our primary
+unadjusted analysis uses a Kruskal-Wallis test to look for any differences in
+distribution of this outcome between the three treatment groups. Please see [the
+Methods section](#unadjusted) for more details. All `r n_rand` randomized
+patients are included.
+
+`[insert general summary of results here]`
 
 ```{r dcfds_unadj, results = "hide"}
 ## -- Test DCFDs by treatment group --------------------------------------------
@@ -1720,28 +1902,22 @@ dcfd_plot
 
 ### Adjusted Analysis
 
-We perform multivariable regression analyses to explore the association between treatment group and DCFDs while adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision. Due to the distribution of DCFDs, we use proportional odds logistic regression, which is robust to non-normal distributions and works well for ordered outcomes.
+`[insert general summary of results here]`
 
-#### Covariates{#covariates}
+#### Model Fitting and Assumptions
 
-Covariates for all multivariable regression models include:
-
-- Age at study consent
-- Preexisting CI, via the IQCODE (performed via patient or surrogate questionnaire)
-- Preexisting frailty, via the CSHA Clinical Frailty Score
-- Preexisting comorbidities, via the Charlson Comorbidities Index
-- SOFA on the day of randomization, excluding the CNS component
-- Level of arousal at randomization, via the RASS closest to the time of randomization
-
-Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distribution of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) has too little variability to allow this flexibility.
-
-In addition, we adjust variances using Huber-White sandwich estimation clustered by study site. This will help account for unmeasured variability and correlation among patients within a given site.
-
-#### Model Fitting, Checks and Assumptions {.tabset}
+For some reason the tabset isn't working here. I am utterly confused.
+`r emo::ji("shrug")`
 
 ##### Model Fitting
 
-```{r dcfds_adj, results = "hide"}
+We use proportional odds logistic regression to look at the association between
+treatment and DCFDs during the intervention period, adjusting for baseline
+patient characteristics. Please see [the Methods section](#adjusted) for more
+details. All `r n_rand_comp` randomized patients with complete covariate data
+are included.
+
+```{r dcfds_adj}
 ## Primary model fit using rms::orm(), because Liu & Shepherd have some nice
 ##  functions for getting means, etc from this. My function to check PO
 ##  assumption assumes rms::lrm() fit; one day I should make this flexible, but
@@ -1762,23 +1938,11 @@ dcfd_mod_lrm <- lrm(
 
 ```
 
-##### Redundancy Analysis
-
-To make sure none of our covariates completely explain any of the others (resulting in collinearity), we perform a redundancy analysis, detailed below. No covariates suggest evidence of too-high collinearity.
-
-```{r redundancy, results = "markup"}
-Hmisc::redun(
-  ~ age_consent + charlson_total + frailty + sofa_mod_imp_rand +
-    I(iqcode_total_ph) + arousal_rand + trt,
-  data = model_df,
-  nk = rcsknots
-)
-
-```
-
 ##### Assumptions
 
-We graphically check our assumption of proportional odds, paying particular attention to treatment group. Something may be amiss if Y axis values (estimated coefficient at various cutoffs of our outcome) change substantially across the X axis, particularly if the effect changes direction (noted by the dotted line at 0). For further discussion, please see Harrell's *Regression Modeling Strategies*, 2nd ed, section 13.3.
+We are looking for fairly flat lines, paying particular attention to panels
+representing treatment groups. Please see the [Methods section](#assumptions)
+for further details.
 
 ```{r dcfds_assume}
 JTHelpers::rms_po_assume(
@@ -1793,11 +1957,16 @@ JTHelpers::rms_po_assume(
 
 #### Model Results
 
-We show the odds ratios (using placebo as reference) and adjusted medians for DCFDs by treatment group. Odds ratios higher than 1 are favorable, indicating higher odds of more "good" days alive and free of brain dysfunction. Medians are adjusted to the median/mode values of all covariates, so that each represents the expected median number of DCFDs for a patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population. All results are shown visually, with tables included for exact numbers if desired.
+We show the odds ratios (using placebo as reference) and adjusted medians for
+DCFDs by treatment group. All results are shown visually, with tables included
+for exact numbers if desired.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Adjusted Odds Ratios {.tabset}
+
+Odds ratios higher than 1 are favorable, indicating higher odds of more "good"
+days alive and free of brain dysfunction.
 
 ###### Visual Form
 
@@ -1821,6 +1990,10 @@ table_trt_ratios(ratio_df = dcfd_ors, ratio_type = "Odds")
 ```
 
 ##### Adjusted Medians {.tabset}
+
+Medians are adjusted to the median/mode values of all covariates, so that each
+represents the expected median number of DCFDs for a patient in each treatment
+group who is otherwise part of a "typical" *(many air quotes)* population.
 
 ###### Visual Form
 
@@ -1959,17 +2132,23 @@ dcfd_adjmeds_table %>%
 
 ## Time to Death
 
-We explore the association between treatment and time to death from all causes within the 30 days following randomization. All randomized patients are included.
+We explore the association between treatment and time to death from all causes
+within the 30 days following randomization.
 
 **Censoring and time to event:**
 
-- The `r nrow(subset(ptsummary_df, is.na(death) & !is.na(tte_death_30)))` patients who withdrew from the study prior to day 30 with no known death status are censored at the time of withdrawal.
+- The `[insert value]` patients who withdrew from the study prior to day 30 with no known death status are censored at the time of withdrawal.
 - Patients who survived the entire 30-day period are censored at day 31.
-- Patients who died within the 30-day period are assigned a time value of `time of death - time of randomization`.
+- Patients who died within the 30-day period are assigned a time value of
+`time of death - time of randomization`.
 
 ### Unadjusted Analysis
 
-Our unadjusted analysis describes survival using Kaplan-Meier curves and tests for differences among treatment groups in time to death within 30 days using the log-rank test.
+Our unadjusted analysis describes survival using Kaplan-Meier curves and tests
+for differences among treatment groups in time to death within 30 days using the
+log-rank test. All `r n_rand` randomized patients are included.
+
+`[insert general summary of results here]`
 
 ```{r death_30_unadj}
 ## -- Create Surv, survfit objects for time to death within 30 days ------------
@@ -2067,9 +2246,15 @@ km_death_30$table
 
 ### Adjusted Analysis
 
-We perform multivariable regression analyses using a Cox proportional hazards model to explore the association between treatment group and time to death while adjusting for potential baseline confounders. Though these covariates should be balanced between treatment groups thanks to randomization, adjustment increases our power and precision.
+`[insert general summary of results here]`
 
 #### Model Fitting and Assumptions {.tabset}
+
+We perform multivariable regression analyses using a Cox proportional hazards
+model to explore the association between treatment group and time to death while
+adjusting for potential baseline confounders. Please see the [Methods
+section](#adjusted) for more details. All `r n_rand_comp` randomized patients
+with complete covariate data are included.
 
 ##### Model Fitting
 
@@ -2085,6 +2270,10 @@ death_30_mod <- cph(
 
 ##### Assumptions
 
+We are looking for generally flat lines, indicating consistent hazards over time
+and paying particular attention to treatment group. For more details, please see
+the [Methods section](#assumptions).
+
 ```{r death_30_assume}
 ## -- Check proportional hazard assumption -------------------------------------
 death_30_zph <- cox.zph(death_30_mod, transform = 'log')
@@ -2094,7 +2283,7 @@ death_30_phtext <- text_ph_assume(death_30_zph)
 
 ```
 
-We graphically check our assumption of proportional hazards, paying particular attention to treatment group and looking for generally flat lines in each panel. `r death_30_phtext`
+`r death_30_phtext`
 
 ```{r death_30_assumeplot}
 plot_ph_assume(death_30_zph)
@@ -2103,7 +2292,10 @@ plot_ph_assume(death_30_zph)
 
 #### Model Results {.tabset}
 
-We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **lower** than 1 are favorable, indicating lower likelihood of death at any given time point within 30 days of randomization given that the patient has survived up to that point.
+We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard
+ratios **lower** than 1 are favorable, indicating lower likelihood of death at
+any given time point within 30 days of randomization, given that the patient has
+survived up to that point.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -2134,17 +2326,34 @@ table_trt_ratios(ratio_df = death_30_hrs)
 
 ## Time to Successful ICU Discharge
 
-We explore the relationship between treatment group and successful ICU discharge, defined as the final ICU discharge from the study hospitalization, followed by at least 48 hours alive. Patients who die prior to ICU discharge are obviously unable to experience that outcome. We could censor patients at the time of death; however, traditional survival analysis assumes that censoring is independent of the outcome, which is clearly not the case here. Rather, we use a competing risks survival model to look at the hazard and cumulative incidence of both ICU discharge and death.
+We use time to event analysis with competing risks to explore the relationship
+between treatment group and "successful" ICU discharge, defined as the final ICU
+discharge from the study hospitalization, followed by at least 48 hours alive.
+We treat death as a competing risk.
 
 **Censoring and time to events:**
 
-- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 < 31))` patients prior to the end of the 30-day period; two withdrew from the study with no access permitted to PHI. One was discharged prior at time 29.x days, but died on day 30.x; this patient is censored at the time of discharge, since s/he experienced neither outcome of interest during the time period, but died prior to the 31 days assigned to all patients who survived the entire 30 days.
-- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 == 31))` patients at day 31 who survived the entire 30-day period but remained in the ICU on day 30.
-- We assign patients who died within the 30-day period a time value of `time of death - time of randomization` and a "failure type" of death; we assign patients who were successfully discharged within the 30-day period a time value of `time of discharge - time of randomization` and a "failure type" of ICU discharge.
+- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 < 31))` patients prior to the end of the 30-day period; two withdrew from the
+study with no access permitted to PHI. One was discharged prior at time 29.x
+days, but died on day 30.x; this patient is censored at the time of discharge,
+since s/he experienced neither outcome of interest during the time period, but
+died prior to the 31 days assigned to all patients who survived the entire 30
+days.
+- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 == 31))` patients at day 31 who survived the entire 30-day period but remained
+in the ICU on day 30.
+- We assign patients who died within the 30-day period a time value of
+`time of death - time of randomization` and a "failure type" of death; we assign
+patients who were successfully discharged within the 30-day period a time value
+of `time of discharge - time of randomization` and a "failure type" of ICU
+discharge.
 
 ### Unadjusted Analyses
 
-A simple Kaplan-Meier curve would be misleading in the case of competing risks, because it does not take into account patients who died. Rather, we present cumulative incidence plots by treatment group for both ICU discharge and death, unadjusted for any covariates.
+We present cumulative incidence plots by treatment group for both ICU discharge
+and death, unadjusted for any covariates. Please see the [Methods
+section](#unadjusted) for more details.
+
+`[insert general summary of results here]`
 
 ```{r cuminc_icudc_unadj, fig.height = 5}
 ## Fit cumulative incidence functions, no covariates except treatments
@@ -2202,6 +2411,8 @@ ggcompetingrisks(icudis_30_cif_unadj, conf.int = TRUE, ggtheme = mindusa_theme()
 ```
 
 ### Adjusted Analyses
+
+`[insert general summary of results here]`
 
 ```{r explore_competingrisks}
 ################################################################################
@@ -2384,6 +2595,10 @@ tmp <- summary(
 
 #### Model Fitting and Assumptions {.tabset}
 
+We use competing risks regression, with subdistributions for both ICU discharge
+and the competing risk of death, to examine the relationship between treatment
+and (primarily) ICU discharge. For further details, please see the [Methods section](#adjusted).
+
 ##### Model Fitting
 
 ```{r icudis_30_adj}
@@ -2544,7 +2759,7 @@ Mental status can change quickly; therefore simple imputation methods like last 
 
 All summary variables (delirium/coma-free days, delirium duration, and coma duration) are calculated using available and imputed mental status.
 
-# Software Details
+# Software Details{#software}
 
 ---
 
@@ -2564,3 +2779,5 @@ devtools::session_info()$packages %>%
 
 ```
 </details>
+
+<hr>
