@@ -117,6 +117,33 @@ rms_comparisons_addoutcome <- function(rmsObj, ...){
     mutate(outcome = outcome)
 }
 
+## Print rms_model_results using kableExtra
+rms_results_kable <- function(rmsObj, ...){
+  ## Label for effect size column
+  output_type <- case_when(
+    inherits(rmsObj, "lrm") ~ "Odds Ratio",
+    inherits(rmsObj, "orm") ~ "Odds Ratio",
+    inherits(rmsObj, "cph") ~ "Hazard Ratio",
+    inherits(rmsObj, "ols") ~ "Difference",
+    TRUE                    ~ "Effect"
+  )
+  
+  rms_model_results(dcfd_mod_lrm, ...) %>%
+    ## Remove rows that give number of observations at every outcome level;
+    ##  we already describe the distribution of ordinal outcomes
+    filter(is.na(as.numeric(label))) %>%
+    kable(
+      format = "html",
+      align = c("l", rep("r", 6)),
+      col.names = c(
+        "Variable", "Reference", "Comparison",
+        sprintf("%s (95%% CI)", output_type),
+        "X2", "df", "P"
+      )
+    ) %>%
+    mykablestyle()  
+}
+
 ## Calculate ratios for both treatments vs placebo;
 ##   result = tidy data frame we can plot! Hooray!
 trt_ratios <- function(mod){
@@ -2165,6 +2192,25 @@ dcfd_adjmeds_table %>%
 
 ```
 
+##### Results for All Covariates
+
+*collapsed to save space; click Details below to view*
+
+<details>
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single odds
+ratio/CI is insufficient to describe the entire relationship between each of
+these covariates and DCFDs. Rather, each odds ratio reflects a comparison
+between two specific values of the covariate, as noted in the table.
+
+```{r dcfd_full_results, warning = FALSE}
+rms_results_kable(dcfd_mod_lrm)
+
+```
+
+</details>
+
 ## Time to Death
 
 We explore the association between treatment and time to death from all causes
@@ -2362,6 +2408,19 @@ plot_trt_ratios(
 
 ```{r table_death_30_hrs}
 table_trt_ratios(ratio_df = death_30_hrs)
+
+```
+
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single
+hazard ratio/CI is insufficient to describe the entire relationship between each
+of these covariates and death. Rather, each hazard ratio reflects a comparison
+between two specific values of the covariate, as noted in the table.
+
+```{r death_30_full_results, warning = FALSE}
+rms_results_kable(death_30_mod)
 
 ```
 
@@ -2737,6 +2796,19 @@ table_trt_ratios(ratio_df = icudis_30_hrs)
 
 ```
 
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single
+subdistribution hazard ratio/CI is insufficient to describe the entire
+relationship between each of these covariates and the relative incidence of ICU
+discharge. Rather, each subdistribution hazard ratio reflects a comparison
+between two specific values of the covariate, as noted in the table.
+
+```{r icudis_30_full_results, warning = FALSE}
+rms_results_kable(icudis_30_mod)
+
+```
 
 # Notes on Variable Calculation{#varcalc}
 
