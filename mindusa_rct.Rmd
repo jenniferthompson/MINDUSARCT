@@ -130,6 +130,41 @@ trt_ratios <- function(mod){
     distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
 }
 
+## Create text examples of HR interpretation, given result of trt_ratios()
+hr_example <- function(hr_df, outcome){
+  ## Death is modeled using regular Cox regression, thus provides a hazard
+  ## Other outcomes use competing risks/Fine-Gray approach, thus provide a
+  ##  subdistribution HR for the relative incidence
+  if(outcome == "death"){
+    hr_type <- "hazard"
+  } else{
+    hr_type <- "incidence"
+  }
+  
+  hr_df %>%
+    dplyr::select(-outcome) %>%
+    mutate(
+      direction = case_when(
+        is.ref     ~ "",
+        effect > 1 ~ "higher",
+        TRUE       ~ "lower"
+      ),
+      pct_change = case_when(
+        is.ref     ~ 0,
+        effect > 1 ~ (effect - 1) * 100,
+        TRUE       ~ (1 - effect) * 100
+      )
+    ) %>%
+    glue_data(
+      "For example, an HR of {rndformat(effect)} for {comp.c} vs placebo ",
+      "indicates that, on average, patients in the {comp.c} group have a ",
+      "{round(pct_change, 0)}% {direction} relative {hr_type} of {outcome} ",
+      "vs patients in the {ref.c} group, given that they remain alive and in ",
+      "the ICU."
+    ) %>%
+    set_names(hr_df %>% pull(comp.c))
+}
+
 ## Plot results of trt_ratios
 ## - Treatment on Y axis
 ## - Point estimates + CIs for ziprasidone, haloperidol vs placebo on X axis
@@ -2292,19 +2327,25 @@ plot_ph_assume(death_30_zph)
 
 #### Model Results {.tabset}
 
+```{r death_30_hrs_prep}
+## -- Calculate, plot hazard ratios for both treatments vs placebo -------------
+death_30_hrs <- trt_ratios(death_30_mod)
+
+## Create example text for interpretation
+death_30_text <- hr_example(hr_df = death_30_hrs, outcome = "death")
+
+```
+
 We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard
 ratios **lower** than 1 are favorable, indicating lower likelihood of death at
 any given time point within 30 days of randomization, given that the patient has
-survived up to that point.
+survived up to that point. `r death_30_text[["A"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Visual Form
 
-```{r death_30_hrs, fig.width = 5, fig.height = 3}
-## -- Calculate, plot hazard ratios for both treatments vs placebo -------------
-death_30_hrs <- trt_ratios(death_30_mod)
-
+```{r death_30_hrs_plot, fig.width = 5, fig.height = 3}
 plot_trt_ratios(
   ratio_df = death_30_hrs,
   outcome_text = "All-Cause Death",
@@ -2595,9 +2636,9 @@ tmp <- summary(
 
 #### Model Fitting and Assumptions {.tabset}
 
-We use competing risks regression, with subdistributions for both ICU discharge
-and the competing risk of death, to examine the relationship between treatment
-and (primarily) ICU discharge. For further details, please see the [Methods section](#adjusted).
+We use Fine & Gray's[^fg] method of competing risks regression to examine the
+relationship between treatment and (primarily) ICU discharge. For further
+details, please see the [Methods section](#adjusted).
 
 ##### Model Fitting
 
@@ -2643,7 +2684,9 @@ icudis_30_phtext <- text_ph_assume(icudis_30_zph)
 
 ```
 
-We graphically check our assumption of proportional hazards for the ICU discharge subdistribution, paying particular attention to treatment group and looking for generally flat lines in each panel. `r icudis_30_phtext`
+We graphically check our assumption of proportional hazards for the ICU
+discharge subdistribution, paying particular attention to treatment group and
+looking for generally flat lines in each panel. `r icudis_30_phtext`
 
 ```{r icudis_30_assumeplot}
 plot_ph_assume(icudis_30_zph)
@@ -2652,16 +2695,24 @@ plot_ph_assume(icudis_30_zph)
 
 #### Model Results {.tabset}
 
-We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard ratios **higher** than 1 are favorable; for example, an HR of 1.5 for haloperidol vs placebo indicates that, on average, patients in the haloperidol group have 1.5 times the likelihood of successful ICU discharge vs those in the placebo group at any given time point, given that they remain alive and in the ICU.
+```{r icudis_30_hrs_prep}
+## -- Calculate hazard ratios for both treatments vs placebo -------------------
+icudis_30_hrs <- trt_ratios(icudis_30_mod)
+
+## Create explanatory text string for subdistribution HRs
+icudis_30_text <- hr_example(hr_df = icudis_30_hrs, outcome = "ICU discharge")
+
+```
+
+We show the subdistribution hazard ratios for ICU discharge for haloperidol and
+ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
+favorable for this outcome. `r icudis_30_text[["A"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Visual Form
 
-```{r icudis_30_hrs, fig.width = 5, fig.height = 3.5}
-## -- Calculate, plot hazard ratios for both treatments vs placebo -------------
-icudis_30_hrs <- trt_ratios(icudis_30_mod)
-
+```{r icudis_30_hrs_plot, fig.width = 5, fig.height = 3.5}
 plot_trt_ratios(
   ratio_df = icudis_30_hrs,
   outcome_text = "Successful ICU Discharge",
