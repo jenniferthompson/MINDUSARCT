@@ -2460,9 +2460,57 @@ section](#unadjusted) for more details.
 
 `[insert general summary of results here]`
 
-```{r cuminc_icudc_unadj, fig.height = 5}
-## Fit cumulative incidence functions, no covariates except treatments
-icudis_30_cif_unadj <- with(model_df, {
+```{r cuminc_icudc_unadj, fig.height = 7}
+## -- Create Surv object -------------------------------------------------------
+## Will be used for N at risk for CIF, as well as adjusted model fit
+icudis_30_Surv <- with(model_df, {
+  Surv(time = tte_icudis_30, event = ftype_icudis_30, type = "mstate")
+})
+
+## -- Create survfit object, N at risk table -----------------------------------
+icudis_30_survfit <- survfit(icudis_30_Surv ~ trt, data = model_df)
+
+icudis_30_sfsum <- summary(icudis_30_survfit, times = seq(0, 30, 5))
+
+## Extract N still at risk, cumulative number of discharges, deaths at each time
+icudis_30_risktable <- data.frame(
+  trt = str_replace(icudis_30_sfsum$strata, "trt=", ""),
+  time = icudis_30_sfsum$time,
+  n_risk = icudis_30_sfsum$n.risk[, 3],
+  n_icudis = icudis_30_sfsum$n.event[, 1],
+  n_death = icudis_30_sfsum$n.event[, 2]
+) %>%
+  group_by(trt) %>%
+  mutate(
+    cumul_icudis = cumsum(n_icudis),
+    cumul_death = cumsum(n_death),
+    risk_string = glue("{n_risk}\n({cumul_icudis}; {cumul_death})")
+  )
+
+icudis_30_risk_plot <- ggplot(
+  data = icudis_30_risktable,
+  aes(x = time, y = 1, colour = trt)
+) +
+  facet_wrap(~ trt, nrow = 1) +
+  geom_text(aes(label = risk_string), size = basetext_size * 0.2) +
+  scale_x_continuous(
+    name = "Days after Randomization",
+    breaks = seq(0, 30, 5),
+    labels = seq(0, 30, 5)
+  ) +
+  labs(
+    title = "Number at risk (cumulative number of ICU discharges; deaths)",
+    ylab = " " ## faking it for spacing purposes
+  ) +
+  theme(plot.title = element_text(size = basetext_size * 0.8),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_text(colour = "white"), ## faking it for spacing
+        axis.ticks.y = element_blank(),
+        legend.position = "none")
+
+## -- Fit cumulative incidence functions by treatment --------------------------
+icudis_30_cif <- with(model_df, {
   cuminc(
     ftime = tte_icudis_30,
     fstatus = ftype_icudis_30,
@@ -2472,15 +2520,15 @@ icudis_30_cif_unadj <- with(model_df, {
 })
 
 ## Create strings for test results
-icudis_30_tests_unadj <- icudis_30_cif_unadj$Tests %>%
+icudis_30_tests_unadj <- icudis_30_cif$Tests %>%
   ## Coerce to tbl_df; as_tibble makes it easy to keep rownames as new variable
   as_tibble(rownames = "subdist") %>%
   glue_data(
     "{subdist}: X2, {rndformat(stat, 2)}; df, {df}; P, {formatp(pv)}"
   )
 
-icudis_30_cif <- ggcompetingrisks(
-  icudis_30_cif_unadj, conf.int = TRUE, ggtheme = mindusa_theme()
+icudis_30_cif_plot <- ggcompetingrisks(
+  icudis_30_cif, conf.int = TRUE, ggtheme = mindusa_theme()
 ) +
   scale_color_manual(
     name = "",
@@ -2515,192 +2563,16 @@ icudis_30_cif <- ggcompetingrisks(
     caption = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
   )
 
-icudis_30_cif
+multiplot(
+  plotlist = list(icudis_30_cif_plot, icudis_30_risk_plot),
+  layout = matrix(c(1, 1, 1, 2), ncol = 1)
+)
 
 ```
 
 ### Adjusted Analyses
 
 `[insert general summary of results here]`
-
-```{r explore_competingrisks}
-################################################################################
-## Competing risks are new to me, and using splines and wanting group-added-  ##
-## last tests makes things difficult. The cmprsk package seems to be standard ##
-## for competing risks; the survival package is classic for time-to-event     ##
-## outcomes; and the rms package has some really nice features for splines    ##
-## and results summaries. Let's see if we can get them all to give us the     ##
-## same results using a model with only linear terms!                         ##
-################################################################################
-
-## -- Previously defined objects: ----------------------------------------------
-## - mod_rhs_lin: "age_consent + charlson_total + iqcode_total_ph + frailty + sofa_mod_imp_rand + trt + arousal_rand"
-## - covariate_vars: character vector with all variables included in mod_rhs_lin
-## - tte_icudis_30: time to ICU discharge, death, or censoring
-## - ftype_icudis_30: can be Censored, ICU Discharge, or Death
-## - model_df: data.frame with all variables for all regression analyses
-
-## -- cmprsk package -----------------------------------------------------------
-## Prep: crr() requires matrix of covariate values; doesn't take model formulas
-## Extract these from model_df, restricting to complete cases
-icudis_30_df <- model_df %>%
-  dplyr::select(id, one_of(covariate_vars), tte_icudis_30, ftype_icudis_30)
-icudis_30_df <- icudis_30_df[complete.cases(icudis_30_df), ]
-
-## Use model.matrix to create a... model matrix; remove the intercept
-icudis_30_modmatrix <-
-  model.matrix(as.formula(sprintf("~ %s", mod_rhs_lin)), icudis_30_df)[, -1]
-
-# > head(icudis_30_modmatrix)
-#   age_consent charlson_total iqcode_total_ph frailty sofa_mod_imp_rand trtB trtC
-# 1    48.59411              4          3.0000       4                 9    0    1
-# 2    58.63929              4          3.0000       6                 4    1    0
-# 3    66.20945              8          3.1250       6                 7    1    0
-# 4    48.76386              4          3.1875       3                15    0    0
-# 5    49.17454              0          3.0000       2                 6    0    1
-# 6    41.06776              3          3.0625       6                12    1    0
-#   arousal_randLightly sedated arousal_randNormal arousal_randAgitated
-# 1                           1                  0                    0
-# 2                           1                  0                    0
-# 3                           0                  0                    1
-# 4                           1                  0                    0
-# 5                           0                  1                    0
-# 6                           1                  0                    0
-
-## Fit competing risks regression using cmprsk
-icudis_30_crr <- crr(
-  ftime = icudis_30_df$tte_icudis_30,     ## failure time variable
-  fstatus = icudis_30_df$ftype_icudis_30, ## failure type variable
-  cov1 = icudis_30_modmatrix,             ## model matrix created above
-  failcode = "ICU Discharge",             ## failure type of *interest*
-  cencode = "Censored"                    ## censoring indicator
-)
-
-## HRs, CIs for ICU discharge
-# > print(summary(icudis_30_crr)$coef, digits = 4)
-#                                  coef exp(coef) se(coef)       z p-value
-# age_consent                 -0.009663    0.9904 0.003569 -2.7076 6.8e-03
-# charlson_total               0.016782    1.0169 0.023418  0.7167 4.7e-01
-# iqcode_total_ph              0.082576    1.0861 0.138195  0.5975 5.5e-01
-# frailty                     -0.079739    0.9234 0.039671 -2.0100 4.4e-02
-# sofa_mod_imp_rand           -0.109252    0.8965 0.016178 -6.7532 1.4e-11
-# trtB                         0.032778    1.0333 0.116178  0.2821 7.8e-01
-# trtC                        -0.007354    0.9927 0.122361 -0.0601 9.5e-01
-# arousal_randLightly sedated  0.089067    1.0932 0.111930  0.7957 4.3e-01
-# arousal_randNormal           0.455087    1.5763 0.169115  2.6910 7.1e-03
-# arousal_randAgitated         0.256523    1.2924 0.181392  1.4142 1.6e-01
-
-## Makes sense - patients who were normal at baseline have a much higher hazard
-## of discharge than patients deeply sedated, for example; HR for higher
-## modified SOFA indicates a lower hazard of discharge; etc
-
-## -- survival package ---------------------------------------------------------
-## survival::finegray() creates a dataset meant for use with Fine-Gray competing
-## risks models. Many thanks to this StackExchange post for making me aware!
-## https://stats.stackexchange.com/questions/212312/add-categorical-variable-in-crr-of-package-cmprsk
-
-## Setup: Create a Surv object with our complete case dataset
-icudis_30_Surv <- with(icudis_30_df, {
-  Surv(
-    time = tte_icudis_30,    ## End time variable
-    event = ftype_icudis_30, ## Failure type variable
-    type = "mstate"          ## Censoring type = multistate (this would be
-                             ##   assumed b/c ftype_icudis_30 is a factor, but
-                             ##   why not be explicit?)
-  )
-})
-
-## Create dataset built for Fine-Gray approach, specifying ICU discharge as our
-## event of interest
-icudis_30_fg <- finegray(
-  icudis_30_Surv ~ .,      ## dataset should include Surv object + all variables
-  data = icudis_30_df,     ## complete case dataset
-  etype = "ICU Discharge", ## event of interest
-  ## Don't really need these, but were helpful when I was spot-checking
-  id = id,
-  count = "fgcount"
-)
-
-## Fit model with usual coxph() syntax; only difference is the use of weights,
-## created for us by finegray() and included as a variable in icudis_30_fg
-icudis_30_coxph <- coxph(
-  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_lin)),
-  data = icudis_30_fg,
-  weights = fgwt
-)
-
-## HRs, CIs for ICU discharge
-# > print(summary(icudis_30_coxph)$coef, digits = 4)
-#                                  coef exp(coef) se(coef)        z  Pr(>|z|)
-# age_consent                 -0.009664    0.9904 0.003695 -2.61522 8.917e-03
-# charlson_total               0.016788    1.0169 0.022293  0.75307 4.514e-01
-# iqcode_total_ph              0.082539    1.0860 0.144711  0.57037 5.684e-01
-# frailty                     -0.079729    0.9234 0.040596 -1.96396 4.953e-02
-# sofa_mod_imp_rand           -0.109252    0.8965 0.015951 -6.84923 7.425e-12
-# trtB                         0.032775    1.0333 0.120221  0.27262 7.851e-01
-# trtC                        -0.007329    0.9927 0.122320 -0.05992 9.522e-01
-# arousal_randLightly sedated  0.089071    1.0932 0.114187  0.78004 4.354e-01
-# arousal_randNormal           0.455061    1.5763 0.181815  2.50287 1.232e-02
-# arousal_randAgitated         0.256547    1.2925 0.183423  1.39867 1.619e-01
-
-## -- rms package --------------------------------------------------------------
-## rms::cph() is a wrapper around survival::coxph(), with some added
-## functionality and consistency with other rms model functions. Therefore we
-## should be able to use nearly the same code as coxph, get the same results,
-## but in a way we expect from rms.
-icudis_30_cph <- cph(
-  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_lin)),
-  data = icudis_30_fg,
-  weights = fgwt
-)
-
-## Lots of tweaks to default summary.rms output to get consistent units with
-##  other two options
-tmp <- summary(
-  icudis_30_cph,
-  age_consent = c(50, 51),
-  charlson_total = c(1, 2),
-  iqcode_total_ph = c(3, 4),
-  frailty = c(3, 4),
-  sofa_mod_imp_rand = c(6, 7),
-  arousal_rand = "Deeply sedated"
-) %>%
-  ## Get summary.rms() output in a format that's easy to compare with others
-  as_tibble(rownames = "var") %>%
-  dplyr::select(var, Effect, "S.E.", Type) %>%
-  set_names(c("var", "coef", "se", "type")) %>%
-  ## For whatever reason, summary.rms() returns the numeric columns as matrices.
-  ## We need them to be numeric. This is harder than it should be.
-  ## mutate_at doesn't accept matrix inputs. SAD FACE. But we have purrr!
-  ## This marks the first time I have found a use for purrr vs mutate methods.
-  map_if(.p = ~ inherits(., "matrix"), .f = as.numeric) %>%
-  ## Using map_if() splits into a list; put it back together
-  bind_cols() %>%
-  mutate(
-    var = ifelse(type == 2, dplyr::lag(var), var),
-    exp_coef = ifelse(type == 1, lead(coef), NA)
-  ) %>%
-  filter(type == 1) %>%
-  dplyr::select(var, coef, exp_coef, se)
-
-## Note: summary.rms() doesn't return that many decimal places.
-
-# > print(tmp, digits = 4)
-# # A tibble: 10 x 4
-#    var                                               coef exp_coef      se
-#    <chr>                                            <dbl>    <dbl>   <dbl>
-#  1 age_consent                                   -0.00966    0.990 0.00370
-#  2 charlson_total                                 0.0168     1.02  0.0223 
-#  3 iqcode_total_ph                                0.0825     1.09  0.145  
-#  4 frailty                                       -0.0797     0.923 0.0406 
-#  5 sofa_mod_imp_rand                             -0.109      0.897 0.0160 
-#  6 trt - B:A                                      0.0328     1.03  0.120  
-#  7 trt - C:A                                     -0.00733    0.993 0.122  
-#  8 arousal_rand - Lightly sedated:Deeply sedated  0.0891     1.09  0.114  
-#  9 arousal_rand - Normal:Deeply sedated           0.455      1.58  0.182  
-# 10 arousal_rand - Agitated:Deeply sedated         0.257      1.29  0.183
-
-```
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -2715,11 +2587,6 @@ details, please see the [Methods section](#adjusted).
 ## Note: I tested three separate methods to make sure results were consistent:
 ## cmprsk, survival, and rms. Results in this gist:
 ## https://gist.github.com/jenniferthompson/c66d1aa6060d3e8919ea917f7aa94288
-
-## -- Create Surv object -------------------------------------------------------
-icudis_30_Surv <- with(model_df, {
-  Surv(time = tte_icudis_30, event = ftype_icudis_30, type = "mstate")
-})
 
 ## -- Create dataset specifically for Fine-Gray method of competing risks ------
 icudis_30_fg <- finegray(
