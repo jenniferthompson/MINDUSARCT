@@ -1779,8 +1779,8 @@ Kaplan-Meier curves would be misleading in these scenarios, because they do not
 take this "competing risk" into account. Therefore, we describe together the
 cumulative incidences of both the outcome of interest and death, along with
 score tests for the difference between groups in the subdistribution of
-interest. Generally, the `[insert value]` patients who withdrew in the hospital
-and revoked access to PHI are censored at the time of withdrawal; we censor at
+interest. Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients who withdrew in the hospital with no discharge or
+death information available are censored at the time of withdrawal; we censor at
 31 days anyone who has experienced neither death nor the outcome of interest by
 30 days. More details on censoring are provided with each analysis.
 
@@ -1814,10 +1814,10 @@ statistical distribution.
 We use Cox proportional hazards regression for mortality. For all other time to
 event outcomes (ICU and hospital discharge and liberation from mechanical
 ventilation), we use competing risks regression[^fg], treating death as our
-competing risk. Generally, the `[insert value]` patients who withdrew in the
-hospital and revoked access to PHI are censored at the time of withdrawal; we
-censor at 31 days anyone who has experienced neither death nor the outcome of
-interest by 30 days. More details on censoring are provided with each analysis.
+competing risk. Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients who withdrew in the hospital with no discharge or
+death information available are censored at the time of withdrawal; we censor at
+31 days anyone who has experienced neither death nor the outcome of interest by
+30 days. More details on censoring are provided with each analysis.
 
 [^fg]: Fine, J., & Gray, R. (1999). A Proportional Hazards Model for the Subdistribution of a Competing Risk. *Journal of the American Statistical Association*, 94(446), 496-509. doi:10.2307/2670170
 
@@ -2036,11 +2036,13 @@ days alive and free of brain dysfunction.
 ## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
 dcfd_ors <- trt_ratios(mod = dcfd_mod)
 
-plot_trt_ratios(
+dcfd_ors_plot <- plot_trt_ratios(
   ratio_df = dcfd_ors,
   "Delirium/Coma-Free Days",
   mod = dcfd_mod
 )
+
+dcfd_ors_plot
 
 ```
 
@@ -2144,7 +2146,9 @@ dcfd_adjmeds <- quantile.orm(mod = dcfd_mod, new.data = pred_df) %>%
   bind_cols(data.frame(trt = levels(model_df$trt)), .)
 
 ## Now we plot them!
-ggplot(data = dcfd_adjmeds, aes(y = quantile, x = forcats::fct_rev(trt))) +
+dcfd_adjmeds_plot <- ggplot(
+  data = dcfd_adjmeds, aes(y = quantile, x = forcats::fct_rev(trt))
+) +
   geom_pointrange(
     aes(ymin = lb, ymax = ub),
     shape = 16, size = 1, colour = as.character(palette_colors["dred"])
@@ -2166,6 +2170,7 @@ ggplot(data = dcfd_adjmeds, aes(y = quantile, x = forcats::fct_rev(trt))) +
   ) +
   coord_flip()
 
+dcfd_adjmeds_plot
 
 ```
 
@@ -2218,9 +2223,10 @@ within the 30 days following randomization.
 
 **Censoring and time to event:**
 
-- The `[insert value]` patients who withdrew from the study prior to day 30 with no known death status are censored at the time of withdrawal.
-- Patients who survived the entire 30-day period are censored at day 31.
-- Patients who died within the 30-day period are assigned a time value of
+- The `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients
+who withdrew from the study prior to day 30 with no known death status are censored at the time of withdrawal.
+- The `r with(ptsummary_df, sum(!hospdis_noinfo & !event_death_30 & tte_death_30 == 31))` patients who survived the entire 30-day period are censored at day 31.
+- The `r with(ptsummary_df, sum(!hospdis_noinfo & event_death_30 & tte_death_30 < 31))` patients who died within the 30-day period are assigned a time value of
 `time of death - time of randomization`.
 
 ### Unadjusted Analysis
@@ -2392,7 +2398,7 @@ TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 ##### Visual Form
 
 ```{r death_30_hrs_plot, fig.width = 5, fig.height = 3}
-plot_trt_ratios(
+death_30_hrs_plot <- plot_trt_ratios(
   ratio_df = death_30_hrs,
   outcome_text = "All-Cause Death",
   extra_text = glue(
@@ -2401,6 +2407,8 @@ plot_trt_ratios(
   ),
   mod = death_30_mod
 )
+
+death_30_hrs_plot
 
 ```
 
@@ -2433,19 +2441,16 @@ We treat death as a competing risk.
 
 **Censoring and time to events:**
 
-- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 < 31))` patients prior to the end of the 30-day period; two withdrew from the
-study with no access permitted to PHI. One was discharged prior at time 29.x
-days, but died on day 30.x; this patient is censored at the time of discharge,
-since s/he experienced neither outcome of interest during the time period, but
-died prior to the 31 days assigned to all patients who survived the entire 30
-days.
-- We censor `r nrow(subset(ptsummary_df, ftype_icudis_30 == "Censored" & tte_icudis_30 == 31))` patients at day 31 who survived the entire 30-day period but remained
-in the ICU on day 30.
-- We assign patients who died within the 30-day period a time value of
-`time of death - time of randomization` and a "failure type" of death; we assign
-patients who were successfully discharged within the 30-day period a time value
-of `time of discharge - time of randomization` and a "failure type" of ICU
-discharge.
+- We censor `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 < 31))` patients prior to the end of the 30-day period; `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 < 31 & hospdis_noinfo))` withdrew from the study prior to hospital discharge, with no
+discharge or death information available. One was discharged prior to death at
+time 29.x days, but died on day 30.x; this patient is censored at the time of
+discharge, since s/he experienced neither outcome of interest during the time
+period, but died prior to the 31 days assigned to all patients who survived the
+entire 30 days.
+- We censor `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 == 31))` patients at day 31 who survived the entire 30-day period
+but remained in the ICU on day 30.
+- We assign the `r with(ptsummary_df, sum(ftype_icudis_30 == "Death"))` patients who died prior to ICU discharge within the 30-day period a time value of `time of death - time of randomization` and a "failure type" of death; we assign the `r with(ptsummary_df, sum(ftype_icudis_30 == "ICU Discharge"))` patients who
+were successfully discharged within the 30-day period a time value of `time of discharge - time of randomization` and a "failure type" of ICU discharge.
 
 ### Unadjusted Analyses
 
@@ -2474,7 +2479,9 @@ icudis_30_tests_unadj <- icudis_30_cif_unadj$Tests %>%
     "{subdist}: X2, {rndformat(stat, 2)}; df, {df}; P, {formatp(pv)}"
   )
 
-ggcompetingrisks(icudis_30_cif_unadj, conf.int = TRUE, ggtheme = mindusa_theme()) +
+icudis_30_cif <- ggcompetingrisks(
+  icudis_30_cif_unadj, conf.int = TRUE, ggtheme = mindusa_theme()
+) +
   scale_color_manual(
     name = "",
     values = c(
@@ -2507,6 +2514,8 @@ ggcompetingrisks(icudis_30_cif_unadj, conf.int = TRUE, ggtheme = mindusa_theme()
     y = "Cumulative Probability",
     caption = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
   )
+
+icudis_30_cif
 
 ```
 
@@ -2772,7 +2781,7 @@ TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 ##### Visual Form
 
 ```{r icudis_30_hrs_plot, fig.width = 5, fig.height = 3.5}
-plot_trt_ratios(
+icudis_30_hrs_plot <- plot_trt_ratios(
   ratio_df = icudis_30_hrs,
   outcome_text = "Successful ICU Discharge",
   extra_text = glue(
@@ -2786,6 +2795,8 @@ plot_trt_ratios(
   mod = icudis_30_mod
 ) +
   theme(plot.caption = element_text(size = basetext_size * 0.6))
+
+icudis_30_hrs_plot
 
 ```
 
