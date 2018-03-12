@@ -280,6 +280,143 @@ table_trt_ratios <- function(
     row_spec(3, color = palette_colors["lgray"])
 }
 
+## -- Competing risks regression -----------------------------------------------
+
+## String describing test results from cmprsk::cuminc()
+cuminc_test <- function(cuminc_obj){
+  icudis_30_cif$Tests %>%
+    ## as_tibble makes it easy to keep rownames as new variable
+    as_tibble(rownames = "subdist") %>%
+    glue_data(
+      "{subdist}: X2, {rndformat(stat, 2)}; df, {df}; P, {formatp(pv)}"
+    )
+}
+
+## -- Functions to extract and plot the N at risk, cumulative events given -----
+## -- a summary(survfit(...)) object -------------------------------------------
+## IMPORTANT: Assumes death is always competing risk, not the one of interest
+## Intended to go along with survminer::ggcompetingrisks() output
+cr_risktable <- function(sf_sum){
+  data.frame(
+    trt = str_replace(sf_sum$strata, "trt=", ""),
+    time = sf_sum$time,
+    n_risk = sf_sum$n.risk[, 3],
+    n_event = sf_sum$n.event[, 1],
+    n_death = sf_sum$n.event[, 2]
+  ) %>%
+    group_by(trt) %>%
+    mutate(
+      cumul_event = cumsum(n_event),
+      cumul_death = cumsum(n_death),
+      risk_string = glue("{n_risk}\n({cumul_event}; {cumul_death})")
+    )
+}
+
+cr_risktable_plot <- function(sf_sum, event_string){
+  df <- cr_risktable(sf_sum)
+  
+  ggplot(data = df, aes(x = time, y = 1, colour = trt)) +
+    facet_wrap(~ trt, nrow = 1) +
+    geom_text(aes(label = risk_string), size = basetext_size * 0.2) +
+    scale_x_continuous(
+      name = "Days after Randomization",
+      breaks = unique(sf_sum$time),
+      labels = unique(sf_sum$time)
+    ) +
+    scale_y_continuous(breaks = 1, labels = "100%") +
+    labs(
+      title = glue(
+        "Number at risk (cumulative number of {event_string}; deaths)"
+      ),
+      ylab = " " ## faking it for spacing purposes
+    ) +
+    theme(plot.title = element_text(size = basetext_size * 0.8),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          ## Set Y axis text to background color; need placeholder text for
+          ## spacing, so that facets line up
+          axis.title.y = element_text(colour = "white"),
+          axis.text.y = element_text(colour = "white"),
+          axis.ticks.y = element_blank(),
+          legend.position = "none")
+  
+}
+
+## -- Function to create plot for cumulative incidence functions ---------------
+## Relies on survminer::ggcompetingrisks
+## test_string should be result of cuminc_test()
+cif_plot <- function(
+  cuminc_obj,    ## class cuminc
+  legend_string, ## event of interest, for plot legend
+  event_string,  ## event of interest, for plot title
+  test_string,   ## to include in subtitle; often result of cuminc_test()
+  caption_string = NULL ## optional plot caption
+){
+  ggcompetingrisks(cuminc_obj, conf.int = TRUE, ggtheme = mindusa_theme()) +
+    scale_color_manual(
+      name = "",
+      values = c(
+        as.character(palette_colors["lgray"]),
+        as.character(palette_colors["dred"])
+      ),
+      labels = c("Death", legend_string)
+    ) +
+    scale_fill_manual(
+      name = "",
+      values = c(
+        as.character(palette_colors["lgray"]),
+        as.character(palette_colors["dred"])
+      ),
+      labels = c("Death", legend_string)
+    ) +
+    scale_y_continuous(
+      limits = 0:1,
+      breaks = seq(0, 1, 0.2),
+      labels = paste0(seq(0, 1, 0.2) * 100, "%")
+    ) +
+    labs(
+      title = glue("Cumulative Incidence of {event_string}"),
+      subtitle = glue(
+        "Competing risk of death prior to discharge\n\n",
+        "Tests for difference between treatments:\n",
+        "{paste(test_string, collapse = '\n')}"
+      ),
+      x = "Days after Randomization",
+      y = "Cumulative Probability",
+      caption = caption_string
+    ) +
+    theme(legend.position = c(0.01, 1),
+          legend.justification = c(0, 1),
+          legend.background = element_blank(),
+          legend.direction = "vertical")
+}
+
+## Function to combine results of cif_plot, cr_risktable_plot
+cr_combine_plots <- function(cif, rt, xmax, time_breaks, caption_string){
+  multiplot(
+    plotlist = list(
+      ## Remove X axis info, caption from CIF plot; only include one at bottom
+      cif +
+        scale_x_continuous(limits = c(0, xmax), breaks = time_breaks) +
+        theme(plot.caption = element_blank(),
+              axis.title.x = element_blank(),
+              axis.text.x = element_blank()),
+      
+      ## Add caption to risk table plot
+      rt +
+        scale_x_continuous(
+          limits = c(0, xmax),
+          breaks = time_breaks,
+          name = "Days after Randomization"
+        ) +
+        labs(caption = paste0("\n", caption_string))
+    ),
+    
+    ## Layout: single column, CIF takes up 2/3 space
+    layout = matrix(c(1, 1, 2), ncol = 1)
+  )
+}
+
 ## -- ggplot palette/custom theme ----------------------------------------------
 # ## Picked colors from/inspired by Flatly theme
 # palette_colors <- c(
@@ -2460,54 +2597,19 @@ section](#unadjusted) for more details.
 
 `[insert general summary of results here]`
 
-```{r cuminc_icudc_unadj, fig.height = 7}
+```{r cuminc_icudc_unadj, warning = FALSE, fig.height = 7}
 ## -- Create Surv object -------------------------------------------------------
 ## Will be used for N at risk for CIF, as well as adjusted model fit
 icudis_30_Surv <- with(model_df, {
   Surv(time = tte_icudis_30, event = ftype_icudis_30, type = "mstate")
 })
 
-## -- Create survfit object, N at risk table -----------------------------------
+## -- Create and summarize survfit object, create N at risk table --------------
 icudis_30_survfit <- survfit(icudis_30_Surv ~ trt, data = model_df)
-
 icudis_30_sfsum <- summary(icudis_30_survfit, times = seq(0, 30, 5))
 
-## Extract N still at risk, cumulative number of discharges, deaths at each time
-icudis_30_risktable <- data.frame(
-  trt = str_replace(icudis_30_sfsum$strata, "trt=", ""),
-  time = icudis_30_sfsum$time,
-  n_risk = icudis_30_sfsum$n.risk[, 3],
-  n_icudis = icudis_30_sfsum$n.event[, 1],
-  n_death = icudis_30_sfsum$n.event[, 2]
-) %>%
-  group_by(trt) %>%
-  mutate(
-    cumul_icudis = cumsum(n_icudis),
-    cumul_death = cumsum(n_death),
-    risk_string = glue("{n_risk}\n({cumul_icudis}; {cumul_death})")
-  )
-
-icudis_30_risk_plot <- ggplot(
-  data = icudis_30_risktable,
-  aes(x = time, y = 1, colour = trt)
-) +
-  facet_wrap(~ trt, nrow = 1) +
-  geom_text(aes(label = risk_string), size = basetext_size * 0.2) +
-  scale_x_continuous(
-    name = "Days after Randomization",
-    breaks = seq(0, 30, 5),
-    labels = seq(0, 30, 5)
-  ) +
-  labs(
-    title = "Number at risk (cumulative number of ICU discharges; deaths)",
-    ylab = " " ## faking it for spacing purposes
-  ) +
-  theme(plot.title = element_text(size = basetext_size * 0.8),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.y = element_text(colour = "white"), ## faking it for spacing
-        axis.ticks.y = element_blank(),
-        legend.position = "none")
+icudis_30_risk_plot <-
+  cr_risktable_plot(icudis_30_sfsum, event_string = "ICU discharges")
 
 ## -- Fit cumulative incidence functions by treatment --------------------------
 icudis_30_cif <- with(model_df, {
@@ -2520,52 +2622,24 @@ icudis_30_cif <- with(model_df, {
 })
 
 ## Create strings for test results
-icudis_30_tests_unadj <- icudis_30_cif$Tests %>%
-  ## Coerce to tbl_df; as_tibble makes it easy to keep rownames as new variable
-  as_tibble(rownames = "subdist") %>%
-  glue_data(
-    "{subdist}: X2, {rndformat(stat, 2)}; df, {df}; P, {formatp(pv)}"
-  )
+icudis_30_tests_unadj <- cuminc_test(icudis_30_cif)
 
-icudis_30_cif_plot <- ggcompetingrisks(
-  icudis_30_cif, conf.int = TRUE, ggtheme = mindusa_theme()
-) +
-  scale_color_manual(
-    name = "",
-    values = c(
-      as.character(palette_colors["lgray"]),
-      as.character(palette_colors["dred"])
-    ),
-    labels = c("Death", "ICU Discharge")
-  ) +
-  scale_fill_manual(
-    name = "",
-    values = c(
-      as.character(palette_colors["lgray"]),
-      as.character(palette_colors["dred"])
-    ),
-    labels = c("Death", "ICU Discharge")
-  ) +
-  scale_y_continuous(
-    limits = 0:1,
-    breaks = seq(0, 1, 0.2),
-    labels = paste0(seq(0, 1, 0.2) * 100, "%")
-  ) +
-  labs(
-    title = "Cumulative Incidence of Successful ICU Discharge",
-    subtitle = glue(
-      "Competing risk of death prior to discharge\n\n",
-      "Tests for difference between treatments:\n",
-      "{paste(icudis_30_tests_unadj, collapse = '\n')}"
-    ),
-    x = "Days after Randomization",
-    y = "Cumulative Probability",
-    caption = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
-  )
+## -- Plot CIFs, N at risk -----------------------------------------------------
+## Create plot for competing risks
+icudis_30_cif_plot <- cif_plot(
+  cuminc_obj = icudis_30_cif,
+  legend_string = "ICU Discharge",
+  event_string = "Successful ICU Discharge",
+  test_string = icudis_30_tests_unadj,
+  caption_string = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
+)
 
-multiplot(
-  plotlist = list(icudis_30_cif_plot, icudis_30_risk_plot),
-  layout = matrix(c(1, 1, 1, 2), ncol = 1)
+## Print combined plot
+cr_combine_plots(
+  cif = icudis_30_cif_plot,
+  rt = icudis_30_risk_plot,
+  xmax = 31, time_breaks = seq(0, 30, 5),
+  caption_string = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
 )
 
 ```
