@@ -1918,8 +1918,8 @@ cumulative incidences of both the outcome of interest and death, along with
 score tests for the difference between groups in the subdistribution of
 interest. Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients who withdrew in the hospital with no discharge or
 death information available are censored at the time of withdrawal; we censor at
-31 days anyone who has experienced neither death nor the outcome of interest by
-30 days. More details on censoring are provided with each analysis.
+30.01 days anyone who has experienced neither death nor the outcome of interest
+by 30 days. More details on censoring are provided with each analysis.
 
 ## Adjusted Analyses{#adjusted}
 
@@ -1953,8 +1953,8 @@ event outcomes (ICU and hospital discharge and liberation from mechanical
 ventilation), we use competing risks regression[^fg], treating death as our
 competing risk. Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients who withdrew in the hospital with no discharge or
 death information available are censored at the time of withdrawal; we censor at
-31 days anyone who has experienced neither death nor the outcome of interest by
-30 days. More details on censoring are provided with each analysis.
+30.01 days anyone who has experienced neither death nor the outcome of interest
+by 30 days. More details on censoring are provided with each analysis.
 
 [^fg]: Fine, J., & Gray, R. (1999). A Proportional Hazards Model for the Subdistribution of a Competing Risk. *Journal of the American Statistical Association*, 94(446), 496-509. doi:10.2307/2670170
 
@@ -2362,9 +2362,10 @@ within the 30 days following randomization.
 
 - The `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients
 who withdrew from the study prior to day 30 with no known death status are censored at the time of withdrawal.
-- The `r with(ptsummary_df, sum(!hospdis_noinfo & !event_death_30 & tte_death_30 == 31))` patients who survived the entire 30-day period are censored at day 31.
-- The `r with(ptsummary_df, sum(!hospdis_noinfo & event_death_30 & tte_death_30 < 31))` patients who died within the 30-day period are assigned a time value of
-`time of death - time of randomization`.
+- The `r with(ptsummary_df, sum(!hospdis_noinfo & !event_death_30 & tte_death_30 == 30.01))` patients who survived the entire 30-day period are censored at day
+30.01.
+- The `r with(ptsummary_df, sum(!hospdis_noinfo & event_death_30 & tte_death_30 < 30.01))` patients who died within the 30-day period are assigned a time value
+of `time of death - time of randomization`.
 
 ### Unadjusted Analysis
 
@@ -2578,14 +2579,10 @@ We treat death as a competing risk.
 
 **Censoring and time to events:**
 
-- We censor `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 < 31))` patients prior to the end of the 30-day period; `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 < 31 & hospdis_noinfo))` withdrew from the study prior to hospital discharge, with no
-discharge or death information available. One was discharged prior to death at
-time 29.x days, but died on day 30.x; this patient is censored at the time of
-discharge, since s/he experienced neither outcome of interest during the time
-period, but died prior to the 31 days assigned to all patients who survived the
-entire 30 days.
-- We censor `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 == 31))` patients at day 31 who survived the entire 30-day period
-but remained in the ICU on day 30.
+- We censor `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 < 30.01))` patients prior to the end of the 30-day period; `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 < 30.01 & hospdis_noinfo))` withdrew from the study prior to hospital discharge, with no
+discharge or death information available, and are therefore censored at the time of study withdrawal. One patient was discharged from the ICU on day 29.9 and died at day 30.7, so that s/he did experienced neither event during the specified time period; this patient is censored at the time of ICU discharge.
+- We censor `r with(ptsummary_df, sum(ftype_icudis_30 == "Censored" & tte_icudis_30 == 30.01))` patients at day 30.01 who survived the entire 30-day
+period but remained in the ICU on day 30.
 - We assign the `r with(ptsummary_df, sum(ftype_icudis_30 == "Death"))` patients who died prior to ICU discharge within the 30-day period a time value of `time of death - time of randomization` and a "failure type" of death; we assign the `r with(ptsummary_df, sum(ftype_icudis_30 == "ICU Discharge"))` patients who
 were successfully discharged within the 30-day period a time value of `time of discharge - time of randomization` and a "failure type" of ICU discharge.
 
