@@ -284,7 +284,7 @@ table_trt_ratios <- function(
 
 ## String describing test results from cmprsk::cuminc()
 cuminc_test <- function(cuminc_obj){
-  icudis_30_cif$Tests %>%
+  cuminc_obj$Tests %>%
     ## as_tibble makes it easy to keep rownames as new variable
     as_tibble(rownames = "subdist") %>%
     glue_data(
@@ -1736,9 +1736,10 @@ We examine all outcomes and covariates to determine how much missing data is pre
 ## -- Create dataset with only outcomes, covariates ----------------------------
 outcome_vars <- c(
   "dcfd_int", "del_int_all", "coma_int_all",
-  "tte_death_30", "event_death_30",   ## Time to death
-  "tte_icudis_30", "ftype_icudis_30", ## Time to final, successful ICU discharge
-  "tte_mvlib_30", "ftype_mvlib_30"    ## Time to liberation from MV
+  "tte_death_30", "event_death_30",     ## Time to death
+  "tte_icudis_30", "ftype_icudis_30",   ## Time to final, succ. ICU discharge
+  "tte_hospdis_30", "ftype_hospdis_30", ## Time to hospital discharge
+  "tte_mvlib_30", "ftype_mvlib_30"      ## Time to liberation from MV
 )
 
 covariate_vars <- c(
@@ -2594,7 +2595,7 @@ section](#unadjusted) for more details.
 
 `[insert general summary of results here]`
 
-```{r cuminc_icudc_unadj, warning = FALSE, fig.height = 7}
+```{r cuminc_icudis_unadj, warning = FALSE, fig.height = 7}
 ## -- Create Surv object -------------------------------------------------------
 ## Will be used for N at risk for CIF, as well as adjusted model fit
 icudis_30_Surv <- with(model_df, {
@@ -2756,6 +2757,198 @@ between two specific values of the covariate, as noted in the table.
 
 ```{r icudis_30_full_results, warning = FALSE}
 rms_results_kable(icudis_30_mod)
+
+```
+
+## Time to Successful Hospital Discharge
+
+We use time to event analysis with competing risks to explore the relationship
+between treatment group and "successful" hospital discharge, defined as discharge from the study hospitalization, followed by at least 48 hours alive.
+We treat death as a competing risk.
+
+**Censoring and time to events:**
+
+- We censor `r with(ptsummary_df, sum(ftype_hospdis_30 == "Censored" & tte_hospdis_30 < 30.01))` patients prior to the end of the 30-day period; these
+patients withdrew from the study prior to hospital discharge, with no discharge
+or death information available, and are therefore censored at the time of study withdrawal.
+- We censor `r with(ptsummary_df, sum(ftype_hospdis_30 == "Censored" & tte_hospdis_30 == 30.01))` patients at day 30.01 who survived the entire 30-day
+period but remained hospitalized on day 30.
+- We assign the `r with(ptsummary_df, sum(ftype_hospdis_30 == "Death"))` patients who died prior to ICU discharge within the 30-day period a time value
+of `time of death - time of randomization` and a "failure type" of death; we
+assign the `r with(ptsummary_df, sum(ftype_hospdis_30 == "Hospital Discharge"))`
+patients who were successfully discharged within the 30-day period a time value
+of `time of discharge - time of randomization` and a "failure type" of hospital
+discharge.
+
+### Unadjusted Analyses
+
+We present cumulative incidence plots by treatment group for both hospital
+discharge and death, unadjusted for any covariates. Please see the [Methods
+section](#unadjusted) for more details.
+
+`[insert general summary of results here]`
+
+```{r cuminc_hospdis_unadj, warning = FALSE, fig.height = 7}
+## -- Create Surv object -------------------------------------------------------
+## Will be used for N at risk for CIF, as well as adjusted model fit
+hospdis_30_Surv <- with(model_df, {
+  Surv(time = tte_hospdis_30, event = ftype_hospdis_30, type = "mstate")
+})
+
+## -- Create and summarize survfit object, create N at risk table --------------
+hospdis_30_survfit <- survfit(hospdis_30_Surv ~ trt, data = model_df)
+hospdis_30_sfsum <- summary(hospdis_30_survfit, times = seq(0, 30, 5))
+
+hospdis_30_risk_plot <-
+  cr_risktable_plot(hospdis_30_sfsum, event_string = "hospital discharges")
+
+## -- Fit cumulative incidence functions by treatment --------------------------
+hospdis_30_cif <- with(model_df, {
+  cuminc(
+    ftime = tte_hospdis_30,
+    fstatus = ftype_hospdis_30,
+    group = trt,
+    cencode = "Censored"
+  )
+})
+
+## Create strings for test results
+hospdis_30_tests_unadj <- cuminc_test(hospdis_30_cif)
+
+## -- Plot CIFs, N at risk -----------------------------------------------------
+## Create plot for competing risks
+hospdis_30_cif_plot <- cif_plot(
+  cuminc_obj = hospdis_30_cif,
+  legend_string = "Hospital Discharge",
+  event_string = "Successful Hospital Discharge",
+  test_string = hospdis_30_tests_unadj,
+  caption_string = '"Successful" is defined as hospital discharge followed by at least 48 hours alive.'
+)
+
+## Print combined plot
+cr_combine_plots(
+  cif = hospdis_30_cif_plot,
+  rt = hospdis_30_risk_plot,
+  xmax = 31, time_breaks = seq(0, 30, 5),
+  caption_string = '"Successful" is defined as hospital discharge followed by at least 48 hours alive.'
+)
+
+```
+
+### Adjusted Analyses
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+We use Fine & Gray's[^fg] method of competing risks regression to examine the
+relationship between treatment and (primarily) hospital discharge. For further
+details, please see the [Methods section](#adjusted).
+
+##### Model Fitting
+
+```{r hospdis_30_adj}
+## -- Fit competing risks model using survival::finegray(), rms::cph() ---------
+
+## -- Create dataset specifically for Fine-Gray method of competing risks ------
+hospdis_30_fg <- finegray(
+  ## Use **linear** RHS here; we'll fit spline terms within model formula itself
+  as.formula(paste("hospdis_30_Surv ~", mod_rhs_lin)),
+  data = model_df,
+  etype = "Hospital Discharge",
+  id = id,
+  count = "fgcount"
+)
+
+## -- Fit actual model, using variables/weights from finegray() ----------------
+hospdis_30_mod <- cph(
+  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs)),
+  data = hospdis_30_fg,
+  weights = fgwt,
+  x = TRUE, y = TRUE
+)
+
+```
+
+##### Assumptions
+
+```{r hospdis_30_assume}
+## -- Check proportional hazard assumption -------------------------------------
+hospdis_30_zph <- cox.zph(hospdis_30_mod, transform = 'log')
+
+## Extract p-value for global PH assumption; create reproducible statement
+hospdis_30_phtext <- text_ph_assume(hospdis_30_zph)
+
+```
+
+We graphically check our assumption of proportional hazards for the hospital
+discharge subdistribution, paying particular attention to treatment group and
+looking for generally flat lines in each panel. `r hospdis_30_phtext`
+
+```{r hospdis_30_assumeplot}
+plot_ph_assume(hospdis_30_zph)
+
+```
+
+#### Model Results {.tabset}
+
+```{r hospdis_30_hrs_prep}
+## -- Calculate hazard ratios for both treatments vs placebo -------------------
+hospdis_30_hrs <- trt_ratios(hospdis_30_mod)
+
+## Create explanatory text string for subdistribution HRs
+hospdis_30_text <-
+  hr_example(hr_df = hospdis_30_hrs, outcome = "hospital discharge")
+
+```
+
+We show the subdistribution hazard ratios for hospital discharge for haloperidol
+and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
+favorable for this outcome. `r hospdis_30_text[["A"]]`
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Visual Form
+
+```{r hospdis_30_hrs_plot, fig.width = 5, fig.height = 3.5}
+hospdis_30_hrs_plot <- plot_trt_ratios(
+  ratio_df = hospdis_30_hrs,
+  outcome_text = "Successful Hospital Discharge",
+  extra_text = glue(
+    "\n\n",
+    '"Successful": hospital discharge within 30 days of randomization, ',
+    "followed by at least 48 hours alive.\n",
+    "Patients who withdrew & revoked access to PHI ",
+    "are censored on the day of withdrawal.\n",
+    "Deaths prior to hospital discharge are accounted for using competing risks."
+  ),
+  mod = hospdis_30_mod
+) +
+  theme(plot.caption = element_text(size = basetext_size * 0.6),
+        plot.title = element_text(size = basetext_size * 1.15))
+
+hospdis_30_hrs_plot
+
+```
+
+##### Tabular Form
+
+```{r table_hospdis_30_hrs}
+table_trt_ratios(ratio_df = hospdis_30_hrs)
+
+```
+
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single
+subdistribution hazard ratio/CI is insufficient to describe the entire
+relationship between each of these covariates and the relative incidence of
+hospital discharge. Rather, each subdistribution hazard ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r hospdis_30_full_results, warning = FALSE}
+rms_results_kable(hospdis_30_mod)
 
 ```
 
