@@ -2591,7 +2591,8 @@ were successfully discharged within the 30-day period a time value of `time of d
 
 We present cumulative incidence plots by treatment group for both ICU discharge
 and death, unadjusted for any covariates. Please see the [Methods
-section](#unadjusted) for more details.
+section](#unadjusted) for more details. All `r n_rand` randomized patients are
+included.
 
 `[insert general summary of results here]`
 
@@ -2650,7 +2651,7 @@ cr_combine_plots(
 
 We use Fine & Gray's[^fg] method of competing risks regression to examine the
 relationship between treatment and (primarily) ICU discharge. For further
-details, please see the [Methods section](#adjusted).
+details, please see the [Methods section](#adjusted). All `r n_rand_comp` randomized patients with complete covariate data are included.
 
 ##### Model Fitting
 
@@ -2784,7 +2785,8 @@ discharge.
 
 We present cumulative incidence plots by treatment group for both hospital
 discharge and death, unadjusted for any covariates. Please see the [Methods
-section](#unadjusted) for more details.
+section](#unadjusted) for more details. All `r n_rand` randomized patients are
+included.
 
 `[insert general summary of results here]`
 
@@ -2843,7 +2845,7 @@ cr_combine_plots(
 
 We use Fine & Gray's[^fg] method of competing risks regression to examine the
 relationship between treatment and (primarily) hospital discharge. For further
-details, please see the [Methods section](#adjusted).
+details, please see the [Methods section](#adjusted). All `r n_rand_comp` randomized patients with complete covariate data are included.
 
 ##### Model Fitting
 
@@ -2949,6 +2951,206 @@ comparison between two specific values of the covariate, as noted in the table.
 
 ```{r hospdis_30_full_results, warning = FALSE}
 rms_results_kable(hospdis_30_mod)
+
+```
+
+## Time to Successful Liberation from Mechanical Ventilation
+
+We use time to event analysis with competing risks to explore the relationship
+between treatment group and "successful" liberation from mechanical ventilation,
+defined as discontinuation of all types of MV followed by at least 48 hours alive and without reinitiation of MV. We treat death as a competing risk.
+
+**Censoring and time to events:**
+
+- We censor `r with(ptsummary_df, sum(ftype_mvlib_30 == "Censored" & tte_mvlib_30 < 30.01 & hospdis_noinfo, na.rm = TRUE))` patients at the time of
+study withdrawal who withdrew from the study prior to hospital discharge,
+with no discharge or death information available.
+- We censor `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Censored" & tte_mvlib_30 < 30.01 & !hospdis_noinfo))` patients at the end of
+hospitalization who were discharged without experiencing either death or
+successful liberation from MV.
+- We censor `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Censored" & tte_mvlib_30 == 30.01))` patients at day 30.01 who survived the entire 30-day
+period but remained hospitalized on day 30.
+- We assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Death"))` patients who died prior to liberation from MV within the 30-day period a time
+value of `time of death - time of randomization` and a "failure type" of death;
+we assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "MV Liberation"))`
+patients who were successfully liberated from MV within the 30-day period a time
+value of `time of liberation - time of randomization` and a "failure type" of
+liberation from MV.
+
+### Unadjusted Analyses
+
+We present cumulative incidence plots by treatment group for both liberation
+from MV and death, unadjusted for any covariates. Please see the [Methods
+section](#unadjusted) for more details. All `r sum_na(ptsummary_df$on_mv_rand24)` randomized patients who were on MV within 24 hours after randomization are included.
+
+`[insert general summary of results here]`
+
+```{r cuminc_mvlib_unadj, warning = FALSE, fig.height = 7}
+## Prep: Smaller df including only patients on MV within 24h of randomization
+model_df_mv <- model_df %>% filter(on_mv_rand24)
+
+## -- Create Surv object -------------------------------------------------------
+## Will be used for N at risk for CIF, as well as adjusted model fit
+mvlib_30_Surv <- with(model_df_mv, {
+  Surv(time = tte_mvlib_30, event = ftype_mvlib_30, type = "mstate")
+})
+
+## -- Create and summarize survfit object, create N at risk table --------------
+mvlib_30_survfit <- survfit(mvlib_30_Surv ~ trt, data = model_df_mv)
+mvlib_30_sfsum <- summary(mvlib_30_survfit, times = seq(0, 30, 5))
+
+mvlib_30_risk_plot <-
+  cr_risktable_plot(mvlib_30_sfsum, event_string = "liberations from MV")
+
+## -- Fit cumulative incidence functions by treatment --------------------------
+mvlib_30_cif <- with(model_df, {
+  cuminc(
+    ftime = tte_mvlib_30,
+    fstatus = ftype_mvlib_30,
+    group = trt,
+    cencode = "Censored"
+  )
+})
+
+## Create strings for test results
+mvlib_30_tests_unadj <- cuminc_test(mvlib_30_cif)
+
+## -- Plot CIFs, N at risk -----------------------------------------------------
+## Create plot for competing risks
+mvlib_30_cif_plot <- cif_plot(
+  cuminc_obj = mvlib_30_cif,
+  legend_string = "Liberation from MV",
+  event_string = "Successful Liberation from MV",
+  test_string = mvlib_30_tests_unadj,
+  caption_string = '"Successful" is defined as discontinuation of MV, followed by at least 48 hours alive without reinitiation.'
+)
+
+## Print combined plot
+cr_combine_plots(
+  cif = mvlib_30_cif_plot,
+  rt = mvlib_30_risk_plot,
+  xmax = 31, time_breaks = seq(0, 30, 5),
+  caption_string = '"Successful" is defined as discontinuation of MV, followed by at least 48 hours alive without reinitiation.'
+)
+
+```
+
+### Adjusted Analyses
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+We use Fine & Gray's[^fg] method of competing risks regression to examine the
+relationship between treatment and (primarily) successful liberation from MV.
+For further details, please see the [Methods section](#adjusted). All `r with(model_df, sum_na(on_mv_rand24 & comp_covars))` randomized patients with
+complete covariate data who received MV within 24 hours after randomization are
+included.
+
+##### Model Fitting
+
+```{r mvlib_30_adj}
+## -- Fit competing risks model using survival::finegray(), rms::cph() ---------
+
+## -- Create dataset specifically for Fine-Gray method of competing risks ------
+mvlib_30_fg <- finegray(
+  ## Use **linear** RHS here; we'll fit spline terms within model formula itself
+  as.formula(paste("mvlib_30_Surv ~", mod_rhs_lin)),
+  data = model_df_mv,
+  etype = "MV Liberation",
+  id = id,
+  count = "fgcount"
+)
+
+## -- Fit actual model, using variables/weights from finegray() ----------------
+mvlib_30_mod <- cph(
+  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs)),
+  data = mvlib_30_fg,
+  weights = fgwt,
+  x = TRUE, y = TRUE
+)
+
+```
+
+##### Assumptions
+
+```{r mvlib_30_assume}
+## -- Check proportional hazard assumption -------------------------------------
+mvlib_30_zph <- cox.zph(mvlib_30_mod, transform = 'log')
+
+## Extract p-value for global PH assumption; create reproducible statement
+mvlib_30_phtext <- text_ph_assume(mvlib_30_zph)
+
+```
+
+We graphically check our assumption of proportional hazards for the hospital
+discharge subdistribution, paying particular attention to treatment group and
+looking for generally flat lines in each panel. `r mvlib_30_phtext`
+
+```{r mvlib_30_assumeplot}
+plot_ph_assume(mvlib_30_zph)
+
+```
+
+#### Model Results {.tabset}
+
+```{r mvlib_30_hrs_prep}
+## -- Calculate hazard ratios for both treatments vs placebo -------------------
+mvlib_30_hrs <- trt_ratios(mvlib_30_mod)
+
+## Create explanatory text string for subdistribution HRs
+mvlib_30_text <-
+  hr_example(hr_df = mvlib_30_hrs, outcome = "liberation from MV")
+
+```
+
+We show the subdistribution hazard ratios for hospital discharge for haloperidol
+and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
+favorable for this outcome. `r mvlib_30_text[["A"]]`
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Visual Form
+
+```{r mvlib_30_hrs_plot, fig.width = 5, fig.height = 3.5}
+mvlib_30_hrs_plot <- plot_trt_ratios(
+  ratio_df = hospdis_30_hrs,
+  outcome_text = "Successful Liberation from MV",
+  extra_text = glue(
+    "\n\n",
+    '"Successful": liberation from MV within 30 days of randomization, ',
+    "followed by at least 48 hours alive without reinitiation.\n",
+    "Patients who withdrew & revoked access to PHI ",
+    "are censored on the day of withdrawal.\n",
+    "Deaths prior to liberation are accounted for using competing risks."
+  ),
+  mod = mvlib_30_mod
+) +
+  theme(plot.caption = element_text(size = basetext_size * 0.6),
+        plot.title = element_text(size = basetext_size * 1.15))
+
+mvlib_30_hrs_plot
+
+```
+
+##### Tabular Form
+
+```{r table_mvlib_30_hrs}
+table_trt_ratios(ratio_df = mvlib_30_hrs)
+
+```
+
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single
+subdistribution hazard ratio/CI is insufficient to describe the entire
+relationship between each of these covariates and the relative incidence of
+hospital discharge. Rather, each subdistribution hazard ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r mvlib_30_full_results, warning = FALSE}
+rms_results_kable(mvlib_30_mod)
 
 ```
 
