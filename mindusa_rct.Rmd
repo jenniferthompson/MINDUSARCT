@@ -904,9 +904,9 @@ last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
 
 ```
 
-`r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`.
+## Overview of Screening, Exclusions and Randomization
 
-#### `r table_nums("screening")`
+`r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`.
 
 ```{r print_screen_table}
 screen_table %>%
@@ -921,9 +921,9 @@ screen_table %>%
 
 ```
 
-Patients could have none, one, or two of the listed organ failures present at randomization; percentages will not add up to 100%.
+**Note**: Patients could have none, one, or two of the listed organ failures present at randomization; percentages will not add up to 100%.
 
-#### `r table_nums("exclusions")`
+## Study Exclusions
 
 ```{r prep_exclusions}
 ## Some exclusions aren't relevant for our purposes here:
@@ -995,7 +995,12 @@ exc_colheads <- c(
 
 ```
 
-Exclusions could take place at the time of screening (vast majority), or after consent, if a patient was determined to have cognitive disability (indicated by an IQCODE score >= 4.5) or was discovered to have an exclusion criteria prior to randomization. For the `r format_comma(sum_na(ptstatus_df$excluded_ever))` patients excluded from MINDUSA, `r table_nums("exclusions", display = "cite")` presents exclusions:
+Exclusions could take place at the time of screening (vast majority), or after
+consent, if a patient was determined to have cognitive disability (indicated by
+an IQCODE score >= 4.5) or was discovered to have an exclusion criteria prior to
+randomization. For the `r format_comma(sum_na(ptstatus_df$excluded_ever))`
+patients excluded from MINDUSA, `r table_nums("exclusions", display = "cite")`
+presents exclusions:
 
 1. At any point (column 1; % out of all exclusions)
 1. At the time of screening (column 2; % out of all screening exclusions)
@@ -1010,9 +1015,10 @@ exc_table %>%
 
 ```
 
-##### `r table_nums("exc_other")`
+### "Other" Exclusions
 
-To save space, reasons for "other" exclusions are collapsed. Click on `Details` below to view them.
+To save space, reasons for "other" exclusions are collapsed. Click on `Details` below to view them. (These explanations are taken directly from our database; potentially identifiable information, including dates, times and parenthetical
+details, have been redacted to preserve patient privacy.)
 
 <details>
 ```{r exc_other_table}
@@ -1039,7 +1045,7 @@ Our study design was such that a substantial number of patients gave consent to 
 
 Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
 
-#### `r table_nums("baseline_all")`
+### Demographic & ICU Admission Characteristics, All **Consented** Patients
 
 **Note on the AUDIT:** This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
 
@@ -1103,7 +1109,7 @@ my_html(
 
 The following tables describe demographic and ICU admission characteristics (`r table_nums("baseline_trt", display = "cite")`) and in-hospital characteristics (`r table_nums("inhosp_trt", display = "cite")`) of all randomized patients.
 
-#### `r table_nums("baseline_trt")`
+### Demographic & ICU Admission Characteristics, All **Randomized** Patients
 
 ```{r baseline_trt}
 my_html(
@@ -1114,7 +1120,7 @@ my_html(
 
 ```
 
-##### `r table_nums("icursn_other")`
+### Descriptions of "Other" ICU Admission Reasons
 
 To save space, reasons for "other" ICU admission among randomized patients are collapsed. Click on `Details` below to view them.
 
@@ -1134,12 +1140,17 @@ ptsummary_all_df %>%
 
 </details>
 
-#### `r table_nums("inhosp_trt")`
+### Intervention Period Characteristics by Treatment Group
 
-Unless otherwise specified, quantities in this table reflect the 14 days including and following randomization (the "study period"). Additional notes:
+Unless otherwise specified, quantities in this table reflect the 14 days
+including and following randomization (the "study period"). Additional notes:
 
-- "Liberation from mechanical ventilation" variables apply only to patients who were on MV when randomized, or were placed on MV within the 24 hours following randomization.
-- All time-to-event descriptions (eg, ICU length of stay) begin at the time of randomization and go through the entire hospitalization (even if the patient remained hospitalized after the intervention period).
+- "Liberation from mechanical ventilation" variables apply only to patients who
+were on MV when randomized, or were placed on MV within the 24 hours following
+randomization.
+- All time-to-event descriptions (eg, ICU length of stay) begin at the time of
+randomization and go through the entire hospitalization (even if the patient
+remained hospitalized after the intervention period).
 
 ```{r inhosp_trt}
 ## Which variables do we want for *all* drugs?
@@ -1279,11 +1290,11 @@ In both tables, quantities are represented as either `N (%)` or as `median [25th
 
 ## Intervention by Patient
 
-[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING] Patients were approximately equally randomized to the three treatment groups, with each group receiving study drug approximately the same number of days and times. Rates of temporary hold and permanent discontinuation were equivalent among all treatment groups.
+`[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING]`
+
+Patients were approximately equally randomized to the three treatment groups, with each group receiving study drug approximately the same number of days and times. Rates of temporary hold and permanent discontinuation were equivalent among all treatment groups.
 
 Among patients with study drug temporarily held, the most common reasons were oversedation and "other." Study drug was most often discontinued by request of the patient, family, or medical team.
-
-#### `r table_nums("intervention_pt")`
 
 ```{r prep_rand_table}
 randtable_df <- rand_df %>%
@@ -1422,19 +1433,21 @@ rand_table %>%
   mykablestyle %>%
   group_rows("Randomized Patients", 2, 10) %>%
   group_rows("Reasons Study Drug Temporarily Held", 11, 18) %>%
-  group_rows("Reasons Study Drug Permanently Discontinued", 19, 26)
+  group_rows("Reasons Study Drug Permanently Discontinued", 19, 27)
 
 ```
 
 ## Intervention by Dose
 
-`r table_nums("intervention_dose", display = "cite")` describes the `r format(nrow(doses_df), big.mark = ",")` doses of study drug attempted during the course of the study. Study staff continued to document dose opportunities after permanent discontinuation; therefore, patients could have >1 dose in that category in this table.
+`r table_nums("intervention_dose", display = "cite")` describes the `r format(nrow(doses_df), big.mark = ",")` doses of study drug attempted during the
+course of the study, generally two doses per day that the patient remained alive
+and in the ICU. Study staff continued to document dose opportunities after permanent discontinuation; therefore, patients could have >1 dose in that category in this table.
 
-[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING] About 75% of doses were successfully given in each of the three treatment groups, with rates of study drug hold and discontinuation approximately equal between groups. Pre-dose QTcs were also roughly equivalent between the three groups.
+`[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING]`
+
+About 75% of doses were successfully given in each of the three treatment groups, with rates of study drug hold and discontinuation approximately equal between groups. Pre-dose QTcs were also roughly equivalent between the three groups.
 
 Oversedation was the most common reason for temporary hold by far; actual RASSes at the time of dose administration are listed in `r table_nums("intervention_dose", display = "cite")`. Refusal (patient, family, or medical team) was the most common reason for permanent discontinuation.
-
-#### `r table_nums("intervention_dose")`
 
 ```{r prep_dose_table}
 ## How many total doses in each treatment group?
@@ -1631,7 +1644,9 @@ dose_table %>%
 
 ## "Other" Reasons for Hold & Discontinuation
 
-Explanations for study drug held (`r table_nums("dose_held_other", display = "cite")`) and discontinued (`r table_nums("dose_permdc_other", display = "cite")`) for "other" reasons are listed in the tables below. To save space, these tables are collapsed; click on `Details` to see them.
+Explanations for study drug held (`r table_nums("dose_held_other", display = "cite")`) and discontinued (`r table_nums("dose_permdc_other", display = "cite")`) for "other" reasons are listed in the tables below. To save space, these tables are collapsed; click on `Details` to see them. (These explanations are taken directly from our database; potentially identifiable information,
+including dates, times and parenthetical details, have been redacted to preserve
+patient privacy.)
 
 ```{r prep_dose_other}
 other_held_table <- doses_df %>%
@@ -1986,6 +2001,17 @@ addition to treatment group:
 
 Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distribution of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) has too little variability to allow this flexibility.
 
+## Effect Modification
+
+We are interested in whether any association between treatment group and our
+main outcomes is modified by several factors. In secondary analyses, we include
+interaction (or cross-product) terms in our multivariable models between
+treatment and the following variables:
+
+- Age at consent
+- Severity of illness, measured by modified SOFA on the day of randomization
+- Pre-existing cognitive impairment, measured by IQCODE at consent
+
 ## Missing Data
 
 We have very little missing covariate or outcome data (see [above](#exploration)
@@ -2028,7 +2054,9 @@ devtools::session_info()$packages %>%
 
 ```
 
-# Primary Outcomes
+# Primary Analysis
+
+This section includes analyses for the entire randomized cohort, with no potential effect modification (no interaction terms).
 
 <hr>
 
