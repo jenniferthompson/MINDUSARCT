@@ -89,6 +89,93 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
 }
 
 ## -- Modeling/results helper functions ----------------------------------------
+## Create string with results of Kruskal-Wallis test
+kw_results <- function(kw_obj){
+  
+  if(!inherits(kw_obj, "htest")){
+    stop("kw_obj must be the result of kruskal.test()", call. = FALSE)
+  }
+  
+  glue(
+    "Kruskal-Wallis test:\n",
+    "X2, {rndformat(kw_obj$statistic, 2)}; ",
+    "df, {kw_obj$parameter}; ",
+    "P, {formatp(kw_obj$p.value)}"
+  )
+}
+
+## Plot distributions of mental status variables by treatment, including
+## results of Kruskal-Wallis test
+mental_plot <- function(xvar, xtitle, kw_obj){
+  ## No patient should have 14 DCFDs (must have delirium to be randomized),
+  ## but could have 14 delirium/coma days
+  if(xvar == "dcfd_int"){
+    xmax <- 13
+  } else{
+    xmax <- 14
+  }
+  
+  ggplot(data = model_df, aes_string(x = xvar)) +
+    facet_wrap(~ trt, nrow = 1) +
+    geom_histogram(aes(fill = trt), binwidth = 1) +
+    scale_x_continuous(name = xtitle, breaks = seq(0, xmax, 2)) +
+    scale_y_continuous(name = "Patient Count") +
+    theme(
+      legend.position = "none",
+      plot.caption = element_text(size = 10)
+    ) +
+    labs(
+      title = glue("{xtitle} by Treatment Group"),
+      subtitle = kw_results(dcfd_kw),
+      caption = days_miss_caption
+    )
+  
+}
+
+## Function to plot adjusted medians or odds ratios for mental status variables
+## df = object created by quantile_orm_df()
+mental_medians_plot <- function(df, mod){
+  if(!inherits(mod, "rms")){
+    stop("mod must be an rms model object", call. = FALSE)
+  }
+  
+  ## Max should be 13 for DCFDs, 14 for delirium/coma
+  if(mod$sformula[[2]] == "dcfd_int"){
+    xmax <- 13
+    outcome <- "DCFDs"
+  } else{
+    xmax <- 14
+    if(mod$sformula[[2]] == "del_int_all"){
+      outcome <- "Delirium Duration"
+    } else{
+      outcome <- "Coma Duration"
+    }
+  }
+    
+  p <- ggplot(data = df, aes(y = quantile, x = forcats::fct_rev(trt))) +
+    geom_pointrange(
+      aes(ymin = lb, ymax = ub),
+      shape = 16, size = 1, colour = as.character(palette_colors["dred"])
+    ) +
+    scale_y_continuous(limits = c(0, xmax), breaks = seq(0, xmax, 2)) +
+    labs(
+      title = glue("Adjusted Median {outcome} by Treatment"),
+      subtitle = glue("P: {formatp(anova(mod)['trt', 'P'])}"),
+      y = glue("Adjusted Median (95% Confidence Interval)"),
+      caption =
+        "\nAdjusted analysis using proportional odds logistic regression."
+    ) +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      plot.caption = element_text(size = basetext_size * 0.7)
+    ) +
+    coord_flip()
+  
+  return(p)
+}
+
 ## Graphically check proportional hazards assumption; mod_zph is class cox.zph
 plot_ph_assume <- function(mod_zph){
   par(mfrow = c(3, 3))
@@ -688,6 +775,21 @@ quantile.orm <- function(mod, new.data, probs = 0.5, se = TRUE){
   }
   
   return(result)
+}
+
+## Wrapper to put these in a data.frame
+quantile_orm_df <- function(
+  ## arguments passed to quantile.orm()
+  mod, new.data = pred_df,
+  ## levels of treatment to append to final df
+  trt_levels = levels(model_df$trt),
+  ...
+){
+  quantile.orm(mod = mod, new.data = new.data, ...) %>%
+    ## Each quantity initially stored as a matrix, in case we want multiple
+    ##   quantiles (we don't); need to be numeric
+    map_dfc(as.numeric) %>%
+    bind_cols(data.frame(trt = trt_levels), .)
 }
 
 ## -- Estimate conditional CDF and its standard error for orm models -----------
@@ -1847,6 +1949,20 @@ spark_dcfd <- create_spark(
   spark_width = 50
 )
 
+spark_del <- create_spark(
+  "del_int_all",
+  # vbreaks = seq(-1, 14, 1),
+  spark_id = "spark-del",
+  spark_width = 50
+)
+
+spark_coma <- create_spark(
+  "coma_int_all",
+  # vbreaks = seq(-1, 14, 1),
+  spark_id = "spark-coma",
+  spark_width = 50
+)
+
 ## -- Create model RHS for multiple uses ---------------------------------------
 ## How many knots for continuous covariates? Which ones are continuous?
 rcsknots <- 3
@@ -2060,28 +2176,9 @@ This section includes analyses for the entire randomized cohort, with no potenti
 
 <hr>
 
-## Delirium/Coma-Free Days
-
-***Note**: We use single imputation to reduce potential bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the
-intervention period without sufficient RASS and/or CAM information to determine
-mental status. Please see [Notes on Variable Calculation](#dcfds) for further
-rationale.*
-
-### Unadjusted Analysis
-
-Due to the non-normal distribution of DCFDs `r spark_dcfd`, our primary
-unadjusted analysis uses a Kruskal-Wallis test to look for any differences in
-distribution of this outcome between the three treatment groups. Please see [the
-Methods section](#unadjusted) for more details. All `r n_rand` randomized
-patients are included.
-
-`[insert general summary of results here]`
-
-```{r dcfds_unadj, results = "hide"}
-## -- Test DCFDs by treatment group --------------------------------------------
-dcfd_kw <- with(ptsummary_df, kruskal.test(x = dcfd_int, g = trt))
-
-## For caption: How many days are missing status which should have it?
+```{r mental_outcomes_prep}
+## -- Info and text strings for % of days that had to be imputed ---------------
+## How many days are missing status which should have it?
 miss_mental <- sum(
   is.na(
     subset(
@@ -2098,26 +2195,131 @@ days_inhosp <- nrow(
 )
 days_all <- nrow(subset(daily_int_df, study_day < 14))
 
+## Caption to include on all mental status charts
+days_miss_caption <- glue(
+  "\n\nAmong in-hospital days, ",
+  "{rndformat((miss_mental / days_inhosp) * 100, 0)}%",
+  " had insufficient CAM and/or RASS available to determine mental",
+  " status;\n",
+  "among all days in the intervention period (including those after death or",
+  " discharge), this percentage is ",
+  "{rndformat((miss_mental / days_all) * 100, 0)}%."
+)
+
+## What % of in-hospital days had to be imputed?
+pct_imputed_ih <-
+  with(subset(daily_int_df, study_status %in% c("Intervention", "Withdrawn")), {
+    round(mean(is.na(mental_status_raw)) * 100)
+  })
+
+## Text string for each section of mental status outcomes
+dcfd_imp_text <- glue(
+  "***Note**: We use single imputation to reduce potential bias from the ",
+  "{pct_imputed_ih}% of patient-days during the intervention period without ",
+  " sufficient RASS and/or CAM information to determine mental status. Please ",
+  " see [Notes on Variable Calculation](#dcfds) for further rationale.*"
+)
+
+## -- Setup for Liu & Shepherd's functions to calculate conditional median, ----
+## -- CI for POLR models (see chunk orm_functions) -----------------------------
+
+## First step: create newdata with median, mode values
+## We can use datadist() to our advantage here. In the $limits element, the
+##  second value for each variable is `Adjust to` and is by default the median
+##  or mode. We'll also need to manually include the values for any associated
+##  spline terms.
+
+## First: Get locations of knots for all continuous covariates
+knot_locations <- set_names(
+  map(
+    cont_covars,
+    ~ rcspline.eval(model_df[, .], nk = rcsknots, knots.only = TRUE)
+  ),
+  cont_covars
+)
+
+## Function to get value(s) of each covariate
+##   (median/mode, plus any spline terms)
+get_adjvals <- function(
+  vname,                      ## string; variable name (must be in dd)
+  ddist,                      ## datadist() object
+  use_rcs = TRUE,             ## whether to include spline terms
+  knot_locs = knot_locations  ## locations of knots for variable vname
+){
+  ## We'll return every result as a data.frame with reasonable names,
+  ##  so it can be easily cbinded later
+  
+  ## base_value = "Adjust to" value for vname
+  base_value <- ddist$limits[2, vname]
+  
+  ## If we're using splines in this model, and variable is in our list of
+  ## variables we use with splines (that's in the global env SORRY), use
+  ## rcspline.eval() to extract both original and spline term values
+  if(use_rcs && vname %in% cont_covars){
+    df <- rcspline.eval(
+      base_value, knots = pluck(knot_locs, vname), inclx = TRUE
+    ) %>%
+      as.data.frame()
+    
+    ## Set reasonable column names: eg, "age", "age_2"
+    names(df) <- map_chr(1:ncol(df), ~ paste(vname, ., sep = "_")) %>%
+      str_replace("\\_1", "")
+  } else{
+    ## If variable doesn't use splines, return base_value as a data.frame
+    df <- set_names(as.data.frame(base_value), vname)
+  }
+  
+  return(df)
+}
+
+## Create data frame with a single row, excluding treatment values
+##  (we'll add those later)
+pred_df_org <- map_dfc(
+  setdiff(c(cont_covars, notcont_covars), "trt"),
+  get_adjvals,
+  ddist = dd
+)
+
+## Repeat those values by row; # rows = # different treatments
+pred_df <- rep(list(pred_df_org), length(levels(model_df$trt))) %>%
+  bind_rows() %>%
+  ## Add treatment levels
+  bind_cols(trt = levels(model_df$trt)) %>%
+  ## Create a model.matrix object, then leave out the intercept
+  ##   model.matrix() handles dummy variables for categoricals nicely
+  model.matrix(
+    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
+    .
+  ) %>%
+  as.data.frame() %>%
+  dplyr::select(-1) %>%
+  ## colnames must be the same as names(coef(model))
+  set_names(str_subset(names(coef(dcfd_mod)), "^[^y>=]"))
+
+```
+
+## Delirium/Coma-Free Days
+
+`r dcfd_imp_text`
+
+### Unadjusted Analysis
+
+Due to the non-normal distribution of DCFDs `r spark_dcfd`, our primary
+unadjusted analysis uses a Kruskal-Wallis test to look for any differences in
+distribution of this outcome between the three treatment groups. Please see [the
+Methods section](#unadjusted) for more details. All `r n_rand` randomized
+patients are included.
+
+`[insert general summary of results here]`
+
+```{r dcfds_unadj, results = "hide"}
+## -- Test DCFDs by treatment group --------------------------------------------
+dcfd_kw <- with(ptsummary_df, kruskal.test(x = dcfd_int, g = trt))
+
 ## -- Plot DCFDs by treatment group; include K-W results as subtitle -----------
-dcfd_plot <- ggplot(data = ptsummary_df, aes(x = dcfd_int)) +
-  facet_wrap(~ trt, nrow = 1) +
-  geom_histogram(aes(fill = trt), binwidth = 1) +
-  scale_x_continuous(name = "Delirium/Coma-Free Days", breaks = seq(0, 13, 2)) +
-  scale_y_continuous(name = "Patient Count") +
-  theme(legend.position = "none",
-        plot.caption = element_text(size = 10)) +
-  labs(
-    title = "Delirium/Coma-Free Days by Treatment Group",
-    subtitle = glue(
-      "Kruskal-Wallis test:\n",
-      "X2, {rndformat(dcfd_kw$statistic, 2)}; ",
-      "df, {dcfd_kw$parameter}; ",
-      "P, {formatp(dcfd_kw$p.value)}"
-    ),
-    caption = glue(
-      "\n\nAmong in-hospital days, {rndformat((miss_mental / days_inhosp) * 100, 0)}% had insufficient CAM and/or RASS available to determine mental status;\namong all days in the intervention period (including those after death or discharge), this percentage is {rndformat((miss_mental / days_all) * 100, 0)}%."
-    )
-  )
+dcfd_plot <- mental_plot(
+  xvar = "dcfd_int", xtitle = "Delirium/Coma-Free Days", kw_obj = dcfd_kw
+)
 
 ```
 
@@ -2228,113 +2430,11 @@ group who is otherwise part of a "typical" *(many air quotes)* population.
 ###### Visual Form
 
 ```{r dcfd_medians, fig.width = 5, fig.height = 3}
-## -- Use Liu's function (see chunk orm_functions) to calculate conditional ----
-## -- median, CI ---------------------------------------------------------------
-## First step: create newdata with median, mode values
-## We can use datadist() to our advantage here. In the $limits element, the
-##  second value for each variable is `Adjust to` and is by default the median
-##  or mode. We'll also need to manually include the values for any associated
-##  spline terms.
+## Get adjusted medians + bounds for each treatment group
+dcfd_adjmeds <- quantile_orm_df(mod = dcfd_mod)
 
-## First: Get locations of knots for all continuous covariates
-knot_locations <- set_names(
-  map(
-    cont_covars,
-    ~ rcspline.eval(model_df[, .], nk = rcsknots, knots.only = TRUE)
-  ),
-  cont_covars
-)
-
-## Function to get value(s) of each covariate
-##   (median/mode, plus any spline terms)
-get_adjvals <- function(
-  vname,                      ## string; variable name (must be in dd)
-  ddist,                      ## datadist() object
-  use_rcs = TRUE,             ## whether to include spline terms
-  knot_locs = knot_locations  ## locations of knots for variable vname
-){
-  ## We'll return every result as a data.frame with reasonable names,
-  ##  so it can be easily cbinded later
-  
-  ## base_value = "Adjust to" value for vname
-  base_value <- ddist$limits[2, vname]
-  
-  ## If we're using splines in this model, and variable is in our list of
-  ## variables we use with splines (that's in the global env SORRY), use
-  ## rcspline.eval() to extract both original and spline term values
-  if(use_rcs && vname %in% cont_covars){
-    df <- rcspline.eval(
-      base_value, knots = pluck(knot_locs, vname), inclx = TRUE
-    ) %>%
-      as.data.frame()
-    
-    ## Set reasonable column names: eg, "age", "age_2"
-    names(df) <- map_chr(1:ncol(df), ~ paste(vname, ., sep = "_")) %>%
-      str_replace("\\_1", "")
-  } else{
-    ## If variable doesn't use splines, return base_value as a data.frame
-    df <- set_names(as.data.frame(base_value), vname)
-  }
-  
-  return(df)
-}
-
-## Create data frame with a single row, excluding treatment values
-##  (we'll add those later)
-pred_df_org <- map_dfc(
-  setdiff(c(cont_covars, notcont_covars), "trt"),
-  get_adjvals,
-  ddist = dd
-)
-
-## Repeat those values by row; # rows = # different treatments
-pred_df <- rep(list(pred_df_org), length(levels(model_df$trt))) %>%
-  bind_rows() %>%
-  ## Add treatment levels
-  bind_cols(trt = levels(model_df$trt)) %>%
-  ## Create a model.matrix object, then leave out the intercept
-  ##   model.matrix() handles dummy variables for categoricals nicely
-  model.matrix(
-    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
-    .
-  ) %>%
-  as.data.frame() %>%
-  dplyr::select(-1) %>%
-  ## colnames must be the same as names(coef(model))
-  set_names(str_subset(names(coef(dcfd_mod)), "^[^y>=]"))
-
-## Finally! Get actual adjusted medians + bounds for each treatment group;
-##  set these in a data.frame
-dcfd_adjmeds <- quantile.orm(mod = dcfd_mod, new.data = pred_df) %>%
-  ## Each quantity initially stored as a matrix, in case we want multiple
-  ##   quantiles (we don't); need to be numeric
-  map(as.numeric) %>%
-  bind_cols(data.frame(trt = levels(model_df$trt)), .)
-
-## Now we plot them!
-dcfd_adjmeds_plot <- ggplot(
-  data = dcfd_adjmeds, aes(y = quantile, x = forcats::fct_rev(trt))
-) +
-  geom_pointrange(
-    aes(ymin = lb, ymax = ub),
-    shape = 16, size = 1, colour = as.character(palette_colors["dred"])
-  ) +
-  scale_y_continuous(limits = c(0, 13), breaks = seq(0, 13, 2)) +
-  labs(
-    title = "Adjusted Median DCFDs by Treatment",
-    subtitle = glue(
-      "P: {formatp(anova(dcfd_mod)['trt', 'P'])}"
-    ),
-    y = "Adjusted Median (95% Confidence Interval)",
-    caption = "\nAdjusted analysis using proportional odds logistic regression."
-  ) +
-  theme(
-    legend.position = "none",
-    axis.ticks.y = element_blank(),
-    axis.title.y = element_blank(),
-    plot.caption = element_text(size = basetext_size * 0.7)
-  ) +
-  coord_flip()
+## Plot medians + CIs
+dcfd_adjmeds_plot <- mental_medians_plot(dcfd_adjmeds, dcfd_mod)
 
 dcfd_adjmeds_plot
 
