@@ -96,11 +96,12 @@ kw_results <- function(kw_obj){
     stop("kw_obj must be the result of kruskal.test()", call. = FALSE)
   }
   
-  glue(
-    "Kruskal-Wallis test:\n",
-    "X2, {rndformat(kw_obj$statistic, 2)}; ",
-    "df, {kw_obj$parameter}; ",
-    "P, {formatp(kw_obj$p.value)}"
+  ## Couldn't get multiple lines to work
+  ##  (doesn't take \n; tried list of bquote objects)
+  bquote(
+    "Kruskal-Wallis test:" ~
+      X^2 * "," ~ .(rndformat(kw_obj$statistic, 2)) * "; df," ~
+      .(kw_obj$parameter) * "; P," ~ .(formatp(kw_obj$p.value))
   )
 }
 
@@ -371,12 +372,17 @@ table_trt_ratios <- function(
 
 ## String describing test results from cmprsk::cuminc()
 cuminc_test <- function(cuminc_obj){
-  cuminc_obj$Tests %>%
+  df <- cuminc_obj$Tests %>%
     ## as_tibble makes it easy to keep rownames as new variable
-    as_tibble(rownames = "subdist") %>%
-    glue_data(
-      "{subdist}: X2, {rndformat(stat, 2)}; df, {df}; P, {formatp(pv)}"
-    )
+    as_tibble(rownames = "subdist")
+  
+  ## Could not figure out how to automate/map this into a bquote() object,
+  ##  and I'm sad about it. I know my competing risks will always have two
+  ##  events so I'll live.
+  bquote(
+    .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "."
+  )
+  
 }
 
 ## -- Functions to extract and plot the N at risk, cumulative events given -----
@@ -446,7 +452,9 @@ cif_plot <- function(
         as.character(palette_colors["lgray"]),
         as.character(palette_colors["dred"])
       ),
-      labels = c("Death", legend_string)
+      labels = c(
+        expression(paste("Death ", italic("(competing risk)"))), legend_string
+      )
     ) +
     scale_fill_manual(
       name = "",
@@ -454,7 +462,9 @@ cif_plot <- function(
         as.character(palette_colors["lgray"]),
         as.character(palette_colors["dred"])
       ),
-      labels = c("Death", legend_string)
+      labels = c(
+        expression(paste("Death ", italic("(competing risk)"))), legend_string
+      )
     ) +
     scale_y_continuous(
       limits = 0:1,
@@ -463,17 +473,14 @@ cif_plot <- function(
     ) +
     labs(
       title = glue("Cumulative Incidence of {event_string}"),
-      subtitle = glue(
-        "Competing risk of death prior to discharge\n\n",
-        "Tests for difference between treatments:\n",
-        "{paste(test_string, collapse = '\n')}"
-      ),
+      subtitle = test_string,
       x = "Days after Randomization",
       y = "Cumulative Probability",
       caption = caption_string
     ) +
     theme(legend.position = c(0.01, 1),
           legend.justification = c(0, 1),
+          legend.text.align = 0,
           legend.background = element_blank(),
           legend.direction = "vertical")
 }
@@ -2238,7 +2245,7 @@ knot_locations <- set_names(
   cont_covars
 )
 
-## Function to get value(s) of each covariate
+## Function to get value(s) of each covariate to adjust predicted values to
 ##   (median/mode, plus any spline terms)
 get_adjvals <- function(
   vname,                      ## string; variable name (must be in dd)
@@ -2271,30 +2278,6 @@ get_adjvals <- function(
   
   return(df)
 }
-
-## Create data frame with a single row, excluding treatment values
-##  (we'll add those later)
-pred_df_org <- map_dfc(
-  setdiff(c(cont_covars, notcont_covars), "trt"),
-  get_adjvals,
-  ddist = dd
-)
-
-## Repeat those values by row; # rows = # different treatments
-pred_df <- rep(list(pred_df_org), length(levels(model_df$trt))) %>%
-  bind_rows() %>%
-  ## Add treatment levels
-  bind_cols(trt = levels(model_df$trt)) %>%
-  ## Create a model.matrix object, then leave out the intercept
-  ##   model.matrix() handles dummy variables for categoricals nicely
-  model.matrix(
-    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
-    .
-  ) %>%
-  as.data.frame() %>%
-  dplyr::select(-1) %>%
-  ## colnames must be the same as names(coef(model))
-  set_names(str_subset(names(coef(dcfd_mod)), "^[^y>=]"))
 
 ```
 
@@ -2401,6 +2384,33 @@ days alive and free of brain dysfunction.
 ###### Visual Form
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
+## -- Create dataset of values to use when calculating conditional medians -----
+## Since we use the same covariates for all three models, can use this dataset
+## 1. Create data frame with a single row, excluding treatment values
+##  (we'll add those later)
+pred_df_org <- map_dfc(
+  setdiff(c(cont_covars, notcont_covars), "trt"),
+  get_adjvals,
+  ddist = dd
+)
+
+## 2. Repeat those values by row; # rows = # different treatments
+pred_df <- rep(list(pred_df_org), length(levels(model_df$trt))) %>%
+  bind_rows() %>%
+  ## Add treatment levels
+  bind_cols(trt = levels(model_df$trt)) %>%
+  ## Create a model.matrix object, then leave out the intercept
+  ##   model.matrix() handles dummy variables for categoricals nicely
+  model.matrix(
+    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
+    .
+  ) %>%
+  as.data.frame() %>%
+  dplyr::select(-1) %>%
+  ## colnames must be the same as names(coef(model))
+  ## We're using the same covariates for all models, so we can just use one
+  set_names(str_subset(names(coef(dcfd_mod)), "^[^y>=]"))
+
 ## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
 dcfd_ors <- trt_ratios(mod = dcfd_mod)
 
@@ -2546,12 +2556,12 @@ km_death_30$plot <- km_death_30$plot +
   ) +
   labs(
     title = "Kaplan-Meier Curve, 30-Day All-Cause Death",
-    ## Add log-rank test results to subtitle
-    subtitle = glue(
-      "Log-rank test for difference between treatments: ",
-      "X2, {rndformat(chisq_death_30, 1)}; ",
-      "df, {df_tte}; ",
-      "P, {formatp(pval_death_30)}"
+    ## Add log-rank test results to subtitle, using bquote for superscript/
+    ## inclusion of variables
+    subtitle = bquote(
+      "Log-rank test for difference between treatments:" ~ X^2 ~ ", " ~
+        .(rndformat(chisq_death_30, 1)) * "; df, " ~ .(df_tte) * "; P, " ~
+        .(formatp(pval_death_30))
     )
   ) +
   ## Place legend in bottom lefthand corner, vertically so full trt names fit
@@ -3131,7 +3141,7 @@ mvlib_30_risk_plot <-
   cr_risktable_plot(mvlib_30_sfsum, event_string = "liberations from MV")
 
 ## -- Fit cumulative incidence functions by treatment --------------------------
-mvlib_30_cif <- with(model_df, {
+mvlib_30_cif <- with(model_df_mv, {
   cuminc(
     ftime = tte_mvlib_30,
     fstatus = ftype_mvlib_30,
