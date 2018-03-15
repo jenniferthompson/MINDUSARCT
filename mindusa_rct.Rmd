@@ -141,14 +141,18 @@ mental_medians_plot <- function(df, mod){
   }
   
   ## Max should be 13 for DCFDs, 14 for delirium/coma
+  ## Font needs to be smaller for delirium duration to fit entire title
   if(mod$sformula[[2]] == "dcfd_int"){
     xmax <- 13
+    base_pct <- 1.2
     outcome <- "DCFDs"
   } else{
     xmax <- 14
     if(mod$sformula[[2]] == "del_int_all"){
+      base_pct <- 1.1
       outcome <- "Delirium Duration"
     } else{
+      base_pct <- 1.2
       outcome <- "Coma Duration"
     }
   }
@@ -170,6 +174,7 @@ mental_medians_plot <- function(df, mod){
       legend.position = "none",
       axis.ticks.y = element_blank(),
       axis.title.y = element_blank(),
+      plot.title = element_text(size = basetext_size * base_pct),
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()
@@ -226,7 +231,7 @@ rms_results_kable <- function(rmsObj, ...){
       col.names = c(
         "Variable", "Reference", "Comparison",
         sprintf("%s (95%% CI)", output_type),
-        "X2", "df", "P"
+        "X^2^", "df", "P"
       )
     ) %>%
     mykablestyle()  
@@ -2220,7 +2225,7 @@ pct_imputed_ih <-
   })
 
 ## Text string for each section of mental status outcomes
-dcfd_imp_text <- glue(
+mental_imp_text <- glue(
   "***Note**: We use single imputation to reduce potential bias from the ",
   "{pct_imputed_ih}% of patient-days during the intervention period without ",
   " sufficient RASS and/or CAM information to determine mental status. Please ",
@@ -2283,7 +2288,7 @@ get_adjvals <- function(
 
 ## Delirium/Coma-Free Days
 
-`r dcfd_imp_text`
+`r mental_imp_text`
 
 ### Unadjusted Analysis
 
@@ -2306,8 +2311,6 @@ dcfd_plot <- mental_plot(
 
 ```
 
-###### `r fig_nums("dcfds_unadj")`
-
 ```{r print_dcfds_unadj, fig.width = 7.5, fig.height = 4}
 dcfd_plot
 
@@ -2317,10 +2320,7 @@ dcfd_plot
 
 `[insert general summary of results here]`
 
-#### Model Fitting and Assumptions
-
-For some reason the tabset isn't working here. I am utterly confused.
-`r emo::ji("shrug")`
+#### Model Fitting and Assumptions {.tabset}
 
 ##### Model Fitting
 
@@ -2378,8 +2378,8 @@ TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Adjusted Odds Ratios {.tabset}
 
-Odds ratios higher than 1 are favorable, indicating higher odds of more "good"
-days alive and free of brain dysfunction.
+Odds ratios **higher** than 1 are favorable, indicating higher odds of more
+"good" days alive and free of brain dysfunction.
 
 ###### Visual Form
 
@@ -2487,6 +2487,380 @@ between two specific values of the covariate, as noted in the table.
 
 ```{r dcfd_full_results, warning = FALSE}
 rms_results_kable(dcfd_mod_lrm)
+
+```
+
+</details>
+
+## Delirium Duration
+
+Delirium duration is an imperfect measure, since patients who die quickly can
+have a short duration and appear to have better outcomes than they actually do.
+It is included as a way to help elucidate any association between treatment and
+our blunt primary outcome of DCFDs, which incorporates delirium and coma
+durations as well as death.
+
+`r mental_imp_text`
+
+### Unadjusted Analysis
+
+Due to the non-normal distribution of delirium duration `r spark_del`, our
+primary unadjusted analysis uses a Kruskal-Wallis test to look for any
+differences in distribution of this outcome between the three treatment groups.
+Please see [the Methods section](#unadjusted) for more details. All `r n_rand`
+randomized patients are included.
+
+`[insert general summary of results here]`
+
+```{r del_unadj, results = "hide"}
+## -- Test delirium duration by treatment group --------------------------------
+del_kw <- with(model_df, kruskal.test(x = del_int_all, g = trt))
+
+## -- Plot DCFDs by treatment group; include K-W results as subtitle -----------
+del_plot <- mental_plot(
+  xvar = "del_int_all", xtitle = "Delirium Duration", kw_obj = del_kw
+)
+
+```
+
+```{r print_del_unadj, fig.width = 7.5, fig.height = 4}
+del_plot
+
+```
+
+### Adjusted Analysis
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+##### Model Fitting
+
+We use proportional odds logistic regression to look at the association between
+treatment and delirium duration during the intervention period, adjusting for
+baseline patient characteristics. Please see [the Methods section](#adjusted)
+for more details. All `r n_rand_comp` randomized patients with complete
+covariate data are included.
+
+```{r del_adj}
+## Primary model fit using rms::orm(), because Liu & Shepherd have some nice
+##  functions for getting means, etc from this. My function to check PO
+##  assumption assumes rms::lrm() fit; one day I should make this flexible, but
+##  for now, fit it twice. Results are identical when both use default options.
+del_mod <- orm(
+  as.formula(paste("del_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+del_mod_lrm <- lrm(
+  as.formula(paste("del_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+```
+
+##### Assumptions
+
+We are looking for fairly flat lines, paying particular attention to panels
+representing treatment groups. Please see the [Methods section](#assumptions)
+for further details.
+
+```{r del_assume}
+JTHelpers::rms_po_assume(
+  del_mod_lrm,
+  cuts = seq(2, 7, 1),
+   ## Minimum value anyone should have is 1; start at >=2. Distribution after
+   ## 7 is very sparse; no real reason to look, since it would be very noisy.
+  modelData = model_df
+) +
+  labs(title = "PO assumption for delirium duration") +
+  theme(axis.text = element_text(size = 8))
+
+```
+
+#### Model Results
+
+We show the odds ratios (using placebo as reference) and adjusted medians for
+delirium duration by treatment group. All results are shown visually, with
+tables included for exact numbers if desired.
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Adjusted Odds Ratios {.tabset}
+
+Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
+with delirium.
+
+###### Visual Form
+
+```{r del_ors, fig.width = 5, fig.height = 3}
+## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
+del_ors <- trt_ratios(mod = del_mod)
+
+del_ors_plot <- plot_trt_ratios(
+  ratio_df = del_ors,
+  "Delirium Duration",
+  mod = del_mod
+)
+
+del_ors_plot
+
+```
+
+###### Tabular Form
+
+```{r table_del_ors}
+table_trt_ratios(ratio_df = del_ors, ratio_type = "Odds")
+
+```
+
+##### Adjusted Medians {.tabset}
+
+Medians are adjusted to the median/mode values of all covariates, so that each
+represents the expected median number of days with delirium for a patient in
+each treatment group who is otherwise part of a "typical" *(many air quotes)*
+population.
+
+###### Visual Form
+
+```{r del_medians, fig.width = 5, fig.height = 3}
+## Get adjusted medians + bounds for each treatment group
+del_adjmeds <- quantile_orm_df(mod = del_mod)
+
+## Plot medians + CIs
+del_adjmeds_plot <- mental_medians_plot(del_adjmeds, del_mod)
+
+del_adjmeds_plot
+
+```
+
+###### Tabular Form
+
+```{r table_del_adjmeds}
+del_adjmeds_table <- del_adjmeds %>%
+  mutate(
+    med_ci = glue(
+      "{rndformat(quantile)} ",
+      "({rndformat(lb)}, ",
+      "{rndformat(ub)})"
+    )
+  ) %>%
+  dplyr::select(trt, med_ci)
+
+del_adjmeds_table %>%
+  kable(
+    format = "html",
+    col.names = c("Treatment", "Adjusted Median (95% CI)"),
+    align = c("c", "r")
+  ) %>%
+  mykablestyle(position = "left")
+
+```
+
+##### Results for All Covariates
+
+*collapsed to save space; click Details below to view*
+
+<details>
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single odds
+ratio/CI is insufficient to describe the entire relationship between each of
+these covariates and delirium duration. Rather, each odds ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r del_full_results, warning = FALSE}
+rms_results_kable(del_mod_lrm)
+
+```
+
+</details>
+
+## Coma Duration
+
+Coma duration is an imperfect measure, since patients who die quickly can have a
+short duration and appear to have better outcomes than they actually do. It is
+included as a way to help elucidate any association between treatment and our
+blunt primary outcome of DCFDs, which incorporates delirium and coma durations
+as well as death.
+
+`r mental_imp_text`
+
+### Unadjusted Analysis
+
+Due to the non-normal distribution of coma duration `r spark_coma`, our
+primary unadjusted analysis uses a Kruskal-Wallis test to look for any
+differences in distribution of this outcome between the three treatment groups.
+Please see [the Methods section](#unadjusted) for more details. All `r n_rand`
+randomized patients are included.
+
+`[insert general summary of results here]`
+
+```{r coma_unadj, results = "hide"}
+## -- Test coma duration by treatment group ------------------------------------
+coma_kw <- with(model_df, kruskal.test(x = coma_int_all, g = trt))
+
+## -- Plot coma duration by treatment; include K-W results as subtitle ---------
+coma_plot <- mental_plot(
+  xvar = "coma_int_all", xtitle = "Coma Duration", kw_obj = coma_kw
+)
+
+```
+
+```{r print_coma_unadj, fig.width = 7.5, fig.height = 4}
+coma_plot
+
+```
+
+### Adjusted Analysis
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+##### Model Fitting
+
+We use proportional odds logistic regression to look at the association between
+treatment and coma duration during the intervention period, adjusting for
+baseline patient characteristics. Please see [the Methods section](#adjusted)
+for more details. All `r n_rand_comp` randomized patients with complete
+covariate data are included.
+
+```{r coma_adj}
+## Primary model fit using rms::orm(), because Liu & Shepherd have some nice
+##  functions for getting means, etc from this. My function to check PO
+##  assumption assumes rms::lrm() fit; one day I should make this flexible, but
+##  for now, fit it twice. Results are identical when both use default options.
+coma_mod <- orm(
+  as.formula(paste("coma_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+coma_mod_lrm <- lrm(
+  as.formula(paste("coma_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+```
+
+##### Assumptions
+
+We are looking for fairly flat lines, paying particular attention to panels
+representing treatment groups. Please see the [Methods section](#assumptions)
+for further details.
+
+```{r coma_assume}
+JTHelpers::rms_po_assume(
+  coma_mod_lrm,
+  cuts = seq(1, 6, 1),
+   ## Distribution after 6 is very sparse; no real reason to look, since it
+   ## would be very noisy.
+  modelData = model_df
+) +
+  labs(title = "PO assumption for coma duration") +
+  theme(axis.text = element_text(size = 8))
+
+```
+
+#### Model Results
+
+We show the odds ratios (using placebo as reference) and adjusted medians for
+coma duration by treatment group. All results are shown visually, with tables
+included for exact numbers if desired.
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Adjusted Odds Ratios {.tabset}
+
+Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
+with coma.
+
+###### Visual Form
+
+```{r coma_ors, fig.width = 5, fig.height = 3}
+## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
+coma_ors <- trt_ratios(mod = coma_mod)
+
+coma_ors_plot <- plot_trt_ratios(
+  ratio_df = coma_ors, "Coma Duration", mod = coma_mod
+)
+
+coma_ors_plot
+
+```
+
+###### Tabular Form
+
+```{r table_coma_ors}
+table_trt_ratios(ratio_df = coma_ors, ratio_type = "Odds")
+
+```
+
+##### Adjusted Medians {.tabset}
+
+Medians are adjusted to the median/mode values of all covariates, so that each
+represents the expected median number of days with coma for a patient in each
+treatment group who is otherwise part of a "typical" *(many air quotes)*
+population.
+
+###### Visual Form
+
+```{r coma_medians, fig.width = 5, fig.height = 3}
+## Get adjusted medians + bounds for each treatment group
+coma_adjmeds <- quantile_orm_df(mod = coma_mod)
+
+## Plot medians + CIs
+coma_adjmeds_plot <- mental_medians_plot(coma_adjmeds, coma_mod)
+
+coma_adjmeds_plot
+
+```
+
+###### Tabular Form
+
+```{r table_coma_adjmeds}
+coma_adjmeds_table <- coma_adjmeds %>%
+  mutate(
+    med_ci = glue(
+      "{rndformat(quantile)} ",
+      "({rndformat(lb)}, ",
+      "{rndformat(ub)})"
+    )
+  ) %>%
+  dplyr::select(trt, med_ci)
+
+coma_adjmeds_table %>%
+  kable(
+    format = "html",
+    col.names = c("Treatment", "Adjusted Median (95% CI)"),
+    align = c("c", "r")
+  ) %>%
+  mykablestyle(position = "left")
+
+```
+
+##### Results for All Covariates
+
+*collapsed to save space; click Details below to view*
+
+<details>
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single odds
+ratio/CI is insufficient to describe the entire relationship between each of
+these covariates and coma duration. Rather, each odds ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r coma_full_results, warning = FALSE}
+rms_results_kable(coma_mod_lrm)
 
 ```
 
