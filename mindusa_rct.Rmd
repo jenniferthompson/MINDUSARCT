@@ -36,6 +36,14 @@ suppressPackageStartupMessages(library(JTHelpers))
 ## Hmisc setup for nicely printing summaryM output
 mu <- markupSpecs$html
 
+## Levels for sorting factor versions of treatment
+## (A-C used for coding prior to treatment blind being broken)
+trt_levels <- data.frame(
+  trt_num = 1:3,
+  trt_abc = LETTERS[1:3],
+  trt_actual = c("Placebo", "Haloperidol", "Ziprasidone")
+)
+
 ## -- General helper functions (summary stats, formatting/printing) ------------
 factor_tf <-
   function(x){ factor(as.numeric(x), levels = 1:0, labels = c("Yes", "No")) }
@@ -135,7 +143,7 @@ mental_plot <- function(xvar, xtitle, kw_obj){
 
 ## Function to plot adjusted medians or odds ratios for mental status variables
 ## df = object created by quantile_orm_df()
-mental_medians_plot <- function(df, mod){
+mental_medians_plot <- function(df, mod, text_results = TRUE){
   if(!inherits(mod, "rms")){
     stop("mod must be an rms model object", call. = FALSE)
   }
@@ -156,7 +164,23 @@ mental_medians_plot <- function(df, mod){
       outcome <- "Coma Duration"
     }
   }
-    
+  
+  ## Add exact results as part of Y axis labels, if desired
+  if(text_results){
+    ## Create named vector of new factor labels
+    med_labels <- df %>%
+      mutate(
+        med_label = glue(
+          "\n\n{trt}\n",
+          "{rndformat(quantile)} ({rndformat(lb)}, {rndformat(ub)})"
+        )
+      ) %>%
+      pull(med_label) %>%
+      set_names(df$trt)
+
+    df$trt <- forcats::fct_relabel(df$trt, ~ med_labels[.])
+  }
+
   p <- ggplot(data = df, aes(y = quantile, x = forcats::fct_rev(trt))) +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
@@ -245,7 +269,7 @@ trt_ratios <- function(mod){
     rms_comparisons_addoutcome,
     df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
   ) %>%
-    mutate(comp.c = fct_rev(factor(comp.c))) %>%
+    mutate(comp.c = factor(comp.c, levels = trt_levels$trt_abc)) %>%
     ## Keep only one row for reference group
     distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
 }
@@ -294,6 +318,7 @@ plot_trt_ratios <- function(
                 ## columns include effect, lcl, ucl, comp.c, ref.c
   outcome_text, ## Text describing outcome (eg, "Delirium/Coma-Free Days")
   extra_text = "", ## Additional text to include on the second line of caption
+  text_results = TRUE, ## whether to include actual results in Y axis labels
   mod           ## rms model object from which P for trt will be extracted
 ){
   ## Extract X axis label from model type: orm/lrm = odds, cph = hazard
@@ -305,21 +330,43 @@ plot_trt_ratios <- function(
     model_type <- "proportional odds logistic"
   }
   
-  ggplot(data = ratio_df, aes(y = effect, x = comp.c)) +
+  ## Add exact results as part of Y axis labels, if desired
+  if(text_results){
+    ## Create named vector of new factor labels
+    comp_labels <- ratio_df %>%
+      mutate(
+        comp_label = ifelse(
+          is.ref, glue("\n\n{comp.c}\n\n"),
+          glue("\n\n{comp.c}\n",
+               "{rndformat(effect)} ({rndformat(lcl)}, {rndformat(ucl)})")
+        )
+      ) %>%
+      pull(comp_label) %>%
+      set_names(ratio_df$comp.c)
+
+    ratio_df$comp.c <- forcats::fct_relabel(
+      ratio_df$comp.c,
+      ~ comp_labels[.]
+    )
+  }
+  
+  p <- ggplot(data = ratio_df, aes(y = effect, x = forcats::fct_rev(comp.c))) +
     ## Fake row to set up order properly
     geom_point(shape = NA) +
     ## Reference line at 1 (no effect)
     geom_hline(yintercept = 1, linetype = "solid",
                colour = palette_colors["lgray"], size = 2) +
     ## Plot a point for control group
-    geom_point(shape = 15, colour = "black", size = 4,
-               data = ratio_df %>% filter(comp.c == "C")) +
+    geom_point(
+      shape = 15, colour = "black", size = 4,
+      data = ratio_df %>% filter(is.ref)
+    ) +
     ## Add ratios, CIs for treatment groups vs control
     geom_pointrange(
       aes(ymin = lcl, ymax = ucl),
       position = position_dodge(width = 0.5),
       shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
-      data = ratio_df %>% filter(comp.c != "C")
+      data = ratio_df %>% filter(!is.ref)
     ) +
     labs(
       title = glue("Treatment Group vs {outcome_text}"),
@@ -333,9 +380,12 @@ plot_trt_ratios <- function(
       legend.position = "none",
       axis.ticks.y = element_blank(),
       axis.title.y = element_blank(),
+      # axis.text.y = element_text(vjust = 1),
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()
+  
+  return(p)  
 }
 
 ## Tabular results of POLR, Cox models: Ratios for each treatment group
@@ -2368,7 +2418,7 @@ JTHelpers::rms_po_assume(
 
 ```
 
-#### Model Results
+#### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
 DCFDs by treatment group. All results are shown visually, with tables included
@@ -2376,12 +2426,10 @@ for exact numbers if desired.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-##### Adjusted Odds Ratios {.tabset}
+##### Adjusted Odds Ratios
 
 Odds ratios **higher** than 1 are favorable, indicating higher odds of more
 "good" days alive and free of brain dysfunction.
-
-###### Visual Form
 
 ```{r dcfd_ors, fig.width = 5, fig.height = 3}
 ## -- Create dataset of values to use when calculating conditional medians -----
@@ -2424,20 +2472,11 @@ dcfd_ors_plot
 
 ```
 
-###### Tabular Form
-
-```{r table_dcfd_ors}
-table_trt_ratios(ratio_df = dcfd_ors, ratio_type = "Odds")
-
-```
-
-##### Adjusted Medians {.tabset}
+##### Adjusted Medians
 
 Medians are adjusted to the median/mode values of all covariates, so that each
 represents the expected median number of DCFDs for a patient in each treatment
 group who is otherwise part of a "typical" *(many air quotes)* population.
-
-###### Visual Form
 
 ```{r dcfd_medians, fig.width = 5, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
@@ -2450,34 +2489,7 @@ dcfd_adjmeds_plot
 
 ```
 
-###### Tabular Form
-
-```{r table_dcfd_adjmeds}
-dcfd_adjmeds_table <- dcfd_adjmeds %>%
-  mutate(
-    med_ci = glue(
-      "{rndformat(quantile)} ",
-      "({rndformat(lb)}, ",
-      "{rndformat(ub)})"
-    )
-  ) %>%
-  dplyr::select(trt, med_ci)
-
-dcfd_adjmeds_table %>%
-  kable(
-    format = "html",
-    col.names = c("Treatment", "Adjusted Median (95% CI)"),
-    align = c("c", "r")
-  ) %>%
-  mykablestyle(position = "left")
-
-```
-
 ##### Results for All Covariates
-
-*collapsed to save space; click Details below to view*
-
-<details>
 
 Since most of the continuous covariates are modeled using restricted cubic
 splines (see the [Methods section](#covariates) for more details), a single odds
@@ -2489,8 +2501,6 @@ between two specific values of the covariate, as noted in the table.
 rms_results_kable(dcfd_mod_lrm)
 
 ```
-
-</details>
 
 ## Delirium Duration
 
@@ -2582,7 +2592,7 @@ JTHelpers::rms_po_assume(
 
 ```
 
-#### Model Results
+#### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
 delirium duration by treatment group. All results are shown visually, with
@@ -2590,12 +2600,10 @@ tables included for exact numbers if desired.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-##### Adjusted Odds Ratios {.tabset}
+##### Adjusted Odds Ratios
 
 Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
 with delirium.
-
-###### Visual Form
 
 ```{r del_ors, fig.width = 5, fig.height = 3}
 ## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
@@ -2611,21 +2619,13 @@ del_ors_plot
 
 ```
 
-###### Tabular Form
 
-```{r table_del_ors}
-table_trt_ratios(ratio_df = del_ors, ratio_type = "Odds")
-
-```
-
-##### Adjusted Medians {.tabset}
+##### Adjusted Medians
 
 Medians are adjusted to the median/mode values of all covariates, so that each
 represents the expected median number of days with delirium for a patient in
 each treatment group who is otherwise part of a "typical" *(many air quotes)*
 population.
-
-###### Visual Form
 
 ```{r del_medians, fig.width = 5, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
@@ -2638,34 +2638,7 @@ del_adjmeds_plot
 
 ```
 
-###### Tabular Form
-
-```{r table_del_adjmeds}
-del_adjmeds_table <- del_adjmeds %>%
-  mutate(
-    med_ci = glue(
-      "{rndformat(quantile)} ",
-      "({rndformat(lb)}, ",
-      "{rndformat(ub)})"
-    )
-  ) %>%
-  dplyr::select(trt, med_ci)
-
-del_adjmeds_table %>%
-  kable(
-    format = "html",
-    col.names = c("Treatment", "Adjusted Median (95% CI)"),
-    align = c("c", "r")
-  ) %>%
-  mykablestyle(position = "left")
-
-```
-
 ##### Results for All Covariates
-
-*collapsed to save space; click Details below to view*
-
-<details>
 
 Since most of the continuous covariates are modeled using restricted cubic
 splines (see the [Methods section](#covariates) for more details), a single odds
@@ -2677,8 +2650,6 @@ comparison between two specific values of the covariate, as noted in the table.
 rms_results_kable(del_mod_lrm)
 
 ```
-
-</details>
 
 ## Coma Duration
 
@@ -2770,7 +2741,7 @@ JTHelpers::rms_po_assume(
 
 ```
 
-#### Model Results
+#### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
 coma duration by treatment group. All results are shown visually, with tables
@@ -2778,12 +2749,10 @@ included for exact numbers if desired.
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
-##### Adjusted Odds Ratios {.tabset}
+##### Adjusted Odds Ratios
 
 Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
 with coma.
-
-###### Visual Form
 
 ```{r coma_ors, fig.width = 5, fig.height = 3}
 ## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
@@ -2797,21 +2766,12 @@ coma_ors_plot
 
 ```
 
-###### Tabular Form
-
-```{r table_coma_ors}
-table_trt_ratios(ratio_df = coma_ors, ratio_type = "Odds")
-
-```
-
-##### Adjusted Medians {.tabset}
+##### Adjusted Medians
 
 Medians are adjusted to the median/mode values of all covariates, so that each
 represents the expected median number of days with coma for a patient in each
 treatment group who is otherwise part of a "typical" *(many air quotes)*
 population.
-
-###### Visual Form
 
 ```{r coma_medians, fig.width = 5, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
@@ -2824,34 +2784,7 @@ coma_adjmeds_plot
 
 ```
 
-###### Tabular Form
-
-```{r table_coma_adjmeds}
-coma_adjmeds_table <- coma_adjmeds %>%
-  mutate(
-    med_ci = glue(
-      "{rndformat(quantile)} ",
-      "({rndformat(lb)}, ",
-      "{rndformat(ub)})"
-    )
-  ) %>%
-  dplyr::select(trt, med_ci)
-
-coma_adjmeds_table %>%
-  kable(
-    format = "html",
-    col.names = c("Treatment", "Adjusted Median (95% CI)"),
-    align = c("c", "r")
-  ) %>%
-  mykablestyle(position = "left")
-
-```
-
 ##### Results for All Covariates
-
-*collapsed to save space; click Details below to view*
-
-<details>
 
 Since most of the continuous covariates are modeled using restricted cubic
 splines (see the [Methods section](#covariates) for more details), a single odds
@@ -2863,8 +2796,6 @@ comparison between two specific values of the covariate, as noted in the table.
 rms_results_kable(coma_mod_lrm)
 
 ```
-
-</details>
 
 ## Time to Death
 
