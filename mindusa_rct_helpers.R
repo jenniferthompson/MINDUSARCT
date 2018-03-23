@@ -1,0 +1,539 @@
+################################################################################
+## Helper functions for mindusa_rct.Rmd
+##  Stored separately to help with debugging, clarity
+################################################################################
+
+## -- General helper functions (summary stats, simple calculations) ------------
+factor_tf <-
+  function(x){ factor(as.numeric(x), levels = 1:0, labels = c("Yes", "No")) }
+format_comma <- partial(format, big.mark = ",")
+sum_na <- partial(sum, na.rm = TRUE)
+q25 <- partial(quantile, probs = 0.25, na.rm = TRUE)
+q50 <- partial(quantile, probs = 0.50, na.rm = TRUE)
+q75 <- partial(quantile, probs = 0.75, na.rm = TRUE)
+mean_na <- partial(mean, na.rm = TRUE)
+sd_na <- partial(sd, na.rm = TRUE)
+rndformat <- function(x, digits = 2){ format(round(x, digits), nsmall = digits) }
+get_npct <- function(num, denom){
+  sprintf("%s (%s%%)", num, round((num / denom) * 100))
+}
+describe_cont <- function(
+  v_q50, v_q25, v_q75, v_mean, v_sd, dig_iqr = 0, dig_msd = 2
+){
+  sprintf(
+    "%s [%s, %s]\\\n%s +/- %s",
+    rndformat(v_q50, digits = dig_iqr),
+    rndformat(v_q25, digits = dig_iqr),
+    rndformat(v_q75, digits = dig_iqr),
+    rndformat(v_mean, digits = dig_msd),
+    rndformat(v_sd, digits = dig_msd)
+  )
+}
+
+## -- Printing helper functions ------------------------------------------------
+## Wrapper with my preferred options for printing summaryM objects
+my_html <- function(sMobj, caption){
+  html(
+    sMobj,
+    exclude1 = FALSE, long = TRUE, digits = 2, what = "%", npct = "both",
+    prmsd = TRUE, brmsd = TRUE, middle.bold = TRUE,
+    ## These options don't seem to be working.
+    msdsize = mu$smaller2, outer.size = mu$smaller2, rowsep = TRUE,
+    caption = caption
+  )
+}
+
+## kable_styling wrapper to ensure all tables are consistently styled
+mykablestyle <- function(obj, stripes = FALSE, ...){
+  boptions <- c("hover", "responsive", "condensed", "bordered")
+  if(stripes){ boptions <- c(boptions, "striped") }
+  
+  kable_styling(
+    obj,
+    bootstrap_options = boptions,
+    full_width = FALSE,
+    ...
+  ) %>%
+    row_spec(0, bold = TRUE, background = palette_colors[["lgray"]])
+  
+}
+
+## -- Continuous outcomes: Modeling/results helper functions -------------------
+## Create string with results of Kruskal-Wallis test
+kw_results <- function(kw_obj){
+  
+  if(!inherits(kw_obj, "htest")){
+    stop("kw_obj must be the result of kruskal.test()", call. = FALSE)
+  }
+  
+  ## Couldn't get multiple lines to work
+  ##  (doesn't take \n; tried list of bquote objects)
+  bquote(
+    "Kruskal-Wallis test:" ~
+      X^2 * "," ~ .(rndformat(kw_obj$statistic, 2)) * "; df," ~
+      .(kw_obj$parameter) * "; P," ~ .(formatp(kw_obj$p.value))
+  )
+}
+
+## Plot distributions of mental status variables by treatment, including
+## results of Kruskal-Wallis test
+mental_plot <- function(xvar, xtitle, kw_obj){
+  ## No patient should have 14 DCFDs (must have delirium to be randomized),
+  ## but could have 14 delirium/coma days
+  if(xvar == "dcfd_int"){
+    xmax <- 13
+  } else{
+    xmax <- 14
+  }
+  
+  ggplot(data = model_df, aes_string(x = xvar)) +
+    facet_wrap(~ trt, nrow = 1) +
+    geom_histogram(aes(fill = trt), binwidth = 1) +
+    scale_x_continuous(name = xtitle, breaks = seq(0, xmax, 2)) +
+    scale_y_continuous(name = "Patient Count") +
+    theme(
+      legend.position = "none",
+      plot.caption = element_text(size = 10)
+    ) +
+    labs(
+      title = glue("{xtitle} by Treatment"),
+      subtitle = kw_results(dcfd_kw),
+      caption = days_miss_caption
+    )
+  
+}
+
+## Function to plot adjusted medians or odds ratios for mental status variables
+## df = object created by quantile_orm_df()
+mental_medians_plot <- function(df, mod, text_results = TRUE){
+  if(!inherits(mod, "rms")){
+    stop("mod must be an rms model object", call. = FALSE)
+  }
+  
+  ## Max should be 13 for DCFDs, 14 for delirium/coma
+  ## Font needs to be smaller for delirium duration to fit entire title
+  if(mod$sformula[[2]] == "dcfd_int"){
+    xmax <- 13
+    base_pct <- 1.2
+    outcome <- "DCFDs"
+  } else{
+    xmax <- 14
+    if(mod$sformula[[2]] == "del_int_all"){
+      base_pct <- 1.1
+      outcome <- "Delirium Duration"
+    } else{
+      base_pct <- 1.2
+      outcome <- "Coma Duration"
+    }
+  }
+  
+  ## Add exact results as part of Y axis labels, if desired
+  if(text_results){
+    ## Create named vector of new factor labels
+    med_labels <- df %>%
+      mutate(
+        med_label = glue(
+          "\n\n{trt}\n",
+          "{rndformat(quantile)} ({rndformat(lb)}, {rndformat(ub)})"
+        )
+      ) %>%
+      pull(med_label) %>%
+      set_names(df$trt)
+    
+    df$trt <- forcats::fct_relabel(df$trt, ~ med_labels[.])
+  }
+  
+  p <- ggplot(data = df, aes(y = quantile, x = forcats::fct_rev(trt))) +
+    geom_pointrange(
+      aes(ymin = lb, ymax = ub),
+      shape = 16, size = 1, colour = as.character(palette_colors["dred"])
+    ) +
+    scale_y_continuous(limits = c(0, xmax), breaks = seq(0, xmax, 2)) +
+    labs(
+      title = glue("Adjusted Median {outcome} by Treatment"),
+      subtitle = glue("P: {formatp(anova(mod)['trt', 'P'])}"),
+      y = glue("Adjusted Median (95% Confidence Interval)"),
+      caption =
+        "\nAdjusted analysis using proportional odds logistic regression."
+    ) +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      plot.title = element_text(size = basetext_size * base_pct),
+      plot.caption = element_text(size = basetext_size * 0.7)
+    ) +
+    coord_flip()
+  
+  return(p)
+}
+
+## -- Helper functions for any rms model object --------------------------------
+## Wrapper for rms_calc_comparisons; adds outcome variable as a column
+## (Tested on lrm, cph fits)
+rms_comparisons_addoutcome <- function(rmsObj, ...){
+  outcome <- gsub("()", "", rmsObj$sformula[2], fixed = TRUE)
+  rms_calc_comparisons(rmsObj, ...) %>%
+    mutate(outcome = outcome)
+}
+
+## Print rms_model_results using kableExtra
+rms_results_kable <- function(rmsObj, ...){
+  ## Label for effect size column
+  output_type <- case_when(
+    inherits(rmsObj, "lrm") ~ "Odds Ratio",
+    inherits(rmsObj, "orm") ~ "Odds Ratio",
+    inherits(rmsObj, "cph") ~ "Hazard Ratio",
+    inherits(rmsObj, "ols") ~ "Difference",
+    TRUE                    ~ "Effect"
+  )
+  
+  rms_model_results(dcfd_mod_lrm, ...) %>%
+    ## Remove rows that give number of observations at every outcome level;
+    ##  we already describe the distribution of ordinal outcomes
+    filter(is.na(as.numeric(label))) %>%
+    kable(
+      format = "html",
+      align = c("l", rep("r", 6)),
+      col.names = c(
+        "Variable", "Reference", "Comparison",
+        sprintf("%s (95%% CI)", output_type),
+        "X^2^", "df", "P"
+      )
+    ) %>%
+    mykablestyle()  
+}
+
+## Calculate ratios for both treatments vs placebo;
+##   result = tidy data frame we can plot! Hooray!
+trt_ratios <- function(mod){
+  map_df(
+    list(mod),
+    rms_comparisons_addoutcome,
+    df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
+  ) %>%
+    mutate(comp.c = factor(comp.c, levels = trt_levels$trt_abc)) %>%
+    ## Keep only one row for reference group
+    distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
+}
+
+## Plot results of trt_ratios
+## - Treatment on Y axis
+## - Point estimates + CIs for ziprasidone, haloperidol vs placebo on X axis
+## - Black square for placebo
+plot_trt_ratios <- function(
+  ratio_df,     ## data.frame w/ one row per treatment, likely from trt_ratios()
+  ## columns include effect, lcl, ucl, comp.c, ref.c
+  outcome_text, ## Text describing outcome (eg, "Delirium/Coma-Free Days")
+  extra_text = "", ## Additional text to include on the second line of caption
+  text_results = TRUE, ## whether to include actual results in Y axis labels
+  mod           ## rms model object from which P for trt will be extracted
+){
+  ## Extract X axis label from model type: orm/lrm = odds, cph = hazard
+  if(inherits(mod, "cph")){
+    ratio_type <- "Hazard"
+    model_type <- "Cox proportional hazards"
+  } else{
+    ratio_type <- "Odds"
+    model_type <- "proportional odds logistic"
+  }
+  
+  ## Add exact results as part of Y axis labels, if desired
+  if(text_results){
+    ## Create named vector of new factor labels
+    comp_labels <- ratio_df %>%
+      mutate(
+        comp_label = ifelse(
+          is.ref, glue("\n\n{comp.c}\n\n"),
+          glue("\n\n{comp.c}\n",
+               "{rndformat(effect)} ({rndformat(lcl)}, {rndformat(ucl)})")
+        )
+      ) %>%
+      pull(comp_label) %>%
+      set_names(ratio_df$comp.c)
+    
+    ratio_df$comp.c <- forcats::fct_relabel(
+      ratio_df$comp.c,
+      ~ comp_labels[.]
+    )
+  }
+  
+  p <- ggplot(data = ratio_df, aes(y = effect, x = forcats::fct_rev(comp.c))) +
+    ## Fake row to set up order properly
+    geom_point(shape = NA) +
+    ## Reference line at 1 (no effect)
+    geom_hline(yintercept = 1, linetype = "solid",
+               colour = palette_colors["lgray"], size = 2) +
+    ## Plot a point for control group
+    geom_point(
+      shape = 15, colour = "black", size = 4,
+      data = ratio_df %>% filter(is.ref)
+    ) +
+    ## Add ratios, CIs for treatment groups vs control
+    geom_pointrange(
+      aes(ymin = lcl, ymax = ucl),
+      position = position_dodge(width = 0.5),
+      shape = 16, size = 1, colour = as.character(palette_colors["dred"]),
+      data = ratio_df %>% filter(!is.ref)
+    ) +
+    labs(
+      title = glue("Treatment vs {outcome_text}"),
+      subtitle = glue("P: {formatp(anova(mod)['trt', 'P'])}"),
+      y = glue("{ratio_type} Ratio (95% Confidence Interval)"),
+      caption = glue(
+        "\nAdjusted analysis using {model_type} regression.\n{extra_text}"
+      )
+    ) +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      # axis.text.y = element_text(vjust = 1),
+      plot.caption = element_text(size = basetext_size * 0.7)
+    ) +
+    coord_flip()
+  
+  return(p)  
+}
+
+## Tabular results of POLR, Cox models: Ratios for each treatment group
+table_trt_ratios <- function(
+  ratio_df, ## data.frame w/ one row per treatment, likely from trt_ratios()
+  ## columns include effect, lcl, ucl, comp.c, ref.c
+  ratio_type = c("Hazard", "Odds") ## Type of ratio (hazard or odds)
+){
+  ## Set ratio_type to default if not specified
+  ##  (Primary outcomes include more Cox models than POLR models)
+  ratio_type <- match.arg(ratio_type)
+  
+  ratio_df %>%
+    ## Create character strings for prettier tables
+    mutate(
+      comparison = glue("{comp.c} vs {ref.c}"),
+      effect_ci = glue(
+        "{rndformat(effect)} ",
+        "({rndformat(lcl)}, ",
+        "{rndformat(ucl)})"
+      )
+    ) %>%
+    ## Arrange in consistent order
+    arrange(desc(ref), comp) %>%
+    ## Only want newly created character columns
+    dplyr::select(comparison, effect_ci) %>%
+    ## Printing options: HTML format, set column names/alignment
+    kable(
+      format = "html",
+      col.names = c("Comparison", glue("{ratio_type} Ratio (95% CI)")),
+      align = c("l", "r")
+    ) %>%
+    mykablestyle(position = "left") %>%
+    ## Include "placebo vs placebo" row for clarity, but gray out
+    row_spec(3, color = palette_colors["lgray"])
+}
+
+## -- Time to event outcomes: Modeling/results helper functions ----------------
+## Graphically check proportional hazards assumption; mod_zph is class cox.zph
+plot_ph_assume <- function(mod_zph){
+  par(mfrow = c(3, 3))
+  plot(mod_zph, col = 'red', lwd = 2)
+  abline(v = 0, lty = 2, col = 'gray')
+  par(mfrow = c(1, 1))
+}
+
+## Extract p-value for global PH assumption; create reproducible statement
+text_ph_assume <- function(mod_zph){
+  global_phtest <- mod_zph$table["GLOBAL", "p"]
+  global_phtext <- ifelse(
+    global_phtest < 0.05,
+    glue(
+      "The global test for proportional hazards indicates the assumption is ",
+      "not fully met (p {formatp(global_phtest)}); please see the figures ",
+      "below for further detail."
+    ),
+    glue(
+      "The global test for proportional hazards indicates no major concern ",
+      "(p = {formatp(global_phtest)}); please see the figures below for ",
+      "further detail."
+    )
+  )
+  
+  return(global_phtext)
+}
+
+## Create text examples of HR interpretation, given result of trt_ratios()
+hr_example <- function(hr_df, outcome){
+  ## Death is modeled using regular Cox regression, thus provides a hazard
+  ## Other outcomes use competing risks/Fine-Gray approach, thus provide a
+  ##  subdistribution HR for the relative incidence
+  if(outcome == "death"){
+    hr_type <- "hazard"
+  } else{
+    hr_type <- "incidence"
+  }
+  
+  hr_df %>%
+    dplyr::select(-outcome) %>%
+    mutate(
+      direction = case_when(
+        is.ref     ~ "",
+        effect > 1 ~ "higher",
+        TRUE       ~ "lower"
+      ),
+      pct_change = case_when(
+        is.ref     ~ 0,
+        effect > 1 ~ (effect - 1) * 100,
+        TRUE       ~ (1 - effect) * 100
+      )
+    ) %>%
+    glue_data(
+      "For example, an HR of {rndformat(effect)} for {comp.c} vs placebo ",
+      "indicates that, on average, patients in the {comp.c} group have a ",
+      "{round(pct_change, 0)}% {direction} relative {hr_type} of {outcome} ",
+      "vs patients in the {ref.c} group, given that they remain alive and in ",
+      "the ICU."
+    ) %>%
+    set_names(hr_df %>% pull(comp.c))
+}
+
+## -- Competing risks regression -----------------------------------------------
+
+## String describing test results from cmprsk::cuminc()
+cuminc_test <- function(cuminc_obj){
+  df <- cuminc_obj$Tests %>%
+    ## as_tibble makes it easy to keep rownames as new variable
+    as_tibble(rownames = "subdist")
+  
+  ## Could not figure out how to automate/map this into a bquote() object,
+  ##  and I'm sad about it. I know my competing risks will always have two
+  ##  events so I'll live.
+  bquote(
+    .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "."
+  )
+  
+}
+
+## -- Functions to extract and plot the N at risk, cumulative events given -----
+## -- a summary(survfit(...)) object -------------------------------------------
+## IMPORTANT: Assumes death is always competing risk, not the one of interest
+## Intended to go along with survminer::ggcompetingrisks() output
+cr_risktable <- function(sf_sum){
+  data.frame(
+    trt = str_replace(sf_sum$strata, "trt=", ""),
+    time = sf_sum$time,
+    n_risk = sf_sum$n.risk[, 3],
+    n_event = sf_sum$n.event[, 1],
+    n_death = sf_sum$n.event[, 2]
+  ) %>%
+    group_by(trt) %>%
+    mutate(
+      cumul_event = cumsum(n_event),
+      cumul_death = cumsum(n_death),
+      risk_string = glue("{n_risk}\n({cumul_event}; {cumul_death})")
+    )
+}
+
+cr_risktable_plot <- function(sf_sum, event_string){
+  df <- cr_risktable(sf_sum)
+  
+  ggplot(data = df, aes(x = time, y = 1, colour = trt)) +
+    facet_wrap(~ trt, nrow = 1) +
+    geom_text(aes(label = risk_string), size = basetext_size * 0.15) +
+    scale_x_continuous(
+      name = "Days after Randomization",
+      breaks = unique(sf_sum$time),
+      labels = unique(sf_sum$time)
+    ) +
+    scale_y_continuous(breaks = 1, labels = "100%") +
+    labs(
+      title = glue(
+        "Number at risk (cumulative number of {event_string}; deaths)"
+      ),
+      ylab = " " ## faking it for spacing purposes
+    ) +
+    theme(plot.title = element_text(size = basetext_size * 0.8),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          ## Set Y axis text to background color; need placeholder text for
+          ## spacing, so that facets line up
+          axis.title.y = element_text(colour = "white"),
+          axis.text.y = element_text(colour = "white"),
+          axis.ticks.y = element_blank(),
+          legend.position = "none")
+  
+}
+
+## -- Function to create plot for cumulative incidence functions ---------------
+## Relies on survminer::ggcompetingrisks
+## test_string should be result of cuminc_test()
+cif_plot <- function(
+  cuminc_obj,    ## class cuminc
+  legend_string, ## event of interest, for plot legend
+  event_string,  ## event of interest, for plot title
+  test_string,   ## to include in subtitle; often result of cuminc_test()
+  caption_string = NULL ## optional plot caption
+){
+  ggcompetingrisks(cuminc_obj, conf.int = TRUE, ggtheme = mindusa_theme()) +
+    scale_color_manual(
+      name = "",
+      values = c(
+        as.character(palette_colors["lgray"]),
+        as.character(palette_colors["dred"])
+      ),
+      labels = c(
+        expression(paste("Death ", italic("(competing risk)"))), legend_string
+      )
+    ) +
+    scale_fill_manual(
+      name = "",
+      values = c(
+        as.character(palette_colors["lgray"]),
+        as.character(palette_colors["dred"])
+      ),
+      labels = c(
+        expression(paste("Death ", italic("(competing risk)"))), legend_string
+      )
+    ) +
+    scale_y_continuous(
+      limits = 0:1,
+      breaks = seq(0, 1, 0.2),
+      labels = paste0(seq(0, 1, 0.2) * 100, "%")
+    ) +
+    labs(
+      title = glue("Cumulative Incidence of {event_string}"),
+      subtitle = test_string,
+      x = "Days after Randomization",
+      y = "Cumulative Probability",
+      caption = caption_string
+    ) +
+    theme(legend.position = c(0.01, 1),
+          legend.justification = c(0, 1),
+          legend.text.align = 0,
+          legend.background = element_blank(),
+          legend.direction = "vertical")
+}
+
+## Function to combine results of cif_plot, cr_risktable_plot
+cr_combine_plots <- function(cif, rt, xmax, time_breaks, caption_string){
+  multiplot(
+    plotlist = list(
+      ## Remove X axis info, caption from CIF plot; only include one at bottom
+      cif +
+        scale_x_continuous(limits = c(0, xmax), breaks = time_breaks) +
+        theme(plot.caption = element_blank(),
+              axis.title.x = element_blank(),
+              axis.text.x = element_blank()),
+      
+      ## Add caption to risk table plot
+      rt +
+        scale_x_continuous(
+          limits = c(0, xmax),
+          breaks = time_breaks,
+          name = "Days after Randomization"
+        ) +
+        labs(caption = paste0("\n", caption_string))
+    ),
+    
+    ## Layout: single column, CIF takes up 2/3 space
+    layout = matrix(c(1, 1, 2), ncol = 1)
+  )
+}
