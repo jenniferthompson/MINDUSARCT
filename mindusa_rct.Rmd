@@ -1,5 +1,6 @@
 ---
 title: "Primary In-Hospital Outcomes Analysis of the MIND-USA Clinical Trial"
+author: "Jennifer L Thompson, MPH; Supervisor: Rameela Chandrasekhar, PhD"
 output:
   html_document:
     theme: flatly
@@ -2821,7 +2822,7 @@ Due to the nature of clinical data collection, we had some missing values for AP
 
 - Oxygenation: If no arterial blood gas was done, we converted the lowest O2 saturation to PaO2 per the [EPIC II conversions](http://intensive.org/epic2/Documents/Estimation%20of%20PO2%20and%20FiO2.pdf) and assigned points based on PaO2 alone. O2 saturations below the lowest level included in the conversion table were assigned the lowest PaO2; O2 saturations of 100 were assigned the highest PaO2.
 - pH: If no arterial blood gas was done, we used the serum HCO3 conversions noted in the original reference.
-- Glasgow Coma Score: If no GCS was available, we assigned points for the APACHE using the lowest RASS on the day of ICU admission using the [Vasilevskis et al's](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/) point values for the SOFA.
+- Glasgow Coma Score: If no GCS was available, we assigned points for the APACHE using the lowest RASS on the day of ICU admission using [Vasilevskis et al's](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4748963/) point values for the SOFA.
 - All other components: If no values were available on a given day, we looked for a value on the closest day within the three full days after ICU admission. If none was available, we assumed that no measurement implied no clinical reason to suspect dysfunction, and assigned a normal value (0 points).
 
 ### SOFA (ICU admission + daily throughout intervention period)
@@ -2879,7 +2880,7 @@ Mental status can change quickly; therefore simple imputation methods like last 
     - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin)
     - Any mental status data available the day of, the day before, and the day after the missing day
 
-All summary variables (delirium/coma-free days, delirium duration, and coma duration) are calculated using available and imputed mental status.
+All summary variables (delirium/coma-free days, delirium duration, and coma duration) are presented using imputed mental status.
 
 # Software Details{#software}
 
