@@ -188,7 +188,7 @@ rms_results_kable <- function(rmsObj, ...){
     TRUE                    ~ "Effect"
   )
   
-  rms_model_results(dcfd_mod_lrm, ...) %>%
+  rms_model_results(rmsObj, ...) %>%
     ## Remove rows that give number of observations at every outcome level;
     ##  we already describe the distribution of ordinal outcomes
     filter(is.na(as.numeric(label))) %>%
@@ -232,7 +232,14 @@ plot_trt_ratios <- function(
   ## Extract X axis label from model type: orm/lrm = odds, cph = hazard
   if(inherits(mod, "cph")){
     ratio_type <- "Hazard"
-    model_type <- "Cox proportional hazards"
+    ## Hacky way to check whether cph() fit uses Fine-Gray approach or not:
+    ## if it does, there will be weights. This will not extend well if we ever
+    ## want to use weights for a different scenario, but works for now.
+    if(is.null(mod$weights)){
+      model_type <- "Cox proportional hazards"
+    } else{
+      model_type <- "competing risks"
+    }
   } else{
     ratio_type <- "Odds"
     model_type <- "proportional odds logistic"
@@ -332,6 +339,94 @@ table_trt_ratios <- function(
 }
 
 ## -- Time to event outcomes: Modeling/results helper functions ----------------
+
+## Unadjusted analyses: Kaplan-Meier curves for time to death ------------------
+km_plot_death <- function(
+  sf,              ## survfit object
+  lr,              ## log-rank test object
+  time = c(30, 90) ## time frame of interest
+){
+  
+  if(!inherits(sf, "survfit")){
+    stop("sf must be a survfit object", call. = FALSE)
+  }
+  
+  if(!inherits(lr, "survdiff")){
+    stop("lr must be a survdiff object", call. = FALSE)
+  }
+  
+  ## -- Get chi-square statistic, p-value from log-rank test -------------------
+  ## df = number of treatment groups - 1
+  df <- length(names(lr$n)) - 1
+  chis <- lr$chisq
+  pval <- 1 - pchisq(chis, df = df)
+  
+  ## -- For 30 days, break every 5 days; for 90 days, break every 15 -----------
+  time_breaks <- ifelse(time == 30, 5, 15)
+  
+  ## -- Create base plot using survminer package -------------------------------
+  km_death <- survminer::ggsurvplot(
+    sf, ## survfit() object
+    
+    ## CIs
+    conf.int = TRUE, conf.int.alpha = 0.20,
+    
+    ## Show N, cumulative events every time_breaks days; color text by trt
+    xlim = c(0, time + 1),
+    break.time.by = time_breaks, risk.table = "nrisk_cumevents",
+    risk.table.fontsize = 3, risk.table.col = "strata", tables.height = 0.35,
+    legend.labs = gsub("trt=", "", names(sf$strata)),
+    
+    ## Use specified themes, colors
+    palette = as.character(palette_colors[c("dred", "dgray", "dgreen")]),
+    ggtheme = mindusa_theme(), tables.theme = mindusa_theme()
+  )
+  
+  ## -- More finely control plot options ---------------------------------------
+  km_death$plot <- km_death$plot +
+    ## Change Y axis to % labels, not proportion
+    scale_y_continuous(
+      name = "Percent Alive",
+      breaks = seq(0, 1, 0.25),
+      labels = paste0(seq(0, 1, 0.25) * 100, "%")
+    ) +
+    labs(
+      title = glue("Kaplan-Meier Curve, {time}-Day All-Cause Death"),
+      ## Add log-rank test results to subtitle, using bquote for superscript/
+      ## inclusion of variables
+      subtitle = bquote(
+        "Log-rank test for difference between treatments:" ~ X^2 ~ ", " ~
+          .(rndformat(chis, 1)) * "; df, " ~ .(df) * "; P, " ~ .(formatp(pval))
+      )
+    ) +
+    ## Place legend in bottom lefthand corner, vertically so full trt names fit
+    theme(
+      ## X axis label will be at the bottom of the table; no need to duplicate
+      axis.title.x = element_blank(),
+      legend.position = c(0, 0),
+      legend.background = element_blank(),
+      legend.title = element_blank(),
+      legend.justification = c(0, 0),
+      legend.direction = "vertical"
+    )
+  
+  ## Add labels to and remove unnecessary reference lines from nrisk table
+  km_death$table <- km_death$table +
+    labs(title = "Number at risk (cumulative number of deaths)") +
+    xlab("Days after Randomization") +
+    theme(
+      plot.title = element_text(size = basetext_size * 0.8),
+      axis.title.x = element_text(vjust = 0),
+      axis.title.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      legend.position = "none",
+      panel.grid = element_blank()
+    )
+  
+  return(km_death)
+  
+}
+
 ## Graphically check proportional hazards assumption; mod_zph is class cox.zph
 plot_ph_assume <- function(mod_zph){
   par(mfrow = c(3, 3))
@@ -347,7 +442,7 @@ text_ph_assume <- function(mod_zph){
     global_phtest < 0.05,
     glue(
       "The global test for proportional hazards indicates the assumption is ",
-      "not fully met (p {formatp(global_phtest)}); please see the figures ",
+      "not fully met (p: {formatp(global_phtest)}); please see the figures ",
       "below for further detail."
     ),
     glue(
