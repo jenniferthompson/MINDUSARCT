@@ -1130,7 +1130,7 @@ outcome_vars <- c(
   "tte_death_90", "event_death_90",     ## Time to death within 90 days
   "tte_icudis_90", "ftype_icudis_90",   ## Time to final, succ. ICU discharge
   "tte_hospdis_90", "ftype_hospdis_90", ## Time to hospital discharge
-  "tte_mvlib_14", "ftype_mvlib_14"      ## Time to liberation from MV
+  "tte_mvlib_30", "ftype_mvlib_30"      ## Time to liberation from MV
 )
 
 covariate_vars <- c(
@@ -1171,7 +1171,7 @@ n_rand_comp <- sum_na(model_df$comp_covars)
 ## (This does *not* include variables related to liberation from MV, as that
 ## would introduce artificial missingness)
 pts_missany <- model_df %>%
-  dplyr::select(-rass_rand, -on_mv_rand24, -tte_mvlib_14, -ftype_mvlib_14) %>%
+  dplyr::select(-rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30) %>%
   miss_case_table() %>%
   filter(n_missing_in_case > 0) %>%
   summarise(
@@ -1257,7 +1257,7 @@ mod_rhs_lin <- paste(covariate_vars, collapse = " + ")
 ```{r missing_allpts}
 gg_miss_var(
   model_df %>%
-    dplyr::select(-id, -rass_rand, -on_mv_rand24, -tte_mvlib_14, -ftype_mvlib_14),
+    dplyr::select(-id, -rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30),
   show_pct = TRUE
 ) +
   scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
@@ -2623,21 +2623,21 @@ rms_results_kable(hospdis_90_mod)
 
 We use time to event analysis with competing risks to explore the relationship
 between treatment group and "successful" liberation from mechanical ventilation,
-defined as discontinuation of all types of MV followed by at least 48 hours alive and without reinitiation of MV, during the 14-day intervention period. We
-treat death during this time as a competing risk.
+defined as discontinuation of all types of MV followed by at least 48 hours alive and without reinitiation of MV, during the 30 days following
+randomization. We treat death during this time as a competing risk.
 
 **Censoring and time to events:**
 
-- We censor at the time of study withdrawal `r with(ptsummary_df, sum(ftype_mvlib_14 == "Censored" & tte_mvlib_14 < 14.01 & hospdis_noinfo, na.rm = TRUE))` patients who withdrew from the study prior to hospital discharge,
+- We censor at the time of study withdrawal `r with(ptsummary_df, sum(ftype_mvlib_30 == "Censored" & tte_mvlib_30 < 30.01 & hospdis_noinfo, na.rm = TRUE))` patients who withdrew from the study prior to hospital discharge,
 with no discharge or death information available.
-- We censor at the time of hospital discharge `r with(ptsummary_df, sum_na(ftype_mvlib_14 == "Censored" & tte_mvlib_14 < 14.01 & !hospdis_noinfo))` patients who were discharged without experiencing either death or successful
+- We censor at the time of hospital discharge `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Censored" & tte_mvlib_30 < 30.01 & !hospdis_noinfo))` patients who were discharged without experiencing either death or successful
 liberation from MV.
-- We censor at day 14.01 `r with(ptsummary_df, sum_na(ftype_mvlib_14 == "Censored" & tte_mvlib_14 == 14.01))` patients who survived the entire 14-day
-intervention period but remained hospitalized on day 14.
-- We assign the `r with(ptsummary_df, sum_na(ftype_mvlib_14 == "Death"))` patients who died prior to liberation from MV, within the intervention period, a
-time value of `time of death - time of randomization` and a "failure type" of
-death; we assign the `r with(ptsummary_df, sum_na(ftype_mvlib_14 == "MV Liberation"))` patients who were successfully liberated from MV within the
-intervention period a time value of `time of liberation - time of randomization`
+- We censor at day 30.01 `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Censored" & tte_mvlib_30 == 30.01))` patients who survived the entire 30-day
+period after randomization, but remained hospitalized on day 30.
+- We assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Death"))` patients who died prior to liberation from MV, within 30 days of randomization,
+a time value of `time of death - time of randomization` and a "failure type" of
+death; we assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "MV Liberation"))` patients who were successfully liberated from MV within 30 days
+of randomization a time value of `time of liberation - time of randomization`
 and a "failure type" of liberation from MV.
 
 ### Unadjusted Analysis
@@ -2654,44 +2654,44 @@ model_df_mv <- model_df %>% filter(on_mv_rand24)
 
 ## -- Create Surv object -------------------------------------------------------
 ## Will be used for N at risk for CIF, as well as adjusted model fit
-mvlib_14_Surv <- with(model_df_mv, {
-  Surv(time = tte_mvlib_14, event = ftype_mvlib_14, type = "mstate")
+mvlib_30_Surv <- with(model_df_mv, {
+  Surv(time = tte_mvlib_30, event = ftype_mvlib_30, type = "mstate")
 })
 
 ## -- Create and summarize survfit object, create N at risk table --------------
-mvlib_14_survfit <- survfit(mvlib_14_Surv ~ trt, data = model_df_mv)
-mvlib_14_sfsum <- summary(mvlib_14_survfit, times = c(0, 4, 7, 11, 14))
+mvlib_30_survfit <- survfit(mvlib_30_Surv ~ trt, data = model_df_mv)
+mvlib_30_sfsum <- summary(mvlib_30_survfit, times = c(0, 4, 7, 11, 14))
 
-mvlib_14_risk_plot <-
-  cr_risktable_plot(mvlib_14_sfsum, event_string = "liberations from MV")
+mvlib_30_risk_plot <-
+  cr_risktable_plot(mvlib_30_sfsum, event_string = "liberations from MV")
 
 ## -- Fit cumulative incidence functions by treatment --------------------------
-mvlib_14_cif <- with(model_df_mv, {
+mvlib_30_cif <- with(model_df_mv, {
   cuminc(
-    ftime = tte_mvlib_14,
-    fstatus = ftype_mvlib_14,
+    ftime = tte_mvlib_30,
+    fstatus = ftype_mvlib_30,
     group = trt,
     cencode = "Censored"
   )
 })
 
 ## Create strings for test results
-mvlib_14_tests_unadj <- cuminc_test(mvlib_14_cif)
+mvlib_30_tests_unadj <- cuminc_test(mvlib_30_cif)
 
 ## -- Plot CIFs, N at risk -----------------------------------------------------
 ## Create plot for competing risks
-mvlib_14_cif_plot <- cif_plot(
-  cuminc_obj = mvlib_14_cif,
+mvlib_30_cif_plot <- cif_plot(
+  cuminc_obj = mvlib_30_cif,
   legend_string = "Liberation from MV",
   event_string = "Successful Liberation from MV",
-  test_string = mvlib_14_tests_unadj,
+  test_string = mvlib_30_tests_unadj,
   caption_string = '"Successful" is defined as discontinuation of MV, followed by at least 48 hours alive without reinitiation.'
 )
 
 ## Print combined plot
 cr_combine_plots(
-  cif = mvlib_14_cif_plot,
-  rt = mvlib_14_risk_plot,
+  cif = mvlib_30_cif_plot,
+  rt = mvlib_30_risk_plot,
   xmax = 15, time_breaks = c(0, 4, 7, 11, 14),
   caption_string = '"Successful" is defined as discontinuation of MV, followed by at least 48 hours alive without reinitiation.'
 )
@@ -2712,13 +2712,13 @@ included.
 
 ##### Model Fitting
 
-```{r mvlib_14_adj}
+```{r mvlib_30_adj}
 ## -- Fit competing risks model using survival::finegray(), rms::cph() ---------
 
 ## -- Create dataset specifically for Fine-Gray method of competing risks ------
-mvlib_14_fg <- finegray(
+mvlib_30_fg <- finegray(
   ## Use **linear** RHS here; we'll fit spline terms within model formula itself
-  as.formula(paste("mvlib_14_Surv ~", mod_rhs_lin)),
+  as.formula(paste("mvlib_30_Surv ~", mod_rhs_lin)),
   data = model_df_mv,
   etype = "MV Liberation",
   id = id,
@@ -2726,9 +2726,9 @@ mvlib_14_fg <- finegray(
 )
 
 ## -- Fit actual model, using variables/weights from finegray() ----------------
-mvlib_14_mod <- cph(
+mvlib_30_mod <- cph(
   as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs)),
-  data = mvlib_14_fg,
+  data = mvlib_30_fg,
   weights = fgwt,
   x = TRUE, y = TRUE
 )
@@ -2737,47 +2737,47 @@ mvlib_14_mod <- cph(
 
 ##### Assumptions
 
-```{r mvlib_14_assume}
+```{r mvlib_30_assume}
 ## -- Check proportional hazard assumption -------------------------------------
-mvlib_14_zph <- cox.zph(mvlib_14_mod, transform = 'log')
+mvlib_30_zph <- cox.zph(mvlib_30_mod, transform = 'log')
 
 ## Extract p-value for global PH assumption; create reproducible statement
-mvlib_14_phtext <- text_ph_assume(mvlib_14_zph)
+mvlib_30_phtext <- text_ph_assume(mvlib_30_zph)
 
 ```
 
 We graphically check our assumption of proportional hazards for the hospital
 discharge subdistribution, paying particular attention to treatment group and
-looking for generally flat lines in each panel. `r mvlib_14_phtext`
+looking for generally flat lines in each panel. `r mvlib_30_phtext`
 
-```{r mvlib_14_assumeplot}
-plot_ph_assume(mvlib_14_zph)
+```{r mvlib_30_assumeplot}
+plot_ph_assume(mvlib_30_zph)
 
 ```
 
 #### Model Results {.tabset}
 
-```{r mvlib_14_hrs_prep}
+```{r mvlib_30_hrs_prep}
 ## -- Calculate hazard ratios for both treatments vs placebo -------------------
-mvlib_14_hrs <- trt_ratios(mvlib_14_mod)
+mvlib_30_hrs <- trt_ratios(mvlib_30_mod)
 
 ## Create explanatory text string for subdistribution HRs
-mvlib_14_text <-
-  hr_example(hr_df = mvlib_14_hrs, outcome = "liberation from MV")
+mvlib_30_text <-
+  hr_example(hr_df = mvlib_30_hrs, outcome = "liberation from MV")
 
 ```
 
 We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
-favorable for this outcome. `r mvlib_14_text[["A"]]`
+favorable for this outcome. `r mvlib_30_text[["A"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Visual Form
 
-```{r mvlib_14_hrs_plot, fig.width = 5, fig.height = 3.5}
-mvlib_14_hrs_plot <- plot_trt_ratios(
-  ratio_df = mvlib_14_hrs,
+```{r mvlib_30_hrs_plot, fig.width = 5, fig.height = 3.5}
+mvlib_30_hrs_plot <- plot_trt_ratios(
+  ratio_df = mvlib_30_hrs,
   outcome_text = "Successful Liberation from MV",
   extra_text = glue(
     "\n\n",
@@ -2787,19 +2787,19 @@ mvlib_14_hrs_plot <- plot_trt_ratios(
     "are censored on the day of withdrawal.\n",
     "Deaths prior to liberation are accounted for using competing risks."
   ),
-  mod = mvlib_14_mod
+  mod = mvlib_30_mod
 ) +
   theme(plot.caption = element_text(size = basetext_size * 0.6),
         plot.title = element_text(size = basetext_size * 1.15))
 
-mvlib_14_hrs_plot
+mvlib_30_hrs_plot
 
 ```
 
 ##### Tabular Form
 
-```{r table_mvlib_14_hrs}
-table_trt_ratios(ratio_df = mvlib_14_hrs)
+```{r table_mvlib_30_hrs}
+table_trt_ratios(ratio_df = mvlib_30_hrs)
 
 ```
 
@@ -2812,8 +2812,8 @@ relationship between each of these covariates and the relative incidence of
 hospital discharge. Rather, each subdistribution hazard ratio reflects a
 comparison between two specific values of the covariate, as noted in the table.
 
-```{r mvlib_14_full_results, warning = FALSE}
-rms_results_kable(mvlib_14_mod)
+```{r mvlib_30_full_results, warning = FALSE}
+rms_results_kable(mvlib_30_mod)
 
 ```
 
