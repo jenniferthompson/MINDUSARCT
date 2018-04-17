@@ -1087,7 +1087,7 @@ No randomized patients ever experienced NMS during the study (during or outside 
 
 During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced torsades de pointes. Both instances were recorded as Serious Adverse Events; descriptions of both AEs are included below, with potentially identifying details redacted.
 
-```{r torsades, results = "hide"}
+```{r torsades}
 torsades_df %>%
   kable(
     format = "html",
