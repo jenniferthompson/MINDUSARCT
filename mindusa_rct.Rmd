@@ -1064,9 +1064,13 @@ other_permdc_table %>%
 ```
 </details>
 
-## Safety Outcomes
+## Safety Outcomes and ABCDE Bundle Compliance
 
-Our three primary safety outcomes are neuroleptic malignant syndrome (NMS); Torsades de pointes (Torsades); and extrapyramidal symptoms (EPS). Incidence of each was minimal and is described below.
+Our three primary safety outcomes are neuroleptic malignant syndrome (NMS); Torsades de pointes (Torsades); and extrapyramidal symptoms (EPS). Incidence of each was minimal and is detailed below.
+
+We also collected data on daily performance of some elements of the [ABCDEF Bundle](http://www.iculiberation.org/Bundles/Pages/default.aspx); we describe
+compliance with these elements on a daily basis, both for all patient-days and
+for randomized patients during the intervention.
 
 ### NMS
 
@@ -1114,6 +1118,268 @@ ptsummary_df %>%
       "Study drug held for EPS?", "Doses held for EPS"
     )
   ) %>%
+  mykablestyle()
+
+```
+
+### ABCDE Compliance
+
+We collected data on the following elements related to the [ABCDEF Bundle](http://www.iculiberation.org/Bundles/Pages/default.aspx). In order to be
+eligible for any of these on a given day, the patient had to have been in the
+ICU all 24 hours.
+
+- *Awakening* (SAT)
+    - Eligible if: On mechanical ventilation, and not off unit when staff
+    attempted SAT
+    - Compliant if: Received an SAT, or did not receive an SAT for a reason
+    besides "other"
+- *Breathing* (SBT)
+    - Eligible if: On mechanical ventilation, and not off unit when staff
+    attempted SBT
+    - Compliant if: Received an SBT, or did not receive an SBT for a reason
+    besides "other"
+- *Coordination* (Coordination of SAT and SBT)
+    - Eligible if: On MV and received both an SAT and SBT
+    - Compliant if: Patient was off sedation when SBT was performed
+- Nonpharmacological interventions for *delirium*
+    - Eligible if: Not comatose
+    - Compliant if: Received >=1 nonpharmacological intervention (pain
+    assessment/management, orientation, sensory, sleep)
+- *Early mobility/exercise*
+    - Eligible if: Not off floor when staff attempted therapy
+    - Compliant if: Was screened for safety, and either:
+        - Failed safety screen for a recorded reason (MI, arrhythmia, FiO2,
+        PEEP, or vasopressors)
+        - Met safety criteria, but did not receive mobility due to
+        sedatives/analgesics or refusal of patient, family, or clinical team
+        - Received mobility
+        
+```{r abcde_table}
+## -- One set of cols for all patient-days; one for all intervention days ------
+
+## Wrapper function to combine results for intervention only, all patient-days
+combine_abcde <- function(comp_fn){
+  df_int <- do.call(comp_fn, list(daily_int_df %>% filter(intervention)))
+  df_all <- do.call(comp_fn, list(daily_all_df))
+  
+  left_join(df_int, df_all, by = "Variable") %>%
+    set_names(c("Variable", "Intervention Period", "All Patient-Days"))
+}
+
+## Awakening
+get_comp_a <- function(df){
+  days_elig <- sum_na(df$elig_a)
+  days_comp <- sum_na(df$comp_a)
+  days_sat <- sum_na(subset(df, comp_a)$sat_today)
+  days_nosat <- sum_na(!subset(df, comp_a)$sat_today)
+  days_sat_why <- map_int(
+    str_subset(names(df), "^sat\\_rsn\\_"),
+    ~ sum_na(pluck(subset(df, comp_a), .))
+  ) %>%
+    set_names(
+      str_remove(str_subset(names(df), "^sat\\_rsn\\_"), "^sat\\_rsn\\_")
+    )
+  
+  df_a <- tribble(
+    ~ Variable,            ~ Days,                            ~ Denom,
+    "Days Eligible",       days_elig,                         nrow(df),
+    "Days Compliant",      days_comp,                         days_elig,
+    "Had SAT",             days_sat,                          days_comp,
+    "No SAT",              days_nosat,                        days_comp,
+    "Seizures",            pluck(days_sat_why, "seizures"),   days_nosat,
+    "Alcohol withdrawal",  pluck(days_sat_why, "alcohol"),    days_nosat,
+    "Agitation",           pluck(days_sat_why, "agitation"),  days_nosat,
+    "Paralytics",          pluck(days_sat_why, "paralytics"), days_nosat,
+    "Myocardial ischemia", pluck(days_sat_why, "mi"),         days_nosat,
+    "High ICP",            pluck(days_sat_why, "icp"),        days_nosat
+  ) %>%
+    mutate(
+      Pct = get_npct(Days, Denom),
+      sort_var = case_when(
+        Variable == "Days Eligible" ~ 1,
+        Variable == "Days Compliant" ~ 2,
+        Variable == "Had SAT" ~ 3,
+        Variable == "No SAT" ~ 4,
+        TRUE ~ 5
+      )
+    ) %>%
+    arrange(sort_var, desc(Days)) %>%
+    dplyr::select(Variable, Pct)
+  
+  return(df_a)
+}
+
+## Breathing
+get_comp_b <- function(df){
+  days_elig <- sum_na(df$elig_b)
+  days_comp <- sum_na(df$comp_b)
+  days_sbt <- sum_na(subset(df, comp_b)$sbt_today)
+  days_nosbt <- sum_na(!subset(df, comp_b)$sbt_today)
+  days_sbt_why <- map_int(
+    str_subset(names(df), "^sbt\\_rsn\\_"),
+    ~ sum_na(pluck(subset(df, comp_b), .))
+  ) %>%
+    set_names(
+      str_remove(str_subset(names(df), "^sbt\\_rsn\\_"), "^sbt\\_rsn\\_")
+    )
+  
+  df_b <- tribble(
+    ~ Variable,                    ~ Days,                           ~ Denom,
+    "Days Eligible",               days_elig,                        nrow(df),
+    "Days Compliant",              days_comp,                        days_elig,
+    "Had SBT",                     days_sbt,                         days_comp,
+    "No SBT",                      days_nosbt,                       days_comp,
+    "Agitation",                   pluck(days_sbt_why, "agitation"), days_nosbt,
+    "O2 sat <88%",                 pluck(days_sbt_why, "o2sat"),     days_nosbt,
+    "FiO2 >50%",                   pluck(days_sbt_why, "fio2"),      days_nosbt,
+    "PEEP >7.5cm H2O",             pluck(days_sbt_why, "peep"),      days_nosbt,
+    "Myocardial ischemia",         pluck(days_sbt_why, "mi"),        days_nosbt,
+    "Significant vasopressor use", pluck(days_sbt_why, "vasopressor"),        days_nosbt,
+    "APRV/BiVent & P1 >24",        pluck(days_sbt_why, "aprv"),      days_nosbt
+  ) %>%
+    mutate(
+      Pct = get_npct(Days, Denom),
+      sort_var = case_when(
+        Variable == "Days Eligible" ~ 1,
+        Variable == "Days Compliant" ~ 2,
+        Variable == "Had SBT" ~ 3,
+        Variable == "No SBT" ~ 4,
+        TRUE ~ 5
+      )
+    ) %>%
+    arrange(sort_var, desc(Days)) %>%
+    dplyr::select(Variable, Pct)
+  
+  return(df_b)
+}
+
+## Coordination
+get_comp_c <- function(df){
+  days_elig <- sum_na(df$elig_c)
+  days_comp <- sum_na(df$comp_c)
+
+  df_c <- tribble(
+    ~ Variable,       ~ Days,    ~ Denom,
+    "Days Eligible",  days_elig, nrow(df),
+    "Days Compliant", days_comp, days_elig
+  ) %>%
+    mutate(
+      Pct = get_npct(Days, Denom),
+      sort_var = case_when(
+        Variable == "Days Eligible" ~ 1,
+        Variable == "Days Compliant" ~ 2,
+        TRUE ~ 5
+      )
+    ) %>%
+    arrange(sort_var, desc(Days)) %>%
+    dplyr::select(Variable, Pct)
+  
+  return(df_c)
+}
+
+## Delirium
+get_comp_d <- function(df){
+  days_elig <- sum_na(df$elig_d)
+  days_comp <- sum_na(df$comp_d)
+  days_int_num <- map_int(
+    1:4, ~ sum_na(subset(df, comp_d)$nonpharm_int == .)
+  ) %>%
+    set_names(1:4)
+  days_int_each <- map_int(
+    str_subset(names(df), "^nonpharm\\_int\\_"),
+    ~ sum_na(pluck(subset(df, comp_d), .))
+  ) %>%
+    set_names(
+      str_remove(
+        str_subset(names(df), "^nonpharm\\_int\\_"),
+        "^nonpharm\\_int\\_"
+      )
+    )
+
+  df_d <- tribble(
+    ~ Variable,                   ~ Days,                          ~ Denom,
+    "Days Eligible",              days_elig,                       nrow(df),
+    "Days Compliant",             days_comp,                       days_elig,
+    "One",                        pluck(days_int_num, "1"),        days_comp,
+    "Two",                        pluck(days_int_num, "2"),        days_comp,
+    "Three",                      pluck(days_int_num, "3"),        days_comp,
+    "Four",                       pluck(days_int_num, "4"),        days_comp,
+    "Pain assessment/management", pluck(days_int_each, "pain"),    days_comp,
+    "Orientation",                pluck(days_int_each, "orient"),  days_comp,
+    "Sensory",                    pluck(days_int_each, "sensory"), days_comp,
+    "Sleep",                      pluck(days_int_each, "sleep"),   days_comp
+  ) %>%
+    mutate(
+      Pct = get_npct(Days, Denom),
+      sort_var = case_when(
+        Variable == "Days Eligible" ~ 1,
+        Variable == "Days Compliant" ~ 2,
+        Variable == "One" ~ 3,
+        Variable == "Two" ~ 4,
+        Variable == "Three" ~ 5,
+        Variable == "Four" ~ 6,
+        TRUE ~ 7
+      )
+    ) %>%
+    arrange(sort_var, desc(Days)) %>%
+    dplyr::select(Variable, Pct)
+  
+  return(df_d)
+}
+
+## Delirium
+get_comp_e <- function(df){
+  days_elig <- sum_na(df$elig_e)
+  days_comp <- sum_na(df$comp_e)
+  days_mobility_each <- map_int(
+    levels(df$mobility_highest),
+    ~ sum_na(subset(df, comp_e)$mobility_highest == .)
+  ) %>%
+    set_names(str_remove(levels(df$mobility_highest), " \\(.*$"))
+
+  df_e <- tribble(
+    ~ Variable,                   ~ Days,                            ~ Denom,
+    "Days Eligible",              days_elig,                         nrow(df),
+    "Days Compliant",             days_comp,                         days_elig,
+    "L1 (Active ROM/sitting)", pluck(days_mobility_each, "Level 1"), days_comp,
+    "L2 (Dangling)",           pluck(days_mobility_each, "Level 2"), days_comp,
+    "L3 (Active transfers)",   pluck(days_mobility_each, "Level 3"), days_comp,
+    "L4 (Marching/walking)",   pluck(days_mobility_each, "Level 4"), days_comp
+  ) %>%
+    mutate(
+      Pct = get_npct(Days, Denom),
+      sort_var = case_when(
+        Variable == "Days Eligible" ~ 1,
+        Variable == "Days Compliant" ~ 2,
+        str_sub(Variable, 1, 2) == "L1" ~ 3,
+        str_sub(Variable, 1, 2) == "L2" ~ 4,
+        str_sub(Variable, 1, 2) == "L3" ~ 5,
+        str_sub(Variable, 1, 2) == "L4" ~ 6,
+        TRUE ~ 7
+      )
+    ) %>%
+    arrange(sort_var, desc(Days)) %>%
+    dplyr::select(Variable, Pct)
+  
+  return(df_e)
+}
+
+## Iterate over all elements to create final table
+abcde_table <- map_df(
+  list(get_comp_a, get_comp_b, get_comp_c, get_comp_d, get_comp_e),
+  combine_abcde
+)
+
+abcde_table %>% kable(
+    format = "html",
+    col.names = c("", "Intervention Period", "All Patient-Days"),
+    align = c("l", "r", "r")
+  ) %>%
+  group_rows("Awakening", 1, 10) %>%
+  group_rows("Breathing", 11, 21) %>%
+  group_rows("Coordination", 22, 23) %>%
+  group_rows("Delirium", 24, 33) %>%
+  group_rows("Early Mobility/Exercise", 34, 39) %>%
   mykablestyle()
 
 ```
