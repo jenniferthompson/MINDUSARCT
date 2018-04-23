@@ -11,6 +11,12 @@ output:
     toc_float: yes
 ---
 
+<script>
+$(document).ready(function(){
+    $('[data-toggle="popover"]').popover(); 
+});
+</script>
+
 The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522).
 
 ```{r setup, results = "hide", warning = FALSE}
@@ -1124,9 +1130,9 @@ ptsummary_df %>%
 
 ### ABCDE Compliance
 
-We collected data on the following elements related to the [ABCDEF Bundle](http://www.iculiberation.org/Bundles/Pages/default.aspx). In order to be
-eligible for any of these on a given day, the patient had to have been in the
-ICU all 24 hours.
+We collected data on the following elements related to the [ABCDEF Bundle](http://www.iculiberation.org/Bundles/Pages/default.aspx), using the earlier definitions of "compliance" in place when study enrollment began. **In
+order to be eligible for any of these on a given day, the patient had to have
+been in the ICU all 24 hours.**
 
 - *Awakening* (SAT)
     - Eligible if: On mechanical ventilation, and not off unit when staff
@@ -1367,10 +1373,42 @@ get_comp_e <- function(df){
 ## Iterate over all elements to create final table
 abcde_table <- map_df(
   list(get_comp_a, get_comp_b, get_comp_c, get_comp_d, get_comp_e),
-  combine_abcde
+  combine_abcde,
+  .id = "element"
+) %>%
+  mutate(
+    poptext = case_when(
+      Variable == "Days Eligible" & element == "1" ~ "On MV and on unit",
+      Variable == "Days Compliant" & element == "1" ~
+        "Received SAT, or no SAT for safety reason",
+      Variable == "Days Eligible" & element == "2" ~ "On MV and on unit",
+      Variable == "Days Compliant" & element == "2" ~ "Received SBT, or no SBT for safety reason",
+      Variable == "Days Eligible" & element == "3" ~ "On MV, received SAT+SBT",
+      Variable == "Days Compliant" & element == "3" ~ "Off sedation when SBT performed",
+      Variable == "Days Eligible" & element == "4" ~ "Not comatose",
+      Variable == "Days Compliant" & element == "4" ~ ">=1 nonpharmacological intervention",
+      Variable == "Days Eligible" & element == "5" ~ "On unit",
+      Variable == "Days Compliant" & element == "5" ~ "Screened and: failed screen; no mobility d/t meds or refusal; or received at least some mobility",
+      Variable %in% c("No SAT", "No SBT") ~
+        "For reason considered compliant, listed below",
+      TRUE ~ ""
+    ),
+    poppos = "auto"
+  )
+
+abcde_table$Variable <- cell_spec(
+  abcde_table$Variable,
+  popover = spec_popover(
+    content = abcde_table$poptext,
+    title = NULL,
+    position = abcde_table$poppos
+  )
 )
 
-abcde_table %>% kable(
+abcde_table %>%
+  dplyr::select(2:4) %>%
+  kable(
+    escape = FALSE,
     format = "html",
     col.names = c("", "Intervention Period", "All Patient-Days"),
     align = c("l", "r", "r")
@@ -1382,9 +1420,6 @@ abcde_table %>% kable(
   group_rows("Coordination", 22, 23) %>%
   group_rows("Delirium", 24, 33) %>%
   group_rows("Early Mobility/Exercise", 34, 39) %>%
-  footnote(
-    general = "Light gray rows describe the reasons SAT/SBTs were not performed."
-  ) %>%
   mykablestyle()
 
 ```
