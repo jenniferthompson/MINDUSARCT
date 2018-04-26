@@ -36,6 +36,7 @@ suppressPackageStartupMessages(library(naniar))
 suppressPackageStartupMessages(library(sparkline))
 suppressPackageStartupMessages(library(survminer))
 suppressPackageStartupMessages(library(cmprsk))
+suppressPackageStartupMessages(library(DT))
 suppressPackageStartupMessages(library(ggthemr)) ## Github only; cttobin/ggthemr
 suppressPackageStartupMessages(library(JTHelpers))
   ## Github only; jenniferthompson/JTHelpers
@@ -1070,7 +1071,112 @@ other_permdc_table %>%
 ```
 </details>
 
-## Safety Outcomes and ABCDE Bundle Compliance
+## Protocol Noncompliance
+
+We summarize below any protocol noncompliance that increased safety risk to the patient, broken down according to a simple categorization scheme followed prospectively during the conduct of the MIND-USA investigation.
+
+```{r noncompliance}
+## -- Summarize protocol noncompliance: N (%) in each category -----------------
+## Variables indicating categories for noncompliance
+noncomp_cats <- str_subset(names(noncompliance_df), "^ntf\\_cat\\_")
+
+## How many noncompliance events in each treatment group?
+noncomp_trt <- c(
+  map_int(levels(noncompliance_df$trt), ~ sum_na(noncompliance_df$trt == .)),
+  sum(is.na(noncompliance_df$trt))
+) %>%
+  set_names(c(levels(noncompliance_df$trt), "Not randomized"))
+
+## Create final data frame with N, % of each noncompliance category
+noncomp_npct <- noncompliance_df %>%
+  mutate(trt = ifelse(is.na(trt), "Not randomized", as.character(trt))) %>%
+  group_by(trt) %>%
+  summarise_at(vars(noncomp_cats), sum_na) %>%
+  ungroup() %>%
+  gather(key = ntf_cat, value = cat_n, -trt) %>%
+  spread(key = trt, value = cat_n) %>%
+  mutate(Overall = rowSums(.[, 2:ncol(.)])) %>%
+  ## Sort in order of overall total
+  arrange(desc(Overall)) %>%
+  ## Get percentages for each column in a hack-y sort of way; I really want
+  ## modify2 to exist but it does not
+  mutate(
+    ## Will need to update these to actual treatment names
+    A = get_npct(num = A, denom = pluck(noncomp_trt, "A")),
+    B = get_npct(num = B, denom = pluck(noncomp_trt, "B")),
+    C = get_npct(num = C, denom = pluck(noncomp_trt, "C")),
+    `Not randomized` = get_npct(
+      num = `Not randomized`, denom = pluck(noncomp_trt, "Not randomized")
+    ),
+    Overall = get_npct(num = Overall, denom = nrow(noncompliance_df)),
+    ntf_cat = case_when(
+      ntf_cat == "ntf_cat_other" ~ "Other category",
+      ntf_cat == "ntf_cat_asmt" ~
+        "Study assessment not completed, not documented",
+      ntf_cat == "ntf_cat_titration" ~ "Study drug titration not as outlined",
+      ntf_cat == "ntf_cat_specimen" ~
+        "Blood specimens not collected as outlined",
+      ntf_cat == "ntf_cat_incexc" ~ "Inclusion/exclusion criteria violation",
+      ntf_cat == "ntf_cat_saeirb" ~ "SAE not reported appropriately to VCC",
+      ntf_cat == "ntf_cat_saevcc" ~ "SAE not reported appropriately to IRB",
+      TRUE ~ "[missing]"
+    )
+  )
+
+```
+
+```{r noncompliance_summary}
+noncomp_npct %>%
+  kable(
+    format = "html",
+    col.names = c(
+      "Category of noncompliance",
+      levels(noncompliance_df$trt),
+      "Not Randomized", "All Events"
+    ),
+    align = c("l", rep("r", 5))
+  ) %>%
+  mykablestyle()
+
+```
+
+For full transparency, we also include in the searchable table below details on
+each incidence of protocol noncompliance which increased patient risk. PHI in
+NTF explanations has been redacted.
+
+```{r noncompliance_all}
+## Helper function to replace TRUE with given string, FALSE with ""
+replace_true <- function(x, rep_str){ ifelse(x, rep_str, "") }
+
+noncompliance_df %>%
+  ## Replace T/F indicators for individual categories with text strings, then
+  ## combine into a single column for easier printing
+  mutate(
+    ntf_cat_incexc =
+      replace_true(ntf_cat_incexc, "Inclusion/exclusion criteria"),
+    ntf_cat_specimen = replace_true(ntf_cat_specimen, "Specimen collection"),
+    ntf_cat_titration = replace_true(ntf_cat_titration, "Study drug titration"),
+    ntf_cat_asmt = replace_true(ntf_cat_asmt, "Assessment not done/documented"),
+    ntf_cat_saevcc = replace_true(ntf_cat_saevcc, "SAE reporting, VCC"),
+    ntf_cat_saeirb = replace_true(ntf_cat_saeirb, "SAE reporting, IRB"),
+    ntf_cat_other = replace_true(ntf_cat_other, "Other category")
+  ) %>%
+  unite(col = ntf_categories, noncomp_cats, sep = "; ") %>%
+  mutate(ntf_categories = str_replace_all(ntf_categories, "(; )+", "; ") %>%
+           str_remove_all("^; ") %>% str_remove_all("; $")) %>%
+  dplyr::select(id, trt, ntf_categories, ntf_explain) %>%
+  DT::datatable(
+    colnames = c("ID", "Treatment", "Noncompliance Categories", "Explanation"),
+    filter = "top",
+    options = list(
+      pageLength = 2,
+      lengthMenu = c(2, 5, 10, 15, 20)
+    )
+  )
+
+```
+
+# Safety Outcomes and ABCDE Bundle Compliance
 
 Our three primary safety outcomes are neuroleptic malignant syndrome (NMS); Torsades de pointes (Torsades); and extrapyramidal symptoms (EPS). Incidence of each was minimal and is detailed below.
 
@@ -1156,7 +1262,7 @@ been in the ICU all 24 hours.**
     - Compliant if: Was screened for safety, and either:
         - Failed safety screen for a recorded reason (MI, arrhythmia, FiO2,
         PEEP, or vasopressors)
-        - Met safety criteria, but did not receive mobility due to
+        - Passed safety screen, but did not receive mobility due to
         sedatives/analgesics or refusal of patient, family, or clinical team
         - Received mobility
         
