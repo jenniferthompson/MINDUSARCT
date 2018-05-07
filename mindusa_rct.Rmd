@@ -3036,7 +3036,8 @@ rms_results_kable(hospdis_90_mod)
 We use time to event analysis with competing risks to explore the relationship
 between treatment group and "successful" liberation from mechanical ventilation,
 defined as discontinuation of all types of MV followed by at least 48 hours alive and without reinitiation of MV, during the 30 days following
-randomization. We treat death during this time as a competing risk.
+randomization. We treat death and hospital discharge without liberation during
+this time as separate competing risks.
 
 **Censoring and time to events:**
 
