@@ -509,26 +509,75 @@ cuminc_test <- function(cuminc_obj){
 
 ## -- Functions to extract and plot the N at risk, cumulative events given -----
 ## -- a summary(survfit(...)) object -------------------------------------------
-## IMPORTANT: Assumes death is always competing risk, not the one of interest
-## Intended to go along with survminer::ggcompetingrisks() output
-cr_risktable <- function(sf_sum){
-  data.frame(
+cr_risktable <- function(
+  sf_sum,    ## summary(survfit(...))
+  main_event ## character string; one of the event types in sf_sum
+){
+  ## Get character strings of event types
+  event_types <- colnames(sf_sum$p0)[1:(ncol(sf_sum$n.event) - 1)]
+
+  ## For our purposes, we assume competing risks are "Death" and possibly
+  ## "Discharge". Issue a warning if this is not the case.
+  ## There is probably a better way to do this. Refactoring opportunity!
+  
+  if(!(length(unique(c(event_types, "Discharge", "Death"))) == 3)){
+    warning(
+      "Competing risks are assumed to be `Death` and possibly `Discharge`, but events in `sf_sum` do not match this assumption",
+      call. = FALSE
+    )
+  }
+     
+  df <- data.frame(
     trt = str_replace(sf_sum$strata, "trt=", ""),
     time = sf_sum$time,
-    n_risk = sf_sum$n.risk[, 3],
-    n_event = sf_sum$n.event[, 1],
-    n_death = sf_sum$n.event[, 2]
+    n_risk = sf_sum$n.risk[, ncol(sf_sum$n.risk)],
+    n_censored = sf_sum$n.censor
   ) %>%
+    bind_cols(
+      as.data.frame(sf_sum$n.event[, 1:(ncol(sf_sum$n.event) - 1)]) %>%
+        set_names(event_types)
+    ) %>%
     group_by(trt) %>%
-    mutate(
-      cumul_event = cumsum(n_event),
-      cumul_death = cumsum(n_death),
-      risk_string = glue("{n_risk}\n({cumul_event}; {cumul_death})")
+    mutate_at(vars(event_types, "n_censored"), cumsum) %>%
+    ungroup() %>%
+    set_names(
+      str_replace(names(.), main_event, "primary")
     )
+  
+  ## -- Create string for N at risk, etc ---------------------------------------
+  ## If time = 0, only include N at risk
+  ## If death is only competing risk, include (events; death) on line 2
+  ## If death&discharge are competing risks: N -> (events) -> (death; discharge)
+  ## (tried glue_data, couldn't get it to work)
+  if("Discharge" %in% names(df)){
+    df$risk_string <- with(df, {
+      ifelse(time == 0, as.character(n_risk),
+             sprintf("%s\n(%s)\n(%s; %s)", n_risk, primary, Death, Discharge))
+    })
+  } else{
+    df$risk_string <- with(df, {
+      ifelse(time == 0, as.character(n_risk),
+             sprintf("%s\n(%s; %s)", n_risk, primary, Death))
+    })
+  }
+
+  return(df)
+  
 }
 
-cr_risktable_plot <- function(sf_sum, event_string){
-  df <- cr_risktable(sf_sum)
+cr_risktable_plot <- function(sf_sum, main_event, event_string){
+  df <- cr_risktable(sf_sum, main_event = main_event)
+  
+  ## Set plot title
+  plot_title <- ifelse(
+    "Discharge" %in% names(df),
+    glue(
+    "Number at risk (cumulative number of {event_string}) (deaths; discharges)"
+    ),
+    glue(
+      "Number at risk (cumulative number of {event_string}; deaths)"
+    )
+  )
   
   ggplot(data = df, aes(x = time, y = 1, colour = trt)) +
     facet_wrap(~ trt, nrow = 1) +
@@ -540,9 +589,7 @@ cr_risktable_plot <- function(sf_sum, event_string){
     ) +
     scale_y_continuous(breaks = 1, labels = "100%") +
     labs(
-      title = glue(
-        "Number at risk (cumulative number of {event_string}; deaths)"
-      ),
+      title = plot_title,
       ylab = " " ## faking it for spacing purposes
     ) +
     theme(plot.title = element_text(size = basetext_size * 0.8),
@@ -567,29 +614,38 @@ cif_plot <- function(
   test_string,   ## to include in subtitle; often result of cuminc_test()
   caption_string = NULL ## optional plot caption
 ){
+  ## What are our event types?
+  event_types <- rownames(cuminc_obj$Tests)
+  
+  ## Which colors to use? Red always main event. Grays = competing risks.
+  risk_colors <- c(
+    as.character(palette_colors["lgray"]),
+    as.character(palette_colors["dgray"]),
+    as.character(palette_colors["dred"])
+  )
+  risk_colors <-
+    risk_colors[seq(to = 3, by = 1, length.out = length(event_types))]
+  
+  ## Label death, discharge with "competing risks"
+  which_competing <- grep("Death|Discharge", event_types)
+
+  ## When it was just death, used italics for competing risk, but couldn't get
+  ## it to work with a flexible # competing risks:
+  # labels = c(
+  #   expression(paste("Death ", italic("(competing risk)"))), legend_string
+  # )
+  
+  event_labels <- map_at(
+    event_types,
+    which_competing,
+    ~ paste(., "(competing risk)")
+  )
+  
   ggcompetingrisks(cuminc_obj, conf.int = TRUE, ggtheme = mindusa_theme()) +
-    scale_color_manual(
-      name = "",
-      values = c(
-        as.character(palette_colors["lgray"]),
-        as.character(palette_colors["dred"])
-      ),
-      labels = c(
-        expression(paste("Death ", italic("(competing risk)"))), legend_string
-      )
-    ) +
-    scale_fill_manual(
-      name = "",
-      values = c(
-        as.character(palette_colors["lgray"]),
-        as.character(palette_colors["dred"])
-      ),
-      labels = c(
-        expression(paste("Death ", italic("(competing risk)"))), legend_string
-      )
-    ) +
+    scale_color_manual(name = "", values = risk_colors, labels = event_labels) +
+    scale_fill_manual(name = "", values = risk_colors, labels = event_labels) +
     scale_y_continuous(
-      limits = 0:1,
+      limits = -0.01:1,
       breaks = seq(0, 1, 0.2),
       labels = paste0(seq(0, 1, 0.2) * 100, "%")
     ) +
