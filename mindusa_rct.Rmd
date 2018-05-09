@@ -1542,7 +1542,8 @@ outcome_vars <- c(
   "tte_death_90", "event_death_90",     ## Time to death within 90 days
   "tte_icudis_90", "ftype_icudis_90",   ## Time to final, succ. ICU discharge
   "tte_hospdis_90", "ftype_hospdis_90", ## Time to hospital discharge
-  "tte_mvlib_30", "ftype_mvlib_30"      ## Time to liberation from MV
+  "tte_mvlib_30", "ftype_mvlib_30",     ## Time to liberation from MV
+  "tte_readm_90", "ftype_readm_90"      ## Time to ICU readmission
 )
 
 covariate_vars <- c(
@@ -1580,15 +1581,15 @@ model_df$comp_covars <- rowSums(is.na(model_df[, covariate_vars])) == 0
 n_rand_comp <- sum_na(model_df$comp_covars)
 
 ## What % of patients are missing at least one covariate/outcome?
-## (This does *not* include variables related to liberation from MV, as that
-## would introduce artificial missingness)
+## (This does *not* include variables related to liberation from MV or ICU
+## readmission, as that would introduce artificial missingness)
 pts_missany <- model_df %>%
   dplyr::select(-rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30) %>%
   miss_case_table() %>%
-  filter(n_missing_in_case > 0) %>%
+  filter(n_miss_in_case > 0) %>%
   summarise(
     nmiss = sum_na(n_cases),
-    pctmiss = sum_na(percent)
+    pctmiss = sum_na(pct_miss)
   )
 
 ## Set datadist to this data.frame
@@ -1665,11 +1666,15 @@ mod_rhs_lin <- paste(covariate_vars, collapse = " + ")
 ```
 
 <details>
+<summary>Summary of Covariate & Outcome Missingness</summary>
 
 ```{r missing_allpts}
 gg_miss_var(
   model_df %>%
-    dplyr::select(-id, -rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30),
+    dplyr::select(
+      -id, -rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30,
+      -tte_readm_90, -ftype_readm_90
+    ),
   show_pct = TRUE
 ) +
   scale_y_continuous(name = "% Missing", limits = c(0, 5)) +
@@ -2684,8 +2689,11 @@ icudis_90_Surv <- with(model_df, {
 icudis_90_survfit <- survfit(icudis_90_Surv ~ trt, data = model_df)
 icudis_90_sfsum <- summary(icudis_90_survfit, times = seq(0, 90, 15))
 
-icudis_90_risk_plot <-
-  cr_risktable_plot(icudis_90_sfsum, event_string = "ICU discharges")
+icudis_90_risk_plot <- cr_risktable_plot(
+  icudis_90_sfsum,
+  main_event = "ICU Discharge",
+  event_string = "ICU discharges"
+)
 
 ## -- Fit cumulative incidence functions by treatment --------------------------
 icudis_90_cif <- with(model_df, {
@@ -2876,10 +2884,13 @@ hospdis_90_Surv <- with(model_df, {
 
 ## -- Create and summarize survfit object, create N at risk table --------------
 hospdis_90_survfit <- survfit(hospdis_90_Surv ~ trt, data = model_df)
-hospdis_90_sfsum <- summary(hospdis_90_survfit, times = seq(0, 30, 5))
+hospdis_90_sfsum <- summary(hospdis_90_survfit, times = seq(0, 90, 15))
 
-hospdis_90_risk_plot <-
-  cr_risktable_plot(hospdis_90_sfsum, event_string = "hospital discharges")
+hospdis_90_risk_plot <- cr_risktable_plot(
+  hospdis_90_sfsum,
+  main_event = "Hospital Discharge",
+  event_string = "hospital discharges"
+)
 
 ## -- Fit cumulative incidence functions by treatment --------------------------
 hospdis_90_cif <- with(model_df, {
@@ -2908,7 +2919,7 @@ hospdis_90_cif_plot <- cif_plot(
 cr_combine_plots(
   cif = hospdis_90_cif_plot,
   rt = hospdis_90_risk_plot,
-  xmax = 91, time_breaks = seq(0, 90, 5),
+  xmax = 91, time_breaks = seq(0, 90, 15),
   caption_string = '"Successful" is defined as hospital discharge followed by at least 48 hours alive.'
 )
 
@@ -3043,13 +3054,11 @@ this time as separate competing risks.
 
 - We censor at the time of study withdrawal `r with(ptsummary_df, sum(ftype_mvlib_30 == "Censored" & tte_mvlib_30 < 30.01 & hospdis_noinfo, na.rm = TRUE))` patients who withdrew from the study prior to hospital discharge,
 with no discharge or death information available.
-- We censor at the time of hospital discharge `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Censored" & tte_mvlib_30 < 30.01 & !hospdis_noinfo))` patients who were discharged without experiencing either death or successful
-liberation from MV.
 - We censor at day 30.01 `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Censored" & tte_mvlib_30 == 30.01))` patients who survived the entire 30-day
 period after randomization, but remained hospitalized on day 30.
-- We assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Death"))` patients who died prior to liberation from MV, within 30 days of randomization,
-a time value of `time of death - time of randomization` and a "failure type" of
-death; we assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "MV Liberation"))` patients who were successfully liberated from MV within 30 days
+- We assign patients who experience the competing risks of either hospital discharge (`r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Discharge" & tte_mvlib_30 < 30.01 & !hospdis_noinfo))` patients) or death (`r with(ptsummary_df, sum_na(ftype_mvlib_30 == "Death" & tte_mvlib_30 < 30.01 & !hospdis_noinfo))` patients) prior to 30 days a time to event of `time of discharge/death - time of randomization` and a "failure type" of hospital
+discharge and death, respectively.
+- We assign the `r with(ptsummary_df, sum_na(ftype_mvlib_30 == "MV Liberation"))` patients who were successfully liberated from MV within 30 days
 of randomization a time value of `time of liberation - time of randomization`
 and a "failure type" of liberation from MV.
 
@@ -3057,7 +3066,7 @@ and a "failure type" of liberation from MV.
 
 We present cumulative incidence plots by treatment group for both liberation
 from MV and death, unadjusted for any covariates. Please see the [Methods
-section](#unadjusted) for more details. All `r sum_na(ptsummary_df$on_mv_rand24)` randomized patients who were on MV within 24 hours after randomization are included.
+section](#unadjusted) for more details. All `r  sum_na(ptsummary_df$on_mv_rand24)` randomized patients who were on MV within 24 hours after randomization are included.
 
 `[insert general summary of results here]`
 
@@ -3073,10 +3082,13 @@ mvlib_30_Surv <- with(model_df_mv, {
 
 ## -- Create and summarize survfit object, create N at risk table --------------
 mvlib_30_survfit <- survfit(mvlib_30_Surv ~ trt, data = model_df_mv)
-mvlib_30_sfsum <- summary(mvlib_30_survfit, times = c(0, 4, 7, 11, 14))
+mvlib_30_sfsum <- summary(mvlib_30_survfit, times = c(0, seq(5, 30, 5)))
 
-mvlib_30_risk_plot <-
-  cr_risktable_plot(mvlib_30_sfsum, event_string = "liberations from MV")
+mvlib_30_risk_plot <- cr_risktable_plot(
+  mvlib_30_sfsum,
+  main_event = "MV Liberation",
+  event_string = "liberations from MV"
+)
 
 ## -- Fit cumulative incidence functions by treatment --------------------------
 mvlib_30_cif <- with(model_df_mv, {
@@ -3105,7 +3117,7 @@ mvlib_30_cif_plot <- cif_plot(
 cr_combine_plots(
   cif = mvlib_30_cif_plot,
   rt = mvlib_30_risk_plot,
-  xmax = 15, time_breaks = c(0, 4, 7, 11, 14),
+  xmax = 31, time_breaks = c(0, seq(5, 30, 5)),
   caption_string = '"Successful" is defined as discontinuation of MV, followed by at least 48 hours alive without reinitiation.'
 )
 
