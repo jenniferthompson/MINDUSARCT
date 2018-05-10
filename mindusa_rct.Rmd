@@ -1553,7 +1553,7 @@ covariate_vars <- c(
 
 model_df <- ptsummary_df %>%
   dplyr::select(
-    id, study_site, on_mv_rand24, rass_rand,
+    id, study_site, on_mv_rand24, rass_rand, elig_readm,
     one_of(outcome_vars), one_of(covariate_vars)
   ) %>%
   ## Create category for level of arousal at randomization,
@@ -3171,8 +3171,8 @@ mvlib_30_phtext <- text_ph_assume(mvlib_30_zph)
 
 ```
 
-We graphically check our assumption of proportional hazards for the hospital
-discharge subdistribution, paying particular attention to treatment group and
+We graphically check our assumption of proportional hazards for the MV
+liberation subdistribution, paying particular attention to treatment group and
 looking for generally flat lines in each panel. `r mvlib_30_phtext`
 
 ```{r mvlib_30_assumeplot}
@@ -3234,11 +3234,216 @@ Since most of the continuous covariates are modeled using restricted cubic
 splines (see the [Methods section](#covariates) for more details), a single
 subdistribution hazard ratio/CI is insufficient to describe the entire
 relationship between each of these covariates and the relative incidence of
-hospital discharge. Rather, each subdistribution hazard ratio reflects a
+liberation from MV. Rather, each subdistribution hazard ratio reflects a
 comparison between two specific values of the covariate, as noted in the table.
 
 ```{r mvlib_30_full_results, warning = FALSE}
 rms_results_kable(mvlib_30_mod)
+
+```
+
+## Time to ICU Readmission
+
+We use time to event analysis with competing risks to explore the relationship
+between treatment group and readmission to the ICU within 90 days of first
+discharge during the index hospitalization, among the `r sum_na(ptsummary_df$elig_readm)` patients who survived their first ICU stay and
+remained in the study. We treat death and hospital discharge without readmission
+during this time as separate competing risks.
+
+Although the question of how _many_ times each patient was readmitted is also
+of interest, we had so few patients who were readmitted >1 time (`r with(subset(ptsummary_df, elig_readm), sum_na(icu_readmit_number > 1))`, or `with(subset(ptsummary_df, elig_readm), round(mean_na(icu_readmit_number >1) * 100))`%) that it was not feasible to address this specific issue.
+
+**Censoring and time to events:**
+
+- We planned to censor at the time of study withdrawal patients who withdrew
+from the study prior to hospital discharge with no discharge or death information available, but `r with(ptsummary_df, sum_na(elig_readm & ftype_readm_90 == "Censored" & tte_readm_90 < 90.01))` patients met this criteria.
+- We censored at day 90.01 `r with(ptsummary_df, sum_na(elig_readm & ftype_readm_90 == "Censored" & tte_readm_90 == 90.01))` patient(s) who survived
+the entire 90-day period after initial discharge, but remained hospitalized on
+day 90.
+- We assign patients who experience the competing risks of either hospital discharge (`r with(ptsummary_df, sum_na(elig_readm & ftype_readm_90 == "Discharge" & tte_readm_90 < 90.01 & !hospdis_noinfo))` patients) or death (`r with(ptsummary_df, sum_na(elig_readm & ftype_readm_90 == "Death" & tte_readm_90 < 90.01 & !hospdis_noinfo))` patients) prior to 90 days after first ICU
+discharge a time to event of `time of discharge/death - time of randomization` and a "failure type" of hospital discharge and death, respectively.
+- We assign the `r with(ptsummary_df, sum_na(elig_readm & ftype_readm_90 == "Readmission"))` patients who were readmitted to the ICU within 90 days of
+first discharge a time value of `time of readmission - time of first ICU discharge` and a "failure type" of readmission.
+
+### Unadjusted Analysis
+
+We present cumulative incidence plots by treatment group for ICU readmission,
+hospital discharge without readmission, and death, unadjusted for any
+covariates. Please see the [Methods section](#unadjusted) for more details. All
+`r  sum_na(ptsummary_df$elig_readm)` randomized patients who survived their
+initial ICU admission and remained in the study are included.
+
+`[insert general summary of results here]`
+
+```{r cuminc_readm_unadj, warning = FALSE, fig.height = 6, fig.width = 8}
+## Prep: Smaller df including only patients who survived first ICU stay
+model_df_readm <- model_df %>% filter(elig_readm)
+
+## -- Create Surv object -------------------------------------------------------
+## Will be used for N at risk for CIF, as well as adjusted model fit
+readm_90_Surv <- with(model_df_readm, {
+  Surv(time = tte_readm_90, event = ftype_readm_90, type = "mstate")
+})
+
+## -- Create and summarize survfit object, create N at risk table --------------
+readm_90_survfit <- survfit(readm_90_Surv ~ trt, data = model_df_readm)
+readm_90_sfsum <- summary(readm_90_survfit, times = seq(0, 90, 15))
+
+readm_90_risk_plot <- cr_risktable_plot(
+  readm_90_sfsum,
+  main_event = "Readmission",
+  event_string = "ICU readmissions"
+)
+
+## -- Fit cumulative incidence functions by treatment --------------------------
+readm_90_cif <- with(model_df_readm, {
+  cuminc(
+    ftime = tte_readm_90,
+    fstatus = ftype_readm_90,
+    group = trt,
+    cencode = "Censored"
+  )
+})
+
+## Create strings for test results
+readm_90_tests_unadj <- cuminc_test(readm_90_cif)
+
+## -- Plot CIFs, N at risk -----------------------------------------------------
+## Create plot for competing risks
+readm_90_cif_plot <- cif_plot(
+  cuminc_obj = readm_90_cif,
+  legend_string = "ICU Readmission",
+  event_string = "ICU Readmission",
+  test_string = readm_90_tests_unadj,
+  caption_string = ''
+)
+
+## Print combined plot
+cr_combine_plots(
+  cif = readm_90_cif_plot,
+  rt = readm_90_risk_plot,
+  xmax = 91, time_breaks = c(0, seq(5, 90, 15)),
+  caption_string = ''
+)
+
+```
+
+### Adjusted Analysis
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+We use Fine & Gray's[^fg] method of competing risks regression to examine the
+relationship between treatment and (primarily) ICU readmission. For further
+details, please see the [Methods section](#adjusted). All `r with(model_df, sum_na(elig_readm & comp_covars))` randomized patients with complete covariate data who survived their first ICU stay and remained in the study are included.
+
+##### Model Fitting
+
+```{r readm_90_adj}
+## -- Fit competing risks model using survival::finegray(), rms::cph() ---------
+
+## -- Create dataset specifically for Fine-Gray method of competing risks ------
+readm_90_fg <- finegray(
+  ## Use **linear** RHS here; we'll fit spline terms within model formula itself
+  as.formula(paste("readm_90_Surv ~", mod_rhs_lin)),
+  data = model_df_readm,
+  etype = "Readmission",
+  id = id,
+  count = "fgcount"
+)
+
+## -- Fit actual model, using variables/weights from finegray() ----------------
+readm_90_mod <- cph(
+  as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs)),
+  data = readm_90_fg,
+  weights = fgwt,
+  x = TRUE, y = TRUE
+)
+
+```
+
+##### Assumptions
+
+```{r readm_90_assume}
+## -- Check proportional hazard assumption -------------------------------------
+readm_90_zph <- cox.zph(readm_90_mod, transform = 'log')
+
+## Extract p-value for global PH assumption; create reproducible statement
+readm_90_phtext <- text_ph_assume(readm_90_zph)
+
+```
+
+We graphically check our assumption of proportional hazards for the ICU
+readmission subdistribution, paying particular attention to treatment group and
+looking for generally flat lines in each panel. `r readm_90_phtext`
+
+**NOTE:** THIS IS NOT WORKING, ALL NANs
+
+```{r readm_90_assumeplot}
+# plot_ph_assume(readm_90_zph)
+
+```
+
+#### Model Results {.tabset}
+
+```{r readm_90_hrs_prep}
+## -- Calculate hazard ratios for both treatments vs placebo -------------------
+readm_90_hrs <- trt_ratios(readm_90_mod)
+
+## Create explanatory text string for subdistribution HRs
+readm_90_text <-
+  hr_example(hr_df = readm_90_hrs, outcome = "ICU readmission")
+
+```
+
+We show the subdistribution hazard ratios for ICU readmission for haloperidol
+and ziprasidone vs placebo. Subdistribution hazard ratios **lower** than 1 are
+favorable for this outcome. `r readm_90_text[["A"]]`
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Visual Form
+
+```{r readm_90_hrs_plot, fig.width = 5, fig.height = 3.5}
+readm_90_hrs_plot <- plot_trt_ratios(
+  ratio_df = readm_90_hrs,
+  outcome_text = "ICU Readmission",
+  # extra_text = glue(
+  #   "\n\n",
+  #   '"Successful": liberation from MV during the intervention period, ',
+  #   "followed by at least 48 hours alive without reinitiation.\n",
+  #   "Patients who withdrew & revoked access to PHI ",
+  #   "are censored on the day of withdrawal.\n",
+  #   "Deaths prior to liberation are accounted for using competing risks."
+  # ),
+  mod = readm_90_mod
+) +
+  theme(plot.caption = element_text(size = basetext_size * 0.6),
+        plot.title = element_text(size = basetext_size * 1.15))
+
+readm_90_hrs_plot
+
+```
+
+##### Tabular Form
+
+```{r table_readm_90_hrs}
+table_trt_ratios(ratio_df = readm_90_hrs)
+
+```
+
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single
+subdistribution hazard ratio/CI is insufficient to describe the entire
+relationship between each of these covariates and the relative incidence of
+ICU readmission. Rather, each subdistribution hazard ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r readm_90_full_results, warning = FALSE}
+rms_results_kable(readm_90_mod)
 
 ```
 
