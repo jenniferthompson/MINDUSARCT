@@ -622,12 +622,15 @@ cif_plot <- function(
     as.character(palette_colors["lgray"]),
     as.character(palette_colors["dgray"]),
     as.character(palette_colors["dred"])
-  )
-  risk_colors <-
-    risk_colors[seq(to = 3, by = 1, length.out = length(event_types))]
-  
+  ) %>%
+    set_names(
+      c("Discharge", "Death", setdiff(event_types, c("Death", "Discharge")))
+    )
+
+  ## -- Gave up on this piece for now; caused inconsistent color matching. -----
+  ## -- Stick with what's in the original object, revisit later. ---------------
   ## Label death, discharge with "competing risks"
-  which_competing <- grep("Death|Discharge", event_types)
+  # which_competing <- grep("^(Death|Discharge)$", event_types)
 
   ## When it was just death, used italics for competing risk, but couldn't get
   ## it to work with a flexible # competing risks:
@@ -635,15 +638,23 @@ cif_plot <- function(
   #   expression(paste("Death ", italic("(competing risk)"))), legend_string
   # )
   
-  event_labels <- map_at(
-    event_types,
-    which_competing,
-    ~ paste(., "(competing risk)")
-  )
+  # event_labels <- map_at(
+  #   event_types,
+  #   which_competing,
+  #   ~ paste(., "(competing risk)")
+  # )
+  # ## Reverse order for proper legends
+  # event_labels <- event_labels[length(event_labels):1]
   
-  ggcompetingrisks(cuminc_obj, conf.int = TRUE, ggtheme = mindusa_theme()) +
-    scale_color_manual(name = "", values = risk_colors, labels = event_labels) +
-    scale_fill_manual(name = "", values = risk_colors, labels = event_labels) +
+  ggcompetingrisks(
+    cuminc_obj,
+    conf.int = TRUE,
+    gnames = sub(" ", "thankscole!", setdiff(names(cuminc_obj), "Tests")),
+    gsep = "thankscole!",
+    ggtheme = mindusa_theme()
+  ) +
+    scale_color_manual(name = "", values = risk_colors) +
+    scale_fill_manual(name = "", values = risk_colors) +
     scale_y_continuous(
       limits = -0.01:1,
       breaks = seq(0, 1, 0.2),
