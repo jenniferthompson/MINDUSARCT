@@ -552,8 +552,8 @@ Unless otherwise specified, quantities in this table reflect the 14 days
 including and following randomization (the "study period"). Additional notes:
 
 - "Liberation from mechanical ventilation" variables apply only to patients who
-were on MV when randomized, or were placed on MV within the 24 hours following
-randomization.
+were on either type of MV when randomized, or were placed on MV within the 24
+hours following randomization.
 - All time-to-event descriptions (eg, ICU length of stay) begin at the time of
 randomization and go through the entire hospitalization (even if the patient
 remained hospitalized after the intervention period).
@@ -897,9 +897,11 @@ dose_table <- doses_df %>%
     type_initial = sum_na(dose_type == "Initial Starting Dose"),
     type_restart = sum_na(dose_type == "Restarting Dose"),
     type_increase = sum_na(dose_type == "Increased Dose"),
-    type_decrease = sum_na(dose_type == "Decreased Dose"),
+    type_decrease = sum_na(dose_type == "Decreased Dose (CAM-ICU Negative)"),
     type_maintmax = sum_na(dose_type == "Maintained at Maximum Dose"),
-    type_maint = sum_na(dose_type == "Maintained"),
+    type_maint = sum_na(
+      dose_type == "Maintained (at current dose for medically induced coma)"
+    ),
     type_other = sum_na(dose_type == "Other"),
     amt_025 = sum_na(dose_amt == 0.25),
     amt_050 = sum_na(dose_amt == 0.50),
@@ -1015,7 +1017,7 @@ dose_table <- doses_df %>%
       table_row == "amt_200" ~ "2.00 mL",
       table_row == "type_initial" ~ "Initial starting dose",
       table_row == "type_restart" ~ "Restarting dose",
-      table_row == "type_decrease" ~ "Decrease",
+      table_row == "type_decrease" ~ "Decrease (CAM-ICU negative)",
       table_row == "type_increase" ~ "Increase",
       table_row == "type_maint" ~ "Maintained (med. induced coma)",
       table_row == "type_maintmax" ~ "Maintained at max dose",
@@ -1307,7 +1309,7 @@ been in the ICU all 24 hours.**
     - Compliant if: Received an SBT, or did not receive an SBT for a reason
     besides "other"
 - *Coordination* (Coordination of SAT and SBT)
-    - Eligible if: On MV and received both an SAT and SBT
+    - Eligible if: On invasive MV and received both an SAT and SBT
     - Compliant if: Patient was off sedation when SBT was performed
 - Nonpharmacological interventions for *delirium*
     - Eligible if: Not comatose
@@ -1540,12 +1542,12 @@ abcde_table <- map_df(
 ) %>%
   mutate(
     poptext = case_when(
-      Variable == "Days Eligible" & element == "1" ~ "On MV and on unit",
+      Variable == "Days Eligible" & element == "1" ~ "On invasive MV and on unit",
       Variable == "Days Compliant" & element == "1" ~
         "Received SAT, or no SAT for safety reason",
-      Variable == "Days Eligible" & element == "2" ~ "On MV and on unit",
+      Variable == "Days Eligible" & element == "2" ~ "On invasive MV and on unit",
       Variable == "Days Compliant" & element == "2" ~ "Received SBT, or no SBT for safety reason",
-      Variable == "Days Eligible" & element == "3" ~ "On MV, received SAT+SBT",
+      Variable == "Days Eligible" & element == "3" ~ "On invasive MV, received SAT+SBT",
       Variable == "Days Compliant" & element == "3" ~ "Off sedation when SBT performed",
       Variable == "Days Eligible" & element == "4" ~ "Not comatose",
       Variable == "Days Compliant" & element == "4" ~ ">=1 nonpharmacological intervention",
@@ -3541,7 +3543,10 @@ Due to the nature of clinical data collection, we had some missing values for AP
 
 ## Mechanical Ventilation
 
-During the course of the study, patients could be on invasive mechanical ventilation (MV), noninvasive positive pressure support (NIPPV), both, or neither. For our purposes, "time on MV" describes the number of days each patient was on *either* type of MV beginning at the time of randomization, **including** time between discontinuation of MV and reinitiation or death, if that time is less than 48 hours. (In other words, if a patient was extubated at 12pm and died at 3pm, those final three hours are included in the total time on MV.)
+During the course of the study, patients could be on invasive mechanical ventilation (invasive MV), noninvasive positive pressure support (NIPPV), both,
+or neither. For our purposes, "time on MV" describes the number of days each patient was on *either* type of ventilation beginning at the time of
+randomization, **including** time between discontinuation of MV and reinitiation
+or death, if that time is less than 48 hours. (In other words, if a patient was extubated at 12pm and died at 3pm, those final three hours are included in the total time on MV.)
 
 "Liberation from mechanical ventilation" indicates the first discontinuation of either type of MV which was followed by at least 48 hours alive without reinitiation of MV.
 
