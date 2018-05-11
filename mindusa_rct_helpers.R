@@ -210,9 +210,9 @@ trt_ratios <- function(mod){
   map_df(
     list(mod),
     rms_comparisons_addoutcome,
-    df = model_df, getRatios = TRUE, vname = "trt", refVal = "C"
+    df = model_df, getRatios = TRUE, vname = "trt", refVal = "Placebo"
   ) %>%
-    mutate(comp.c = factor(comp.c, levels = trt_levels$trt_abc)) %>%
+    mutate(comp.c = factor(comp.c, levels = trt_levels$trt_actual)) %>%
     ## Keep only one row for reference group
     distinct(ref, comp, effect, is.ref, .keep_all = TRUE)
 }
