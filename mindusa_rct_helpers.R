@@ -97,8 +97,7 @@ mental_plot <- function(xvar, xtitle, kw_obj){
     ) +
     labs(
       title = glue("{xtitle} by Treatment"),
-      subtitle = kw_results(dcfd_kw),
-      caption = days_miss_caption
+      subtitle = kw_results(kw_obj)
     )
   
 }
