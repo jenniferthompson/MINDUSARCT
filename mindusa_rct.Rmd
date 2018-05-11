@@ -197,6 +197,12 @@ load("analysisdata/rct.Rdata")
 ## How many patients were randomized?
 n_rand <- length(rand_pts)
 
+## Add treatment groups to datasets as needed
+rand_df$trt <- factor(
+  rand_df$trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")
+)
+ptsummary_df <- left_join(ptsummary_df, rand_df, by = "id")
+
 ```
 
 # Screening, Consent, and Randomization
@@ -225,9 +231,11 @@ screen_ns <- ptstatus_df %>%
     dq_diedwd = ifelse(!disqualified, NA, dq_reason == "Died/withdrew before delirium")
   ) %>%
   ## Select the categories we want
-  dplyr::select(screened, excluded_imm, approached, refused, consented, excluded_later,
-         disqualified, randomized, dq_nodel, dq_icudc, dq_diedwd,
-         matches("^rand\\_")) %>%
+  dplyr::select(
+    screened, excluded_imm, approached, refused, consented, excluded_later,
+     disqualified, randomized, dq_nodel, dq_icudc, dq_diedwd,
+    matches("^rand\\_"), -rand_list
+  ) %>%
   summarize_all(sum, na.rm = TRUE)
 
 ## Create data.frame for final table, starting with horizontal df
@@ -289,6 +297,18 @@ last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
 ## Overview of Screening, Exclusions and Randomization
 
 `r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`.
+
+### Note on ITT Population
+
+When the treatment blind was broken, we discovered that `r with(ptstatus_df, sum(rand_list & !randomized))` patients who never met criteria for randomization
+had been assigned a treatment group that was never enacted. This assignment was
+done in the pharmacy only, with no study drug ever sent, no intervention done,
+and no outcomes tracked for these patients. Because these patients never met
+randomization criteria, they were never intended to be randomized or treated by
+site coordinators, and thus had no outcomes data tracked. They are included in
+the "Ineligible for Randomization" group below and are *not* included in the
+intent-to-treat population. The `r with(ptsummary_df, sum(randomized & !ever_studydrug))` patients who were randomized but never received a dose of
+study drug *are* included in the ITT population.
 
 ```{r print_screen_table}
 screen_table %>%
@@ -399,10 +419,13 @@ exc_table %>%
 
 ### "Other" Exclusions
 
-To save space, reasons for "other" exclusions are collapsed. Click on `Details` below to view them. (These explanations are taken directly from our database; potentially identifiable information, including dates, times and parenthetical
-details, have been redacted to preserve patient privacy.)
+To save space, reasons for "other" exclusions are collapsed below. (These
+explanations are taken directly from our database; potentially identifiable
+information, including dates, times and parenthetical details, have been
+redacted to preserve patient privacy.)
 
 <details>
+<summary>Reasons for "Other" Exclusions</summary>
 ```{r exc_other_table}
 ptstatus_df %>%
   filter(exc_99_other) %>%
@@ -504,9 +527,10 @@ my_html(
 
 ### Descriptions of "Other" ICU Admission Reasons
 
-To save space, reasons for "other" ICU admission among randomized patients are collapsed. Click on `Details` below to view them.
+To save space, reasons for "other" ICU admission among randomized patients are collapsed.
 
 <details>
+<summary>"Other" Reasons for ICU Admission</summary>
 ```{r icursn_other_table}
 ptsummary_all_df %>%
   filter(randomized & icu_rsn == "Other") %>%
@@ -533,6 +557,15 @@ randomization.
 - All time-to-event descriptions (eg, ICU length of stay) begin at the time of
 randomization and go through the entire hospitalization (even if the patient
 remained hospitalized after the intervention period).
+- "Antipsychotics" refers not only to open-label haloperidol and ziprasidone,
+but *any* antipsychotic, including quetiapine, aripiprazole, olanzapine, and
+risperidone. Doses are converted to haloperidol equivalents.
+- "Benzodiazepines" includes midazolam, lorazepam, and diazepam, all converted
+to midazolam equivalents.
+- "Opioids" includes fentanyl, remifentanil, morphine, and hydromorphone, all
+converted to fentanyl equivalents.
+
+All drug conversion formulas can be found [here](https://docs.google.com/spreadsheets/d/1ZGfxAmTFxGgfzjwE0trrpKEn_21QDwCSGJIv-E5kiE4/edit?usp=drivesdk).
 
 ```{r inhosp_trt}
 ## Which variables do we want for *all* drugs?
@@ -574,7 +607,8 @@ inhosp_desc_df <- ptsummary_df %>%
 label(inhosp_desc_df$sofa_imp_rand) <- "SOFA on day of randomization (imputed data)"
 label(inhosp_desc_df$cv_sofa_rand) <- "Cardiovascular SOFA on day of randomization"
 label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type)"
-label(inhosp_desc_df$days_mv_exp) <- "Days on mechanical ventilation"
+label(inhosp_desc_df$days_mv_exp) <-
+  "Days on mechanical ventilation (either type)"
 label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type)"
 label(inhosp_desc_df$int_num) <- "Number of intubations"
 label(inhosp_desc_df$noninv_num) <- "Times NIPPV initiated"
@@ -749,9 +783,11 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       mean_drug_daily_mean, mean_drug_daily_sd
     )
   ) %>%
-  dplyr::select(trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
-         mean_drug_daily, npct_held, matches("^npct\\_held\\_"), npct_permdc,
-         matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig) %>%
+  dplyr::select(
+    trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
+    mean_drug_daily, npct_held, matches("^npct\\_held\\_"), npct_permdc,
+    matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig
+  ) %>%
   gather(key = table_row, value = table_string, -trt) %>%
   spread(key = trt, value = table_string) %>%
   mutate(
@@ -823,13 +859,17 @@ rand_table %>%
 
 `r table_nums("intervention_dose", display = "cite")` describes the `r format(nrow(doses_df), big.mark = ",")` doses of study drug attempted during the
 course of the study, generally two doses per day that the patient remained alive
-and in the ICU. Study staff continued to document dose opportunities after permanent discontinuation; therefore, patients could have >1 dose in that category in this table.
+and in the ICU. This includes doses where drug was held, temporarily or
+permanently. Study staff continued to document dose opportunities after
+permanent discontinuation; therefore, patients could have >1 dose in that category in this table.
 
 `[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING]`
 
 About 75% of doses were successfully given in each of the three treatment groups, with rates of study drug hold and discontinuation approximately equal between groups. Pre-dose QTcs were also roughly equivalent between the three groups.
 
 Oversedation was the most common reason for temporary hold by far; actual RASSes at the time of dose administration are listed in `r table_nums("intervention_dose", display = "cite")`. Refusal (patient, family, or medical team) was the most common reason for permanent discontinuation.
+
+Though study drug was held or discontinued due to suspected NMS, there were no *confirmed* cases after investigation by the DSMB.
 
 ```{r prep_dose_table}
 ## How many total doses in each treatment group?
@@ -994,9 +1034,9 @@ dose_table <- doses_df %>%
         paste0("-", gsub("^rass\\_", "", table_row)),
       table_row == "permdc_ae" ~ "Adverse event",
       table_row == "permdc_coma" ~ "Coma due to structural brain damage",
-      table_row == "permdc_nms" ~ "NMS",
+      table_row == "permdc_nms" ~ "Suspected NMS",
       table_row == "permdc_react" ~ "DRESS",
-      table_row == "permdc_torsades" ~ "Torsades de pointes",
+      table_row == "permdc_torsades" ~ "Suspected Torsades de pointes",
       table_row == "permdc_refuseptfam" ~ "Patient/family refusal",
       table_row == "permdc_refuseteam" ~ "Medical team refusal",
       table_row == "permdc_other" ~ "Other",
@@ -1044,6 +1084,7 @@ other_permdc_table <- doses_df %>%
 ##### `r table_nums("dose_held_other")`
 
 <details>
+<summary>"Other" Reasons Study Drug Held</summary>
 ```{r print_dose_held_other}
 other_held_table %>%
   kable(
@@ -1059,6 +1100,7 @@ other_held_table %>%
 ##### `r table_nums("dose_permdc_other")`
 
 <details>
+<summary>"Other" Reasons Study Drug Permanently Discontinued</summary>
 ```{r print_dose_permdc_other}
 other_permdc_table %>%
   kable(
@@ -1073,7 +1115,7 @@ other_permdc_table %>%
 
 ## Protocol Noncompliance
 
-We summarize below any protocol noncompliance that increased safety risk to the patient, broken down according to a simple categorization scheme followed prospectively during the conduct of the MIND-USA investigation.
+We summarize below any protocol noncompliance that increased safety risk to the patient, broken down according to a simple categorization scheme followed prospectively during the conduct of the MIND-USA investigation. During the entire study, there were `r nrow(noncompliance_df)` events which met these criteria, among `r length(unique(noncompliance_df$id))` unique patients.
 
 ```{r noncompliance}
 ## -- Summarize protocol noncompliance: N (%) in each category -----------------
@@ -1082,10 +1124,10 @@ noncomp_cats <- str_subset(names(noncompliance_df), "^ntf\\_cat\\_")
 
 ## How many noncompliance events in each treatment group?
 noncomp_trt <- c(
-  map_int(levels(noncompliance_df$trt), ~ sum_na(noncompliance_df$trt == .)),
+  map_int(levels(rand_df$trt), ~ sum_na(noncompliance_df$trt == .) ),
   sum(is.na(noncompliance_df$trt))
 ) %>%
-  set_names(c(levels(noncompliance_df$trt), "Not randomized"))
+  set_names(c(levels(rand_df$trt), "Not randomized"))
 
 ## Create final data frame with N, % of each noncompliance category
 noncomp_npct <- noncompliance_df %>%
@@ -1101,10 +1143,11 @@ noncomp_npct <- noncompliance_df %>%
   ## Get percentages for each column in a hack-y sort of way; I really want
   ## modify2 to exist but it does not
   mutate(
-    ## Will need to update these to actual treatment names
-    A = get_npct(num = A, denom = pluck(noncomp_trt, "A")),
-    B = get_npct(num = B, denom = pluck(noncomp_trt, "B")),
-    C = get_npct(num = C, denom = pluck(noncomp_trt, "C")),
+    Haloperidol =
+      get_npct(num = Haloperidol, denom = pluck(noncomp_trt, "Haloperidol")),
+    Ziprasidone =
+      get_npct(num = Ziprasidone, denom = pluck(noncomp_trt, "Ziprasidone")),
+    Placebo = get_npct(num = Placebo, denom = pluck(noncomp_trt, "Placebo")),
     `Not randomized` = get_npct(
       num = `Not randomized`, denom = pluck(noncomp_trt, "Not randomized")
     ),
@@ -1121,6 +1164,9 @@ noncomp_npct <- noncompliance_df %>%
       ntf_cat == "ntf_cat_saevcc" ~ "SAE not reported appropriately to IRB",
       TRUE ~ "[missing]"
     )
+  ) %>%
+  dplyr::select(
+    ntf_cat, Haloperidol, Ziprasidone, Placebo, `Not randomized`, Overall
   )
 
 ```
@@ -1131,7 +1177,7 @@ noncomp_npct %>%
     format = "html",
     col.names = c(
       "Category of noncompliance",
-      levels(noncompliance_df$trt),
+      "Haloperidol", "Ziprasidone", "Placebo",
       "Not Randomized", "All Events"
     ),
     align = c("l", rep("r", 5))
@@ -1148,7 +1194,7 @@ NTF explanations has been redacted.
 ## Helper function to replace TRUE with given string, FALSE with ""
 replace_true <- function(x, rep_str){ ifelse(x, rep_str, "") }
 
-noncompliance_df %>%
+noncomp_details <- noncompliance_df %>%
   ## Replace T/F indicators for individual categories with text strings, then
   ## combine into a single column for easier printing
   mutate(
@@ -1186,6 +1232,10 @@ for randomized patients during the intervention.
 
 ### NMS
 
+All suspected cases of NMS (i.e., patients in whom there was an initial suspicion of possible NMS) were rapidly reported to the DSMB for evaluation and
+the final determination of existence. No randomized patients ever experienced
+*confirmed* NMS during the study (during or outside the intervention phase).
+
 ```{r nms}
 ## How many patients experienced NMS at all? during intervention?
 n_rand_nms_ih <- sum_na(ptsummary_df$ever_nms_ih)
@@ -1197,17 +1247,22 @@ n_rand_nms_int <- sum_na(ptsummary_df$ever_nms_int)
 
 ```
 
-No randomized patients ever experienced NMS during the study (during or outside the intervention phase).
-
 ### Torsades de Pointes
 
-During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced torsades de pointes. Both instances were recorded as Serious Adverse Events; descriptions of both AEs are included below, with potentially identifying details redacted.
+All suspected cases of Torsades de pointes were rapidly reported to the DSMB for
+the final determination of existence.
+
+During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced confirmed Torsades de pointes. Both instances
+were recorded as adverse events in the category of "Torsades, clinical outcome";
+descriptions of both events are included below, with potentially identifying
+details redacted.
 
 ```{r torsades}
 torsades_df %>%
+  dplyr::select(-ae_serious) %>% ## Torsades always serious, redundant
   kable(
     format = "html",
-    col.names = c("ID", "Trt", "Study Phase", "Serious?", "Description")
+    col.names = c("ID", "Trt", "Study Phase", "Description")
   ) %>%
   mykablestyle()
 
@@ -1215,7 +1270,7 @@ torsades_df %>%
 
 ### EPS
 
-To describe and determine the presence of extrapyramidal symptoms (EPS), we used a modified version of the [Simpson-Angus Score](http://onlinelibrary.wiley.com/doi/10.1111/j.1600-0447.1970.tb02066.x/epdf) which included elbow and wrist rigidity, glabellar tap, resting tremor, and salivation. Patients were considered to have an official diagnosis of EPS if at least three out of these five symptoms had a score of 3 or higher on a given day; patients whose glabellar tap reflex could not be assessed were assigned a symptom score of 0. Details for the `r sum_na(ptsummary_df$ever_eps_int)` randomized patients who met this criteria at least once during the intervention period are shown below.
+To describe and determine the presence of extrapyramidal symptoms (EPS), we used a modified version of the [Simpson-Angus Score](http://onlinelibrary.wiley.com/doi/10.1111/j.1600-0447.1970.tb02066.x/epdf) which included elbow and wrist rigidity, glabellar tap, resting tremor, and salivation. Study drug was held if at least three out of these five symptoms had a score of 3 or higher on a given day; patients whose glabellar tap reflex could not be assessed were assigned a symptom score of 0. (Study drug was restarted if EPS resolved to a score of <3 on all categories.) Details for the `r sum_na(ptsummary_df$ever_eps_int)` randomized patients who met this criteria at least once during the intervention period are shown below.
 
 ```{r eps}
 ptsummary_df %>%
@@ -1226,7 +1281,8 @@ ptsummary_df %>%
   kable(
     format = "html",
     col.names = c(
-      "ID", "Trt", "Days met EPS criteria", "Overall EPS Score when Criteria Met",
+      "ID", "Trt", "Days met EPS criteria",
+      "Overall EPS Score when Criteria Met",
       "Study drug held for EPS?", "Doses held for EPS"
     )
   ) %>%
@@ -2591,7 +2647,7 @@ death_90_text <- hr_example(hr_df = death_90_hrs, outcome = "death")
 We show the hazard ratios for haloperidol and ziprasidone vs placebo. Hazard
 ratios **lower** than 1 are favorable, indicating lower likelihood of death at
 any given time point within 30 days of randomization, given that the patient has
-survived up to that point. `r death_30_text[["A"]]`
+survived up to that point. `r death_30_text[["Haloperidol"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -2799,7 +2855,7 @@ icudis_90_text <- hr_example(hr_df = icudis_90_hrs, outcome = "ICU discharge")
 
 We show the subdistribution hazard ratios for ICU discharge for haloperidol and
 ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
-favorable for this outcome. `r icudis_90_text[["A"]]`
+favorable for this outcome. `r icudis_90_text[["Haloperidol"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -2994,7 +3050,7 @@ hospdis_90_text <-
 
 We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
-favorable for this outcome. `r hospdis_90_text[["A"]]`
+favorable for this outcome. `r hospdis_90_text[["Haloperidol"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -3194,7 +3250,7 @@ mvlib_30_text <-
 
 We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
-favorable for this outcome. `r mvlib_30_text[["A"]]`
+favorable for this outcome. `r mvlib_30_text[["Haloperidol"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -3399,7 +3455,7 @@ readm_90_text <-
 
 We show the subdistribution hazard ratios for ICU readmission for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **lower** than 1 are
-favorable for this outcome. `r readm_90_text[["A"]]`
+favorable for this outcome. `r readm_90_text[["Haloperidol"]]`
 
 TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
@@ -3503,21 +3559,21 @@ We determined mental status for a given *assessment* using the following criteri
 
 Patients could have multiple assessments on a given study day. On a given *day*, a patient was considered delirious if any assessment was considered delirious; comatose if no assessments met criteria for delirium and at least one was considered comatose; and normal if no assessments met criteria for delirium or coma, and at least one was considered normal.
 
-### Handling Missing Data
+<!-- ### Handling Missing Data -->
 
-Among all consented patients, `r sum(is.na(daily_all_df$mental_status_raw))` (`r round(mean(is.na(daily_all_df$mental_status_raw)) * 100)`%) in-hospital patient-days have insufficient information to determine mental status (due to missing data or study withdrawal).
+<!-- Among all consented patients, `r sum(is.na(daily_all_df$mental_status_raw))` (`r round(mean(is.na(daily_all_df$mental_status_raw)) * 100)`%) in-hospital patient-days have insufficient information to determine mental status (due to missing data or study withdrawal). -->
 
-Among randomized patients during the intervention period, `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw))` (`r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`%) of patient-days have missing mental status, again due either to missing data or study withdrawal.
+<!-- Among randomized patients during the intervention period, `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw))` (`r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`%) of patient-days have missing mental status, again due either to missing data or study withdrawal. -->
 
-Mental status can change quickly; therefore simple imputation methods like last observation carried forward could be inaccurate. Since we are fortunate to have strong covariate data, we performed single imputation using polytomous logistic regression, including the following variables as covariates in the imputation.
+<!-- Mental status can change quickly; therefore simple imputation methods like last observation carried forward could be inaccurate. Since we are fortunate to have strong covariate data, we performed single imputation using polytomous logistic regression, including the following variables as covariates in the imputation. -->
 
-- **Baseline**: Age at consent; gender; BMI; education; level of proficiency in English; insurance; home antipsychotic use; Charlson comorbidities index; CSHA Clinical Frailty Score; APACHE II APS
-- **Daily**:
-    - Medications (clonazepam, dexmedetomidine, propofol, remifentanil, antipsychotics, benzodiazepines, opioids [IV and PO], antibiotics, anxiolytics, statins)
-    - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin)
-    - Any mental status data available the day of, the day before, and the day after the missing day
+<!-- - **Baseline**: Age at consent; gender; BMI; education; level of proficiency in English; insurance; home antipsychotic use; Charlson comorbidities index; CSHA Clinical Frailty Score; APACHE II APS -->
+<!-- - **Daily**: -->
+<!--     - Medications (clonazepam, dexmedetomidine, propofol, remifentanil, antipsychotics, benzodiazepines, opioids [IV and PO], antibiotics, anxiolytics, statins) -->
+<!--     - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin) -->
+<!--     - Any mental status data available the day of, the day before, and the day after the missing day -->
 
-All summary variables (delirium/coma-free days, delirium duration, and coma duration) are presented using imputed mental status.
+<!-- All summary variables (delirium/coma-free days, delirium duration, and coma duration) are presented using imputed mental status. -->
 
 # Software Details{#software}
 
