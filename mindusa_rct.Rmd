@@ -203,6 +203,14 @@ rand_df$trt <- factor(
 )
 ptsummary_df <- left_join(ptsummary_df, rand_df, by = "id")
 
+## Create an indicator for whether randomized patients got antipsychotics
+## *either* between ICU admission & consent, or between consent & randomization
+## ICU admission -> consent: ptsummary_df$antipsyc_adm
+## Consent -> randomization/DQ: ptsummary_df$antipsyc_ever_pr
+ptsummary_df$antipsyc_adm_pr <- with(ptsummary_df, {
+  antipsyc_adm | (!is.na(antipsyc_ever_pr) & antipsyc_ever_pr)
+})
+
 ```
 
 # Screening, Consent, and Randomization
@@ -572,8 +580,8 @@ All drug conversion formulas can be found [here](https://docs.google.com/spreads
 medsum_vars <- c("ever_int", "days_exp_int", "total_exp_int", "mean_exp_int")
 
 inhosp_vars <- c(
-  "sofa_imp_rand", "cv_sofa_rand", "ever_mv", "days_mv_exp", "mv_num",
-  "int_num", "noninv_num", "on_mv_rand24", "ever_mvlib_rand24",
+  "antipsyc_adm_pr", "sofa_imp_rand", "cv_sofa_rand", "ever_mv", "days_mv_exp",
+  "mv_num", "int_num", "noninv_num", "on_mv_rand24", "ever_mvlib_rand24",
   "daysto_mvlib_exp", "sepsis", "stroke",
   paste("benzo", medsum_vars, sep = "_"),
   paste("opioid", medsum_vars, sep = "_"),
@@ -590,6 +598,7 @@ inhosp_vars <- c(
 ## Create new dataset with variable labels, factors
 inhosp_desc_df <- ptsummary_df %>%
   mutate(
+    antipsyc_adm_pr = factor_tf(antipsyc_adm_pr),
     ever_mv = factor_tf(ever_mv),
     on_mv_rand24 = factor_tf(on_mv_rand24),
     ever_mvlib_rand24 = factor_tf(ever_mvlib_rand24),
@@ -604,8 +613,12 @@ inhosp_desc_df <- ptsummary_df %>%
     ever_coma_int = factor_tf(ever_coma_int),
     ever_delcoma_int = factor_tf(ever_delcoma_int)
   )
-label(inhosp_desc_df$sofa_imp_rand) <- "SOFA on day of randomization (imputed data)"
-label(inhosp_desc_df$cv_sofa_rand) <- "Cardiovascular SOFA on day of randomization"
+label(inhosp_desc_df$antipsyc_adm_pr) <-
+  "Received open-label antipsychotics between ICU admission and randomization"
+label(inhosp_desc_df$sofa_imp_rand) <-
+  "SOFA on day of randomization (imputed data)"
+label(inhosp_desc_df$cv_sofa_rand) <-
+  "Cardiovascular SOFA on day of randomization"
 label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type)"
 label(inhosp_desc_df$days_mv_exp) <-
   "Days on mechanical ventilation (either type)"
@@ -672,8 +685,10 @@ label(inhosp_desc_df$ever_coma_int) <- "Experienced coma"
 label(inhosp_desc_df$coma_int_exp) <- "Days of coma"
 label(inhosp_desc_df$ever_delcoma_int) <- "Experienced delirium and/or coma"
 label(inhosp_desc_df$delcoma_int_exp) <- "Days of delirium and/or coma"
-label(inhosp_desc_df$dcfd_int) <- "Delirium/coma-free days (missing days imputed)"
-label(inhosp_desc_df$icu_los) <- "Total length of ICU stay (entire hospitalization)"
+label(inhosp_desc_df$dcfd_int) <-
+  "Delirium/coma-free days (missing days imputed)"
+label(inhosp_desc_df$icu_los) <-
+  "Total length of ICU stay (entire hospitalization)"
 label(inhosp_desc_df$icu_readmit_number) <-
   "Number of ICU readmissions during hospitalization"
 label(inhosp_desc_df$hosp_los) <- "Total length of hospitalization"
