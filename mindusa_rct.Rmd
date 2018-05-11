@@ -590,7 +590,8 @@ inhosp_vars <- c(
   paste("zipras", medsum_vars, sep = "_"),
   paste("antipsyc", medsum_vars, sep = "_"),
   "sofa_imp_max_int", "sofa_imp_min_int", "sofa_imp_mean_int",
-  "ever_del_int", "del_int_exp", "ever_coma_int", "coma_int_exp",
+  "ever_del_int", "del_int_exp", "ever_hyperdel_int", "hyperdel_int_exp",
+  "ever_hypodel_int", "hypodel_int_exp", "ever_coma_int", "coma_int_exp",
   "ever_delcoma_int", "delcoma_int_exp", "dcfd_int",
   "icu_los", "icu_readmit_number", "hosp_los", "dc_status", "hospdis_loc"
 )
@@ -681,6 +682,12 @@ label(inhosp_desc_df$sofa_imp_min_int) <- "Lowest daily SOFA"
 label(inhosp_desc_df$sofa_imp_mean_int) <- "Mean daily SOFA"
 label(inhosp_desc_df$ever_del_int) <- "Experienced delirium"
 label(inhosp_desc_df$del_int_exp) <- "Days of delirium"
+label(inhosp_desc_df$ever_hyperdel_int) <-
+  "Experienced hyperactive delirium (RASS > 0)"
+label(inhosp_desc_df$hyperdel_int_exp) <- "Days of hyperactive delirium"
+label(inhosp_desc_df$ever_hypodel_int) <-
+  "Experienced hypoactive delirium (RASS <= 0)"
+label(inhosp_desc_df$hypodel_int_exp) <- "Days of hypoactive delirium"
 label(inhosp_desc_df$ever_coma_int) <- "Experienced coma"
 label(inhosp_desc_df$coma_int_exp) <- "Days of coma"
 label(inhosp_desc_df$ever_delcoma_int) <- "Experienced delirium and/or coma"
@@ -1610,7 +1617,8 @@ We examine all outcomes and covariates to determine how much missing data is pre
 ```{r model_prep}
 ## -- Create dataset with only outcomes, covariates ----------------------------
 outcome_vars <- c(
-  "dcfd_int", "del_int_all", "coma_int_all",
+  "dcfd_int", "del_int_all", "hyperdel_int_all", "hypodel_int_all",
+  "coma_int_all",
   "tte_death_30", "event_death_30",     ## Time to death within 30 days
   "tte_death_90", "event_death_90",     ## Time to death within 90 days
   "tte_icudis_90", "ftype_icudis_90",   ## Time to final, succ. ICU discharge
@@ -1713,6 +1721,20 @@ spark_del <- create_spark(
   "del_int_all",
   # vbreaks = seq(-1, 14, 1),
   spark_id = "spark-del",
+  spark_width = 50
+)
+
+spark_hyperdel <- create_spark(
+  "hyperdel_int_all",
+  # vbreaks = seq(-1, 14, 1),
+  spark_id = "spark-hyperdel",
+  spark_width = 50
+)
+
+spark_hypodel <- create_spark(
+  "hypodel_int_all",
+  # vbreaks = seq(-1, 14, 1),
+  spark_id = "spark-hypodel",
   spark_width = 50
 )
 
@@ -1946,47 +1968,54 @@ This section includes analyses for the entire randomized cohort, with no potenti
 
 ```{r mental_outcomes_prep}
 ## -- Info and text strings for % of days that had to be imputed ---------------
-## How many days are missing status which should have it?
-miss_mental <- sum(
-  is.na(
-    subset(
-      daily_int_df,
-      study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
-    )$mental_status_raw
-  )
-)
-days_inhosp <- nrow(
-  subset(
-    daily_int_df,
-    study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
-  )
-)
-days_all <- nrow(subset(daily_int_df, study_day < 14))
-
-## Caption to include on all mental status charts
-days_miss_caption <- glue(
-  "\n\nAmong in-hospital days, ",
-  "{rndformat((miss_mental / days_inhosp) * 100, 0)}%",
-  " had insufficient CAM and/or RASS available to determine mental",
-  " status;\n",
-  "among all days in the intervention period (including those after death or",
-  " discharge), this percentage is ",
-  "{rndformat((miss_mental / days_all) * 100, 0)}%."
-)
-
-## What % of in-hospital days had to be imputed?
-pct_imputed_ih <-
-  with(subset(daily_int_df, study_status %in% c("Intervention", "Withdrawn")), {
-    round(mean(is.na(mental_status_raw)) * 100)
-  })
-
-## Text string for each section of mental status outcomes
-mental_imp_text <- glue(
-  "***Note**: We use single imputation to reduce potential bias from the ",
-  "{pct_imputed_ih}% of patient-days during the intervention period without ",
-  " sufficient RASS and/or CAM information to determine mental status. Please ",
-  " see [Notes on Variable Calculation](#dcfds) for further rationale.*"
-)
+# ## How many assessments are missing status which should have it?
+# miss_mental <- sum(
+#   is.na(
+#     subset(
+#       padasmts_int_df,
+#       study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
+#     )$braindys_raw
+#   )
+# )
+# asmts_inhosp <- nrow(
+#   subset(
+#     padasmts_int_df,
+#     study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
+#   )
+# )
+# 
+# ## How many *days* in the hospital have no status?
+# asmts_day_inhosp <- padasmts_int_df %>%
+#   filter(study_day < 14 & study_status %in% c("Intervention", "Withdrawn")) %>%
+#   group_by(id, redcap_event_name) %>%
+#   summarise(asmts_avail_raw = sum(!is.na(braindys_raw))) %>%
+#   ungroup() %>%
+#   mutate(has_asmt_raw = asmts_avail_raw > 0)
+# 
+# ## Caption to include on all mental status charts
+# asmts_miss_caption <- glue(
+#   "\n\nAmong assessments on in-hospital days, ",
+#   "{rndformat((miss_mental / days_inhosp) * 100, 0)}%",
+#   " had insufficient CAM and/or RASS available to determine mental",
+#   " status;\n",
+#   "among all days in the intervention period (including those after death or",
+#   " discharge), this percentage is ",
+#   "{rndformat((miss_mental / days_all) * 100, 0)}%."
+# )
+# 
+# ## What % of in-hospital days had to be imputed?
+# pct_imputed_ih <-
+#   with(subset(daily_int_df, study_status %in% c("Intervention", "Withdrawn")), {
+#     round(mean(is.na(mental_status_raw)) * 100)
+#   })
+# 
+# ## Text string for each section of mental status outcomes
+# mental_imp_text <- glue(
+#   "***Note**: We use single imputation to reduce potential bias from the ",
+#   "{pct_imputed_ih}% of patient-days during the intervention period without ",
+#   " sufficient RASS and/or CAM information to determine mental status. Please ",
+#   " see [Notes on Variable Calculation](#dcfds) for further rationale.*"
+# )
 
 ## -- Setup for Liu & Shepherd's functions to calculate conditional median, ----
 ## -- CI for POLR models (see chunk orm_functions) -----------------------------
@@ -2043,8 +2072,6 @@ get_adjvals <- function(
 ```
 
 ## Delirium/Coma-Free Days
-
-`r mental_imp_text`
 
 ### Unadjusted Analysis
 
@@ -2216,8 +2243,6 @@ It is included as a way to help elucidate any association between treatment and
 our blunt primary outcome of DCFDs, which incorporates delirium and coma
 durations as well as death.
 
-`r mental_imp_text`
-
 ### Unadjusted Analysis
 
 Due to the non-normal distribution of delirium duration `r spark_del`, our
@@ -2364,8 +2389,6 @@ short duration and appear to have better outcomes than they actually do. It is
 included as a way to help elucidate any association between treatment and our
 blunt primary outcome of DCFDs, which incorporates delirium and coma durations
 as well as death.
-
-`r mental_imp_text`
 
 ### Unadjusted Analysis
 
@@ -3579,21 +3602,120 @@ We determined mental status for a given *assessment* using the following criteri
 
 Patients could have multiple assessments on a given study day. On a given *day*, a patient was considered delirious if any assessment was considered delirious; comatose if no assessments met criteria for delirium and at least one was considered comatose; and normal if no assessments met criteria for delirium or coma, and at least one was considered normal.
 
-<!-- ### Handling Missing Data -->
+### Handling Missing Data
 
-<!-- Among all consented patients, `r sum(is.na(daily_all_df$mental_status_raw))` (`r round(mean(is.na(daily_all_df$mental_status_raw)) * 100)`%) in-hospital patient-days have insufficient information to determine mental status (due to missing data or study withdrawal). -->
+Despite the best efforts of our coordinators, we had a small amount of missing
+data on the assessment and daily level. The following table describes the amount
+of missingness by assessment and by day, for both all in-hospital days
+*(pre-randomization, intervention, post-intervention, among all consented
+patients)* and all in-hospital days during the intervention period among
+randomized patients only *(the period during which all our mental status
+outcomes are calculated)*.
 
-<!-- Among randomized patients during the intervention period, `r sum(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw))` (`r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`%) of patient-days have missing mental status, again due either to missing data or study withdrawal. -->
+```{r missing_mental}
+## -- Among all consented patients, how many assessments are missing? ----------
+n_asmts_ih_total <- nrow(padasmts_df)
+n_asmts_ih_miss_rc <- with(padasmts_df, sum(is.na(rass_raw) | is.na(cam_raw)))
+n_asmts_ih_miss_ronly <-
+  with(padasmts_df, sum(is.na(rass_raw) & !is.na(cam_raw)))
+n_asmts_ih_miss_conly <-
+  with(padasmts_df, sum(!is.na(rass_raw) & is.na(cam_raw)))
+n_asmts_ih_miss_both <-
+  with(padasmts_df, sum(is.na(rass_raw) & is.na(cam_raw)))
 
-<!-- Mental status can change quickly; therefore simple imputation methods like last observation carried forward could be inaccurate. Since we are fortunate to have strong covariate data, we performed single imputation using polytomous logistic regression, including the following variables as covariates in the imputation. -->
+## How many days are missing all assessments?
+n_days_ih_total <- nrow(
+  unique(subset(padasmts_df, select = c(id, redcap_event_name)))
+)
+n_days_ih_missrc <- nrow(
+  padasmts_df %>%
+    mutate(miss_rc = is.na(rass_raw) | is.na(cam_raw)) %>%
+    group_by(id, redcap_event_name) %>%
+    summarise(has_rc = sum(!miss_rc)) %>%
+    ungroup() %>%
+    filter(has_rc == 0)
+)
 
-<!-- - **Baseline**: Age at consent; gender; BMI; education; level of proficiency in English; insurance; home antipsychotic use; Charlson comorbidities index; CSHA Clinical Frailty Score; APACHE II APS -->
-<!-- - **Daily**: -->
-<!--     - Medications (clonazepam, dexmedetomidine, propofol, remifentanil, antipsychotics, benzodiazepines, opioids [IV and PO], antibiotics, anxiolytics, statins) -->
-<!--     - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin) -->
-<!--     - Any mental status data available the day of, the day before, and the day after the missing day -->
+## Restrict assessments to only intervention period, before day 14; this is
+## period DCFDs is calculated over
+pad_int_df <- daily_int_df %>%
+  filter(intervention & study_status %in% c("Intervention", "Withdrawn")) %>%
+  dplyr::select(id, redcap_event_name, study_day, study_status) %>%
+  left_join(padasmts_df, by = c("id", "redcap_event_name"))
 
-<!-- All summary variables (delirium/coma-free days, delirium duration, and coma duration) are presented using imputed mental status. -->
+n_asmts_int_total <- nrow(pad_int_df)
+n_asmts_int_miss_rc <- with(pad_int_df, sum(is.na(rass_raw) | is.na(cam_raw)))
+n_asmts_int_miss_ronly <-
+  with(pad_int_df, sum(is.na(rass_raw) & !is.na(cam_raw)))
+n_asmts_int_miss_conly <-
+  with(pad_int_df, sum(!is.na(rass_raw) & is.na(cam_raw)))
+n_asmts_int_miss_both <-
+  with(pad_int_df, sum(is.na(rass_raw) & is.na(cam_raw)))
+
+## How many days are missing all assessments?
+n_days_int_total <- nrow(
+  unique(subset(pad_int_df, select = c(id, redcap_event_name)))
+)
+n_days_int_missrc <- nrow(
+  pad_int_df %>%
+    mutate(miss_rc = is.na(rass_raw) | is.na(cam_raw)) %>%
+    group_by(id, redcap_event_name) %>%
+    summarise(has_rc = sum(!miss_rc)) %>%
+    ungroup() %>%
+    filter(has_rc == 0)
+)
+
+## -- Make a table -------------------------------------------------------------
+missing_mental <- tribble(
+  ~ rowlabel,             ~ n_ih,                ~ n_int,
+  "Assessments Possible", n_asmts_ih_total,      n_asmts_int_total,
+  "RASS *or* CAM",        n_asmts_ih_miss_rc,    n_asmts_int_miss_rc,
+  "Only RASS",            n_asmts_ih_miss_ronly, n_asmts_int_miss_ronly,
+  "Only CAM",             n_asmts_ih_miss_conly, n_asmts_int_miss_conly,
+  "RASS + CAM",           n_asmts_ih_miss_both,  n_asmts_int_miss_both,
+  "Days Possible",        n_days_ih_total,       n_days_int_total,
+  "Days with no non-missing assessment", n_days_ih_missrc, n_days_int_missrc
+) %>%
+  mutate(
+    d_ih = c(
+      NA, n_asmts_ih_total, rep(n_asmts_ih_miss_rc, 3), NA, n_days_ih_total
+    ),
+    d_int = c(
+      NA, n_asmts_int_total, rep(n_asmts_int_miss_rc, 3), NA, n_days_int_total
+    ),
+    npct_ih = ifelse(is.na(d_ih), as.character(n_ih), get_npct(n_ih, d_ih)),
+    npct_int = ifelse(is.na(d_int), as.character(n_int), get_npct(n_int, d_int))
+  )
+
+missing_mental %>%
+  dplyr::select(rowlabel, npct_ih, npct_int) %>%
+  kable(
+    format = "html",
+    align = c("l", "r", "r"),
+    col.names = c(
+      "",
+      "All In-Hospital Days",
+      "In-Hospital, Randomized, Intervention Phase"
+    )
+  ) %>%
+  group_rows("Assessments missing...", 2, 5) %>%
+  mykablestyle()
+
+```
+
+Mental status can change quickly; therefore simple imputation methods like last observation carried forward could be inaccurate. Since we are fortunate to have strong covariate data, we performed single imputation to impute individual missing RASS and CAM scores, including the following variables as covariates in
+the imputation. We used predictive mean matching and polytomous logistic
+regression as the imputation methods, respectively, within R's `mice` package.
+
+- **Baseline**: Age at consent; gender; BMI; education; level of proficiency in English; insurance; home antipsychotic use; Charlson comorbidities index; CSHA Clinical Frailty Score; APACHE II APS
+- **Daily**:
+    - Medications (clonazepam, dexmedetomidine, propofol, remifentanil, antipsychotics, benzodiazepines, opioids [IV and PO], antibiotics, anxiolytics, statins)
+    - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin)
+    - Any mental status data available the day of, the day before, and the day after the missing day
+    
+After any missing RASS and CAM values were imputed, we then determined all mental statuses (whether patients were comatose, delirious, hyperactively delirious, and hypoactively delirious) based on these imputed values.
+
+All summary variables (delirium/coma-free days, delirium duration, and coma duration) are presented using imputed mental status.
 
 # Software Details{#software}
 
