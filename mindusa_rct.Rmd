@@ -3598,7 +3598,7 @@ or death, if that time is less than 48 hours. (In other words, if a patient was 
 
 "Liberation from mechanical ventilation" indicates the first discontinuation of either type of MV which was followed by at least 48 hours alive without reinitiation of MV.
 
-## Delirium/Coma-Free Days{#dcfds}
+## Delirium/Coma-Free Days (+ Other Mental Status Variables){#dcfds}
 
 This primary outcome variable is calculated over the 14 days including and immediately following randomization. It is defined as days alive and without brain dysfunction.
 
@@ -3608,7 +3608,13 @@ We determined mental status for a given *assessment* using the following criteri
 
 1. **Comatose**: RASS -4 or -5, **or** RASS missing and CAM Unable to Assess
 1. **Delirious**: RASS missing or >= -3, and CAM Positive
+    - Hyperactive delirium: Delirium with RASS +1 or higher
+    - Hypoactive delirium: Delirium with RASS 0 or lower
 1. **Normal**: RASS missing or >= -3, and CAM Negative
+
+If the patient's RASS was -3 or higher, but the CAM was marked Unable to Assess,
+this information was marked as conflicting and the assessment was considered to
+be missing.
 
 Patients could have multiple assessments on a given study day. On a given *day*, a patient was considered delirious if any assessment was considered delirious; comatose if no assessments met criteria for delirium and at least one was considered comatose; and normal if no assessments met criteria for delirium or coma, and at least one was considered normal.
 
@@ -3684,7 +3690,7 @@ missing_mental <- tribble(
   "Only CAM",             n_asmts_ih_miss_conly, n_asmts_int_miss_conly,
   "RASS + CAM",           n_asmts_ih_miss_both,  n_asmts_int_miss_both,
   "Days Possible",        n_days_ih_total,       n_days_int_total,
-  "Days with no non-missing assessment", n_days_ih_missrc, n_days_int_missrc
+  "Days with All Assessments Missing", n_days_ih_missrc, n_days_int_missrc
 ) %>%
   mutate(
     d_ih = c(
@@ -3723,7 +3729,8 @@ regression as the imputation methods, respectively, within R's `mice` package.
     - Variables indicating severity of illness (CV SOFA, creatinine, urine output, platelets, lowest recorded RASS, Glasgow Coma Scale, P/F ratio, S/F ratio, bilirubin)
     - Any mental status data available the day of, the day before, and the day after the missing day
     
-After any missing RASS and CAM values were imputed, we then determined all mental statuses (whether patients were comatose, delirious, hyperactively delirious, and hypoactively delirious) based on these imputed values.
+After any missing RASS and CAM values were imputed, we then determined all mental statuses (whether patients were comatose, delirious, hyperactively delirious, and hypoactively delirious) based on these imputed values and the
+algorithm noted above.
 
 All summary variables (delirium/coma-free days, delirium duration, and coma duration) are presented using imputed mental status.
 
