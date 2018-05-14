@@ -466,6 +466,13 @@ Our study design was such that a substantial number of patients gave consent to 
 
 Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
 
+In both baseline tables, "surgical patients" met one or more of the following
+criteria:
+
+1. Recorded primary ICU admission reason involving "surgery"
+2. Emergency or elective surgery between hospital admission and ICU admission
+3. Went to the OR between ICU admission and study enrollment
+
 ### Demographic & ICU Admission Characteristics, All **Consented** Patients
 
 **Note on the AUDIT:** This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
@@ -508,6 +515,7 @@ label(ptsummary_all_df2$audit_total_ph_partial) <-
   "AUDIT total score; incomplete questions considered normal"
 label(ptsummary_all_df2$frailty_f) <- "CSHA Clinical Frailty Score"
 label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
+label(ptsummary_all_df2$med_surg) <- "Patient type"
 label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission (imputed data)"
 label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
 label(ptsummary_all_df2$sofa_imp_consent) <- "SOFA on day of consent (imputed data)"
@@ -515,7 +523,7 @@ label(ptsummary_all_df2$cv_sofa_consent) <- "Cardiovascular SOFA on day of conse
 label(ptsummary_all_df2$apache_adm) <- "APACHE II at ICU admission"
 
 ## Formula we'll use for both demographic/admission tables
-admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + apache_adm + sofa_adm + cv_sofa_adm_f + sofa_imp_consent + cv_sofa_consent"
+admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + med_surg + apache_adm + sofa_adm + cv_sofa_adm_f + sofa_imp_consent + cv_sofa_consent"
 
 my_html(
   summaryM(as.formula(paste(admit_formula_lhs, "randomized_f", sep = " ~ ")),
