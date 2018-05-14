@@ -17,10 +17,18 @@ $(document).ready(function(){
 });
 </script>
 
-The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522).
+The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in both the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522) and on
+the [Open Science Framework](https://osf.io/mq38r/), which houses the full
+statistical analysis plan and links to code for data management and analysis.
 
-```{r setup, results = "hide", warning = FALSE}
+```{r setup, results = "hide", warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+suppressPackageStartupMessages(library(checkpoint))
+
+## Set checkpoint: Packages on CRAN as of May 14, 2018 (Github-only packages
+## also installed on this date)
+checkpoint("2018-05-14")
 
 suppressPackageStartupMessages(library(knitr))
 suppressPackageStartupMessages(library(dplyr))
@@ -1956,7 +1964,11 @@ devtools::session_info()$packages %>%
 
 ```
 
-This RMarkdown file **will, upon final analysis prior to submission**, include a [`checkpoint()`](https://cran.r-project.org/web/packages/checkpoint/vignettes/checkpoint.html) call setting the date to the date final primary analysis was run. That date will be specified here.
+In addition, we use the [`checkpoint`](https://cran.r-project.org/package=checkpoint) package for
+**reproducibility**. This package downloaded R package versions on CRAN as of
+May 14, 2018, and will use these versions going forward, regardless of future
+software updates. (The `ggthemr` and `JTHelpers` packages, solely housed on
+Github, were also installed in this directory on the same date.)
 
 # Primary Analysis
 
