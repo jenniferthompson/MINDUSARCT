@@ -120,6 +120,12 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
     if(mod$sformula[[2]] == "del_int_all"){
       base_pct <- 1.1
       outcome <- "Delirium Duration"
+    } else if(mod$sformula[[2]] == "hyperdel_int_all"){
+      base_pct <- 1.0
+      outcome <- "Duration of Hyperactive Delirium"
+    } else if(mod$sformula[[2]] == "hypodel_int_all"){
+      base_pct <- 1.0
+      outcome <- "Duration of Hypoactive Delirium"
     } else{
       base_pct <- 1.2
       outcome <- "Coma Duration"
