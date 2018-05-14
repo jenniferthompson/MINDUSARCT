@@ -867,13 +867,13 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
 rand_table %>%
   kable(
     format = "html",
-    col.names = c("", LETTERS[1:3]),
+    col.names = c("", names(rand_table)[2:ncol(rand_table)]),
     align = c("l", rep("r", 3))
   ) %>%
   mykablestyle %>%
-  group_rows("Randomized Patients", 2, 10) %>%
-  group_rows("Reasons Study Drug Temporarily Held", 11, 18) %>%
-  group_rows("Reasons Study Drug Permanently Discontinued", 19, 27)
+  group_rows("Randomized Patients", 2, 11) %>%
+  group_rows("Reasons Study Drug Temporarily Held", 12, 19) %>%
+  group_rows("Reasons Study Drug Permanently Discontinued", 20, 27)
 
 ```
 
