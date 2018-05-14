@@ -308,15 +308,15 @@ last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
 
 ### Note on ITT Population
 
-When the treatment blind was broken, we discovered that `r with(ptstatus_df, sum(rand_list & !randomized))` patients who never met criteria for randomization
-had been assigned a treatment group that was never enacted. This assignment was
-done in the pharmacy only, with no study drug ever sent, no intervention done,
-and no outcomes tracked for these patients. Because these patients never met
-randomization criteria, they were never intended to be randomized or treated by
-site coordinators, and thus had no outcomes data tracked. They are included in
-the "Ineligible for Randomization" group below and are *not* included in the
-intent-to-treat population. The `r with(ptsummary_df, sum(randomized & !ever_studydrug))` patients who were randomized but never received a dose of
-study drug *are* included in the ITT population.
+When the treatment blind was broken, we found that `r with(ptstatus_df, sum(rand_list & !randomized))` patients who never met criteria for randomization
+were assigned a treatment group by the investigational pharmacy, unbeknownst to study and/or treatment teams, who considered the patients disqualified for
+appropriate reasons documented in the database. This assignment was done in the
+pharmacy only, with no study drug ever sent, no intervention done, and no
+outcomes tracked for these patients. Because these patients never met
+randomization criteria, they were never considered to be randomized or treated by site coordinators; as disqualified patients, they had no outcomes data tracked after the date of disqualification, and no study drug was given. They are included in the "Ineligible for Randomization" group below and are *not*
+included in the intent-to-treat population.
+
+The `r with(ptsummary_df, sum(randomized & !ever_studydrug))` patients who were randomized but never received a dose of study drug *are* included in the ITT population.
 
 ```{r print_screen_table}
 screen_table %>%
@@ -850,7 +850,7 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "npct_held_refuseteam"    ~ "Medical team refusal",
       table_row == "npct_permdc_ae"          ~ "Adverse event",
       table_row == "npct_permdc_coma"        ~ "Coma due to structural brain damage",
-      table_row == "npct_permdc_nms"         ~ "NMS",
+      table_row == "npct_permdc_nms"         ~ "Suspected NMS",
       table_row == "npct_permdc_other"       ~ "Other reason",
       table_row == "npct_permdc_react"       ~ "DRESS",
       table_row == "npct_permdc_refuseptfam" ~ "Patient/family refusal",
@@ -1273,13 +1273,11 @@ n_rand_nms_int <- sum_na(ptsummary_df$ever_nms_int)
 
 ### Torsades de Pointes
 
-All suspected cases of Torsades de pointes were rapidly reported to the DSMB for
-the final determination of existence.
-
 During the intervention phase, `r sum_na(ptsummary_df$ever_torsades_any_int)` randomized patients experienced confirmed Torsades de pointes. Both instances
-were recorded as adverse events in the category of "Torsades, clinical outcome";
-descriptions of both events are included below, with potentially identifying
-details redacted.
+were rapidly reported to the DSMB as "Torsades, clinical outcome"; descriptions
+of both events are included below, with potentially identifying details
+redacted. While both events were within the study drug period, neither patient
+was on study drug at the time of the event, and neither event was considered to be related to study drug.
 
 ```{r torsades}
 torsades_df %>%
@@ -1321,13 +1319,13 @@ order to be eligible for any of these on a given day, the patient had to have
 been in the ICU all 24 hours.**
 
 - *Awakening* (SAT)
-    - Eligible if: On mechanical ventilation, and not off unit when staff
-    attempted SAT
+    - Eligible if: On invasive mechanical ventilation, and not off unit when
+    staff attempted SAT
     - Compliant if: Received an SAT, or did not receive an SAT for a reason
     besides "other"
 - *Breathing* (SBT)
-    - Eligible if: On mechanical ventilation, and not off unit when staff
-    attempted SBT
+    - Eligible if: On invasive mechanical ventilation, and not off unit when
+    staff attempted SBT
     - Compliant if: Received an SBT, or did not receive an SBT for a reason
     besides "other"
 - *Coordination* (Coordination of SAT and SBT)
