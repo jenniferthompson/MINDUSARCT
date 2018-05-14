@@ -1929,7 +1929,11 @@ treatment and the following variables:
 - Age at consent
 - Severity of illness, measured by modified SOFA on the day of randomization
 - Pre-existing cognitive impairment, measured by IQCODE at consent
-- Medical vs surgical patient as defined by... `waiting on definition from PP, AM`
+- Medical vs surgical patient as defined by meeting at least one of the
+following criteria:
+    - Recorded primary ICU admission reason involving "surgery"
+    - Emergency or elective surgery between hospital admission and ICU admission
+    - Went to the OR between ICU admission and study enrollment
 
 ## Missing Data
 
@@ -2331,7 +2335,7 @@ for further details.
 ```{r del_assume}
 JTHelpers::rms_po_assume(
   del_mod_lrm,
-  cuts = seq(2, 7, 1),
+  cuts = seq(2, 11, 1),
    ## Minimum value anyone should have is 1; start at >=2. Distribution after
    ## 7 is very sparse; no real reason to look, since it would be very noisy.
   modelData = model_df
@@ -2397,6 +2401,289 @@ comparison between two specific values of the covariate, as noted in the table.
 
 ```{r del_full_results, warning = FALSE}
 rms_results_kable(del_mod_lrm)
+
+```
+
+## Duration of **Hyperactive** Delirium
+
+In addition to *any* delirium, we are interested in any differential association
+between treatment and either hypoactive or hyperactive delirium. Here, we look
+at treatment vs hyperactive delirium, defined as delirium with a RASS > 0.
+
+### Unadjusted Analysis
+
+Due to the non-normal distribution of hyperactive delirium duration `r spark_hyperdel`, our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of this outcome between the three
+treatment groups. Please see [the Methods section](#unadjusted) for more
+details. All `r n_rand` randomized patients are included.
+
+`[insert general summary of results here]`
+
+```{r hyperdel_unadj, results = "hide"}
+## -- Test duration by treatment group -----------------------------------------
+hyperdel_kw <- with(model_df, kruskal.test(x = hyperdel_int_all, g = trt))
+
+## -- Plot by treatment group; include K-W results as subtitle -----------------
+hyperdel_plot <- mental_plot(
+  xvar = "hyperdel_int_all",
+  xtitle = "Duration of Hyperactive Delirium",
+  kw_obj = hyperdel_kw
+)
+
+```
+
+```{r print_hyperdel_unadj, fig.width = 7.5, fig.height = 4}
+hyperdel_plot
+
+```
+
+### Adjusted Analysis
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+##### Model Fitting
+
+We use proportional odds logistic regression to look at the association between
+treatment and duration of hyperactive during the intervention period, adjusting
+for baseline patient characteristics. Please see [the Methods section](#adjusted) for more details. All `r n_rand_comp` randomized patients
+with complete covariate data are included.
+
+```{r hyperdel_adj}
+hyperdel_mod <- orm(
+  as.formula(paste("hyperdel_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+hyperdel_mod_lrm <- lrm(
+  as.formula(paste("hyperdel_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+```
+
+##### Assumptions
+
+We are looking for fairly flat lines, paying particular attention to panels
+representing treatment groups. Please see the [Methods section](#assumptions)
+for further details.
+
+```{r hyperdel_assume}
+JTHelpers::rms_po_assume(
+  hyperdel_mod_lrm,
+  cuts = seq(1, 4, 1),
+   ## Distribution after 4 days is very sparse; no real reason to look, since it
+   ## would be very noisy.
+  modelData = model_df
+) +
+  labs(title = "PO assumption for duration of hyperactive delirium") +
+  theme(axis.text = element_text(size = 8))
+
+```
+
+#### Model Results {.tabset}
+
+We show the odds ratios (using placebo as reference) and adjusted medians for
+delirium duration by treatment group. All results are shown visually, with
+tables included for exact numbers if desired.
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Adjusted Odds Ratios
+
+Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
+with delirium.
+
+```{r hyperdel_ors, fig.width = 5, fig.height = 3}
+## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
+hyperdel_ors <- trt_ratios(mod = hyperdel_mod)
+
+hyperdel_ors_plot <- plot_trt_ratios(
+  ratio_df = hyperdel_ors,
+  "Duration of Hyperactive Delirium",
+  mod = hyperdel_mod
+)
+
+hyperdel_ors_plot
+
+```
+
+
+##### Adjusted Medians
+
+Medians are adjusted to the median/mode values of all covariates, so that each
+represents the expected median number of days with hyperactive delirium for a
+patient in each treatment group who is otherwise part of a "typical" *(many air
+quotes)* population.
+
+```{r hyperdel_medians, fig.width = 5, fig.height = 3}
+## Get adjusted medians + bounds for each treatment group
+hyperdel_adjmeds <- quantile_orm_df(mod = hyperdel_mod)
+
+## Plot medians + CIs
+hyperdel_adjmeds_plot <- mental_medians_plot(hyperdel_adjmeds, hyperdel_mod)
+
+hyperdel_adjmeds_plot
+
+```
+
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single odds
+ratio/CI is insufficient to describe the entire relationship between each of
+these covariates and delirium duration. Rather, each odds ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r hyperdel_full_results, warning = FALSE}
+rms_results_kable(hyperdel_mod_lrm)
+
+```
+
+
+
+
+
+
+
+## Duration of **Hypoactive** Delirium
+
+In addition to *any* delirium, we are interested in any differential association
+between treatment and either hypoactive or hypoactive delirium. Here, we look
+at treatment vs hypoactive delirium, defined as delirium with a RASS > 0.
+
+### Unadjusted Analysis
+
+Due to the non-normal distribution of hypoactive delirium duration `r spark_hypodel`, our primary unadjusted analysis uses a Kruskal-Wallis test to look for any differences in distribution of this outcome between the three
+treatment groups. Please see [the Methods section](#unadjusted) for more
+details. All `r n_rand` randomized patients are included.
+
+`[insert general summary of results here]`
+
+```{r hypodel_unadj, results = "hide"}
+## -- Test duration by treatment group -----------------------------------------
+hypodel_kw <- with(model_df, kruskal.test(x = hypodel_int_all, g = trt))
+
+## -- Plot by treatment group; include K-W results as subtitle -----------------
+hypodel_plot <- mental_plot(
+  xvar = "hypodel_int_all",
+  xtitle = "Duration of Hypoactive Delirium",
+  kw_obj = hypodel_kw
+)
+
+```
+
+```{r print_hypodel_unadj, fig.width = 7.5, fig.height = 4}
+hypodel_plot
+
+```
+
+### Adjusted Analysis
+
+`[insert general summary of results here]`
+
+#### Model Fitting and Assumptions {.tabset}
+
+##### Model Fitting
+
+We use proportional odds logistic regression to look at the association between
+treatment and duration of hypoactive delirium during the intervention period,
+adjusting for baseline patient characteristics. Please see [the Methods section](#adjusted) for more details. All `r n_rand_comp` randomized patients
+with complete covariate data are included.
+
+```{r hypodel_adj}
+hypodel_mod <- orm(
+  as.formula(paste("hypodel_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+hypodel_mod_lrm <- lrm(
+  as.formula(paste("hypodel_int_all ~", mod_rhs)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+```
+
+##### Assumptions
+
+We are looking for fairly flat lines, paying particular attention to panels
+representing treatment groups. Please see the [Methods section](#assumptions)
+for further details.
+
+```{r hypodel_assume}
+JTHelpers::rms_po_assume(
+  hypodel_mod_lrm,
+  cuts = seq(2, 11, 1),
+  modelData = model_df
+) +
+  labs(title = "PO assumption for duration of hypoactive delirium") +
+  theme(axis.text = element_text(size = 8))
+
+```
+
+#### Model Results {.tabset}
+
+We show the odds ratios (using placebo as reference) and adjusted medians for
+duration of hypoactive delirium by treatment group. All results are shown
+visually, with tables included for exact numbers if desired.
+
+TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
+
+##### Adjusted Odds Ratios
+
+Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
+with delirium.
+
+```{r hypodel_ors, fig.width = 5, fig.height = 3}
+## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
+hypodel_ors <- trt_ratios(mod = hypodel_mod)
+
+hypodel_ors_plot <- plot_trt_ratios(
+  ratio_df = hypodel_ors,
+  "Duration of Hypoactive Delirium",
+  mod = hypodel_mod
+)
+
+hypodel_ors_plot
+
+```
+
+##### Adjusted Medians
+
+Medians are adjusted to the median/mode values of all covariates, so that each
+represents the expected median number of days with hypoactive delirium for a
+patient in each treatment group who is otherwise part of a "typical" *(many air
+quotes)* population.
+
+```{r hypodel_medians, fig.width = 5, fig.height = 3}
+## Get adjusted medians + bounds for each treatment group
+hypodel_adjmeds <- quantile_orm_df(mod = hypodel_mod)
+
+## Plot medians + CIs
+hypodel_adjmeds_plot <- mental_medians_plot(hypodel_adjmeds, hypodel_mod)
+
+hypodel_adjmeds_plot
+
+```
+
+##### Results for All Covariates
+
+Since most of the continuous covariates are modeled using restricted cubic
+splines (see the [Methods section](#covariates) for more details), a single odds
+ratio/CI is insufficient to describe the entire relationship between each of
+these covariates and delirium duration. Rather, each odds ratio reflects a
+comparison between two specific values of the covariate, as noted in the table.
+
+```{r hypodel_full_results, warning = FALSE}
+rms_results_kable(hypodel_mod_lrm)
 
 ```
 
