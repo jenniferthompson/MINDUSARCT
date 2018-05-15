@@ -489,8 +489,8 @@ hr_example <- function(hr_df, outcome){
       "For example, an HR of {rndformat(effect)} for {comp.c} vs placebo ",
       "indicates that, on average, patients in the {comp.c} group have a ",
       "{round(pct_change, 0)}% {direction} relative {hr_type} of {outcome} ",
-      "vs patients in the {ref.c} group, given that they remain alive and in ",
-      "the ICU."
+      "vs patients in the {ref.c} group, given that they have not yet ",
+      "experienced the outcome of interest."
     ) %>%
     set_names(hr_df %>% pull(comp.c))
 }
