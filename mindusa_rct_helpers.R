@@ -151,7 +151,7 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
   p <- ggplot(data = df, aes(y = quantile, x = forcats::fct_rev(trt))) +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
-      shape = 16, size = 1, colour = as.character(palette_colors["dred"])
+      shape = 16, size = 0.8, colour = as.character(palette_colors["dred"])
     ) +
     scale_y_continuous(limits = c(0, xmax), breaks = seq(0, xmax, 2)) +
     labs(
