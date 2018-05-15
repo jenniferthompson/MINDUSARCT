@@ -1,6 +1,7 @@
 ---
 title: "Primary In-Hospital Outcomes Analysis of the MIND-USA Clinical Trial"
 author: "Jennifer L Thompson, MPH; Supervisor: Rameela Chandrasekhar, PhD"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
   html_document:
     theme: flatly
@@ -281,8 +282,8 @@ screen_table <- screen_ns %>%
       status == "excluded_later" ~ "Excluded after consent (details below)",
       status == "disqualified"   ~ "Ineligible for randomization",
       status == "randomized"     ~ "Randomized to study drug",
-      status == "rand_mv"        ~ "Mechanical ventilation",
-      status == "rand_nippv"     ~ "Non-invasive positive pressure ventilation (NIPPV)",
+      status == "rand_mv"        ~ "Invasive mechanical ventilation",
+      status == "rand_nippv"     ~ "Non-invasive positive pressure ventilation",
       status == "rand_shock"     ~ "Requiring treatment for shock",
       status == "dq_nodel"       ~ "No delirium in 5 days after consent",
       status == "dq_icudc"       ~ "ICU discharge prior to delirium",
@@ -314,7 +315,7 @@ last_month <- screening_months %>% slice(n()) %>% pull(monthyr)
 
 `r table_nums("screening", display = "cite")` presents patient flow information for the `r format_comma(sum_na(ptstatus_df$screened))` patients who were screened with 72 hours of meeting inclusion criteria. Screening took place between `r first_month` and `r last_month`.
 
-### Note on ITT Population
+#### Note on Intent To Treat Population
 
 When the treatment blind was broken, we found that `r with(ptstatus_df, sum(rand_list & !randomized))` patients who never met criteria for randomization
 were assigned a treatment group by the investigational pharmacy, unbeknownst to study and/or treatment teams, who considered the patients disqualified for
@@ -462,9 +463,9 @@ ptstatus_df %>%
 
 Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
 
-## Randomized vs Non-Randomized Patients
+## Notes on Baseline Tables
 
-Since no further information was collected on patients who were unable to be randomized, we can only describe demographic and ICU admission characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
+#### Medical vs Surgical Patients
 
 In both baseline tables, "surgical patients" met one or more of the following
 criteria:
@@ -473,9 +474,17 @@ criteria:
 2. Emergency or elective surgery between hospital admission and ICU admission
 3. Went to the OR between ICU admission and study enrollment
 
-### Demographic & ICU Admission Characteristics, All **Consented** Patients
+#### AUDIT Questionnaire
 
-**Note on the AUDIT:** This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
+This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
+
+## Randomized vs Non-Randomized Patients
+
+Since no information after study disqualification was collected on patients who
+were not randomized, we can only describe demographic and ICU admission
+characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
+
+### Demographic & ICU Admission Characteristics, All **Consented** Patients
 
 ```{r baseline_all}
 ## Do things to make the table pretty: Factor version of rand. indicator, labels
@@ -572,8 +581,7 @@ ptsummary_all_df %>%
 
 ### Intervention Period Characteristics by Treatment Group
 
-Unless otherwise specified, quantities in this table reflect the 14 days
-including and following randomization (the "study period"). Additional notes:
+Unless otherwise specified, quantities in this table reflect the **14 days including and following randomization** (the “study period”). Additional notes:
 
 - "Liberation from mechanical ventilation" variables apply only to patients who
 were on either type of MV when randomized, or were placed on MV within the 24
@@ -636,17 +644,17 @@ label(inhosp_desc_df$sofa_imp_rand) <-
   "SOFA on day of randomization (imputed data)"
 label(inhosp_desc_df$cv_sofa_rand) <-
   "Cardiovascular SOFA on day of randomization"
-label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type)"
+label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type), entire hospitalization"
 label(inhosp_desc_df$days_mv_exp) <-
-  "Days on mechanical ventilation (either type)"
-label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type)"
-label(inhosp_desc_df$int_num) <- "Number of intubations"
-label(inhosp_desc_df$noninv_num) <- "Times NIPPV initiated"
+  "Days on mechanical ventilation (either type), entire hospitalization"
+label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type), entire hospitalization"
+label(inhosp_desc_df$int_num) <- "Number of intubations, entire hospitalization"
+label(inhosp_desc_df$noninv_num) <- "Times NIPPV initiated, entire hospitalization"
 label(inhosp_desc_df$on_mv_rand24) <- "On MV at or within 24h of randomization"
 label(inhosp_desc_df$ever_mvlib_rand24) <-
   "Ever successfully liberated from MV at randomization"
 label(inhosp_desc_df$daysto_mvlib_exp) <-
-  "Days to successful liberation from MV"
+  "Days to successful liberation from MV, entire hospitalization"
 label(inhosp_desc_df$sepsis) <-
   "Met criteria for sepsis on or before Intervention Day 18"
 label(inhosp_desc_df$stroke) <- "Had a stroke during hospitalization"
@@ -744,11 +752,21 @@ In both tables, quantities are represented as either `N (%)` or as `median [25th
 
 ## Intervention by Patient
 
-`[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING]`
+Patients were approximately equally randomized to the three treatment groups, with each group receiving study drug approximately the same number of days and times.
 
-Patients were approximately equally randomized to the three treatment groups, with each group receiving study drug approximately the same number of days and times. Rates of temporary hold and permanent discontinuation were equivalent among all treatment groups.
+Among patients with study drug temporarily held, the most common reasons were oversedation and "other." Study drug was most often permanently discontinued by
+request of the patient, family, or medical team.
 
-Among patients with study drug temporarily held, the most common reasons were oversedation and "other." Study drug was most often discontinued by request of the patient, family, or medical team.
+There is a somewhat higher proportion of patients in the ziprasidone group who
+*ever* had study drug held, although the number of doses of study drug given
+ended up being similar between groups. More patients in the placebo group had
+drug held due to oversedation and "other" reasons. Compared to the placebo and
+haloperidol groups, a slightly higher proportion of patients randomized to
+ziprasidone ever had drug held due to prolonged QTc (~5%), and about 9% more
+had drug held at some point due to medical team refusal.
+
+Though one patient had study drug discontinued due to suspected NMS, there were
+no *confirmed* cases after investigation by the DSMB.
 
 ```{r prep_rand_table}
 randtable_df <- rand_df %>%
@@ -896,18 +914,30 @@ rand_table %>%
 ## Intervention by Dose
 
 `r table_nums("intervention_dose", display = "cite")` describes the `r format(nrow(doses_df), big.mark = ",")` doses of study drug attempted during the
-course of the study, generally two doses per day that the patient remained alive
-and in the ICU. This includes doses where drug was held, temporarily or
-permanently. Study staff continued to document dose opportunities after
-permanent discontinuation; therefore, patients could have >1 dose in that category in this table.
+course of the study - generally two doses per day that the patient remained
+alive and in the ICU. This includes doses where drug was held, temporarily or
+permanently, for adverse clinical reasons; it does not include instances where
+study drug was not administered due to resolution of delirium or patient
+unavailability (including ICU discharge, death, study withdrawal, being off the floor, or being placed on comfort care measures/hospice).
 
-`[PLACEHOLDER TEXT TILL WE GET REAL TREATMENT GROUPS, ASSUMING TREATMENT MEANS NOTHING]`
+> Study staff continued to document dose opportunities after permanent
+discontinuation; therefore, patients could have >1 dose in that category in this
+table. Note, however, that it is probably more helpful to look at reasons for
+permanent discontinuation by *patient* (previous table) rather than by
+individual doses. (For example, 24 doses in the placebo group were held due to
+coma due to structural brain damage, but these doses all came from three
+patients; similarly, the 22 doses discontinued for suspected NMS all came from
+one patient.)
 
-About 75% of doses were successfully given in each of the three treatment groups, with rates of study drug hold and discontinuation approximately equal between groups. Pre-dose QTcs were also roughly equivalent between the three groups.
+Nearly all randomized patients received at least one dose of study drug. Two patients had study drug held due to either oversedation or prolonged QTc during
+their remaining ICU stay, and never received a dose of study drug.
 
-Oversedation was the most common reason for temporary hold by far; actual RASSes at the time of dose administration are listed in `r table_nums("intervention_dose", display = "cite")`. Refusal (patient, family, or medical team) was the most common reason for permanent discontinuation.
+About 75% of doses were successfully given in each of the three treatment groups. Pre-dose QTcs were also roughly equivalent between the three groups.
 
-Though study drug was held or discontinued due to suspected NMS, there were no *confirmed* cases after investigation by the DSMB.
+Oversedation was the most common reason for temporary hold by far, and was slightly more common in the placebo group, while slightly more doses in the
+ziprasidone group were held due to prolonged QTc. Rates of medical team refusal
+were similar between the three groups. Study drug hold due to other safety
+concerns (adverse events, dystonia, EPS, NMS, DRESS) was very rare.
 
 ```{r prep_dose_table}
 ## How many total doses in each treatment group?
@@ -1092,7 +1122,7 @@ dose_table <- doses_df %>%
 dose_table %>%
   kable(
     format = "html",
-    col.names = c("", LETTERS[1:3]),
+    col.names = c("", names(dose_table)[2:ncol(dose_table)]),
     align = c("l", rep("r", 3))
   ) %>%
   mykablestyle %>%
@@ -1106,9 +1136,8 @@ dose_table %>%
 
 ## "Other" Reasons for Hold & Discontinuation
 
-Explanations for study drug held (`r table_nums("dose_held_other", display = "cite")`) and discontinued (`r table_nums("dose_permdc_other", display = "cite")`) for "other" reasons are listed in the tables below. To save space, these tables are collapsed; click on `Details` to see them. (These explanations are taken directly from our database; potentially identifiable information,
-including dates, times and parenthetical details, have been redacted to preserve
-patient privacy.)
+Explanations for study drug held (`r table_nums("dose_held_other", display = "cite")`) and discontinued (`r table_nums("dose_permdc_other", display = "cite")`) for "other" reasons are listed in the tables below. (To save space, these tables are collapsed. These explanations are taken directly from our database; potentially identifiable information, including dates, times and
+parenthetical details, have been redacted to preserve patient privacy.)
 
 ```{r prep_dose_other}
 other_held_table <- doses_df %>%
@@ -1155,44 +1184,68 @@ other_permdc_table %>%
 
 ## Protocol Noncompliance
 
-We summarize below any protocol noncompliance that increased safety risk to the patient, broken down according to a simple categorization scheme followed prospectively during the conduct of the MIND-USA investigation. During the entire study, there were `r nrow(noncompliance_df)` events which met these criteria, among `r length(unique(noncompliance_df$id))` unique patients.
+We summarize below any protocol noncompliance that increased safety risk to the patient, broken down according to a simple categorization scheme followed prospectively during the conduct of the MIND-USA investigation. During the entire study, there were `r nrow(noncompliance_df)` events which met these criteria, among `r length(unique(noncompliance_df$id))` unique patients. Nearly all events were lack of completion/documentation of study assessments, study
+drug titration which did not follow the protocol, or "other." Study drug
+titration noncompliance happened most frequently in the haloperidol and
+ziprasidone groups; study assessment noncompliance happened most frequently in
+the placebo group.
 
 ```{r noncompliance}
 ## -- Summarize protocol noncompliance: N (%) in each category -----------------
 ## Variables indicating categories for noncompliance
 noncomp_cats <- str_subset(names(noncompliance_df), "^ntf\\_cat\\_")
 
+## Set treatment group to "Not randomized" for noncompliance events among
+## patients consented but disqualified
+noncompliance_df <- noncompliance_df %>%
+  mutate(trt = ifelse(is.na(trt), "Not randomized", trt))
+
 ## How many noncompliance events in each treatment group?
-noncomp_trt <- c(
-  map_int(levels(rand_df$trt), ~ sum_na(noncompliance_df$trt == .) ),
-  sum(is.na(noncompliance_df$trt))
-) %>%
-  set_names(c(levels(rand_df$trt), "Not randomized"))
+noncomp_bytrt <- noncompliance_df %>%
+  count(trt)
+noncomp_trt <- noncomp_bytrt %>%
+  pull(n) %>%
+  set_names(pull(noncomp_bytrt, "trt"))
 
 ## Create final data frame with N, % of each noncompliance category
 noncomp_npct <- noncompliance_df %>%
-  mutate(trt = ifelse(is.na(trt), "Not randomized", as.character(trt))) %>%
+  dplyr::select(trt, one_of(noncomp_cats)) %>%
   group_by(trt) %>%
-  summarise_at(vars(noncomp_cats), sum_na) %>%
+  summarise_all(sum_na) %>%
   ungroup() %>%
   gather(key = ntf_cat, value = cat_n, -trt) %>%
   spread(key = trt, value = cat_n) %>%
-  mutate(Overall = rowSums(.[, 2:ncol(.)])) %>%
+  bind_rows(noncomp_trt, .) %>%
+  mutate(Overall = rowSums(.[, 1:(ncol(.) - 1)])) %>%
   ## Sort in order of overall total
   arrange(desc(Overall)) %>%
   ## Get percentages for each column in a hack-y sort of way; I really want
   ## modify2 to exist but it does not
   mutate(
-    Haloperidol =
-      get_npct(num = Haloperidol, denom = pluck(noncomp_trt, "Haloperidol")),
-    Ziprasidone =
-      get_npct(num = Ziprasidone, denom = pluck(noncomp_trt, "Ziprasidone")),
-    Placebo = get_npct(num = Placebo, denom = pluck(noncomp_trt, "Placebo")),
-    `Not randomized` = get_npct(
-      num = `Not randomized`, denom = pluck(noncomp_trt, "Not randomized")
+    Haloperidol = ifelse(
+      is.na(ntf_cat), as.character(Haloperidol),
+      get_npct(num = Haloperidol, denom = pluck(noncomp_trt, "Haloperidol"))
     ),
-    Overall = get_npct(num = Overall, denom = nrow(noncompliance_df)),
+    Ziprasidone =ifelse(
+      is.na(ntf_cat), as.character(Ziprasidone),
+      get_npct(num = Ziprasidone, denom = pluck(noncomp_trt, "Ziprasidone"))
+    ),
+    Placebo = ifelse(
+      is.na(ntf_cat), as.character(Placebo),
+      get_npct(num = Placebo, denom = pluck(noncomp_trt, "Placebo"))
+    ),
+    `Not randomized` = ifelse(
+      is.na(ntf_cat), as.character(`Not randomized`),
+      get_npct(
+      num = `Not randomized`, denom = pluck(noncomp_trt, "Not randomized")
+      )
+    ),
+    Overall = ifelse(
+      is.na(ntf_cat), as.character(Overall),
+      get_npct(num = Overall, denom = nrow(noncompliance_df))
+    ),
     ntf_cat = case_when(
+      is.na(ntf_cat) ~ "All noncompliance events",
       ntf_cat == "ntf_cat_other" ~ "Other category",
       ntf_cat == "ntf_cat_asmt" ~
         "Study assessment not completed, not documented",
@@ -1206,7 +1259,7 @@ noncomp_npct <- noncompliance_df %>%
     )
   ) %>%
   dplyr::select(
-    ntf_cat, Haloperidol, Ziprasidone, Placebo, `Not randomized`, Overall
+    ntf_cat, Placebo, Haloperidol, Ziprasidone, `Not randomized`, Overall
   )
 
 ```
@@ -1217,7 +1270,7 @@ noncomp_npct %>%
     format = "html",
     col.names = c(
       "Category of noncompliance",
-      "Haloperidol", "Ziprasidone", "Placebo",
+      "Placebo", "Haloperidol", "Ziprasidone",
       "Not Randomized", "All Events"
     ),
     align = c("l", rep("r", 5))
@@ -1234,7 +1287,7 @@ NTF explanations has been redacted.
 ## Helper function to replace TRUE with given string, FALSE with ""
 replace_true <- function(x, rep_str){ ifelse(x, rep_str, "") }
 
-noncomp_details <- noncompliance_df %>%
+noncompliance_df %>%
   ## Replace T/F indicators for individual categories with text strings, then
   ## combine into a single column for easier printing
   mutate(
@@ -1250,9 +1303,9 @@ noncomp_details <- noncompliance_df %>%
   unite(col = ntf_categories, noncomp_cats, sep = "; ") %>%
   mutate(ntf_categories = str_replace_all(ntf_categories, "(; )+", "; ") %>%
            str_remove_all("^; ") %>% str_remove_all("; $")) %>%
-  dplyr::select(id, trt, ntf_categories, ntf_explain) %>%
+  dplyr::select(trt, ntf_categories, ntf_explain) %>%
   DT::datatable(
-    colnames = c("ID", "Treatment", "Noncompliance Categories", "Explanation"),
+    colnames = c("Treatment", "Noncompliance Categories", "Explanation"),
     filter = "top",
     options = list(
       pageLength = 2,
@@ -1297,10 +1350,10 @@ was on study drug at the time of the event, and neither event was considered to 
 
 ```{r torsades}
 torsades_df %>%
-  dplyr::select(-ae_serious) %>% ## Torsades always serious, redundant
+  dplyr::select(-id, -ae_serious) %>% ## Torsades always serious, redundant
   kable(
     format = "html",
-    col.names = c("ID", "Trt", "Study Phase", "Description")
+    col.names = c("Trt", "Study Phase", "Description")
   ) %>%
   mykablestyle()
 
@@ -1314,13 +1367,12 @@ To describe and determine the presence of extrapyramidal symptoms (EPS), we used
 ptsummary_df %>%
   filter(ever_eps_int) %>%
   dplyr::select(
-    id, trt, days_eps_int, eps_score_mean_exp_int, ever_held_eps, times_held_eps
+    trt, days_eps_int, eps_score_mean_exp_int, ever_held_eps, times_held_eps
   ) %>%
   kable(
     format = "html",
     col.names = c(
-      "ID", "Trt", "Days met EPS criteria",
-      "Overall EPS Score when Criteria Met",
+      "Trt", "Days met EPS criteria", "Overall EPS Score when Criteria Met",
       "Study drug held for EPS?", "Doses held for EPS"
     )
   ) %>%
