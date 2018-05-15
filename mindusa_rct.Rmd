@@ -2928,7 +2928,7 @@ for differences among treatment groups in time to death within 30 and within 90
 days of randomization using the log-rank test. All `r n_rand` randomized
 patients are included.
 
-`[insert general summary of results here]`
+We see no association between treatment group and death at either 30 or 90 days.
 
 ```{r death_unadj}
 ## -- Create Surv, survfit objects for time to death ---------------------------
@@ -2966,7 +2966,10 @@ km_death_90
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for all baseline covariates, we again see no significant association between treatment and time to death within 30 days. We also see no
+significant association between treatment and time to death within 90 days;
+the confidence interval for haloperidol vs placebo does come quite close to
+significance for this time point, which could be worth further investigation.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -3059,8 +3062,6 @@ ratios **lower** than 1 are favorable, indicating lower likelihood of death at
 any given time point within 30 days of randomization, given that the patient has
 survived up to that point. `r death_30_text[["Haloperidol"]]`
 
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
-
 ###### 30-Day Death
 
 ```{r death_30_hrs_plot, fig.width = 5, fig.height = 3}
@@ -3142,7 +3143,8 @@ and death, unadjusted for any covariates. Please see the [Methods
 section](#unadjusted) for more details. All `r n_rand` randomized patients are
 included.
 
-`[insert general summary of results here]`
+We see no association between treatment and time to either ICU discharge or
+the competing risk of death.
 
 ```{r cuminc_icudis_unadj, warning = FALSE, fig.height = 6, fig.width = 8}
 ## -- Create Surv object -------------------------------------------------------
@@ -3154,6 +3156,10 @@ icudis_90_Surv <- with(model_df, {
 ## -- Create and summarize survfit object, create N at risk table --------------
 icudis_90_survfit <- survfit(icudis_90_Surv ~ trt, data = model_df)
 icudis_90_sfsum <- summary(icudis_90_survfit, times = seq(0, 90, 15))
+
+# ## Double-check placebo
+# icudis_90_sfsum_detailed <- summary(icudis_90_survfit, times = seq(0, 90, 1))
+# summary(subset(model_df, trt == "Placebo")$tte_icudis_90)
 
 icudis_90_risk_plot <- cr_risktable_plot(
   icudis_90_sfsum,
@@ -3196,7 +3202,8 @@ cr_combine_plots(
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for baseline covariates, we still see no significant association
+between treatment and relative incidence of ICU discharge.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -3266,8 +3273,6 @@ icudis_90_text <- hr_example(hr_df = icudis_90_hrs, outcome = "ICU discharge")
 We show the subdistribution hazard ratios for ICU discharge for haloperidol and
 ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
 favorable for this outcome. `r icudis_90_text[["Haloperidol"]]`
-
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Visual Form
 
@@ -3339,7 +3344,8 @@ discharge and death, unadjusted for any covariates. Please see the [Methods
 section](#unadjusted) for more details. All `r n_rand` randomized patients are
 included.
 
-`[insert general summary of results here]`
+We see no association between treatment and time to successful hospital
+discharge.
 
 ```{r cuminc_hospdis_unadj, warning = FALSE, fig.height = 6, fig.width = 8}
 ## -- Create Surv object -------------------------------------------------------
@@ -3393,7 +3399,8 @@ cr_combine_plots(
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for baseline covariates, we still see no significant association
+between treatment and relative incidence of successful hospital discharge.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -3461,8 +3468,6 @@ hospdis_90_text <-
 We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
 favorable for this outcome. `r hospdis_90_text[["Haloperidol"]]`
-
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Visual Form
 
@@ -3534,7 +3539,8 @@ We present cumulative incidence plots by treatment group for both liberation
 from MV and death, unadjusted for any covariates. Please see the [Methods
 section](#unadjusted) for more details. All `r  sum_na(ptsummary_df$on_mv_rand24)` randomized patients who were on MV within 24 hours after randomization are included.
 
-`[insert general summary of results here]`
+We see no association between treatment and time to successful liberation from
+mechanical ventilation.
 
 ```{r cuminc_mvlib_unadj, warning = FALSE, fig.height = 6, fig.width = 8}
 ## Prep: Smaller df including only patients on MV within 24h of randomization
@@ -3591,7 +3597,8 @@ cr_combine_plots(
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for baseline covariates, we still see no significant association
+between treatment and relative incidence of liberation from MV.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -3709,6 +3716,10 @@ rms_results_kable(mvlib_30_mod)
 ```
 
 ## Time to ICU Readmission
+
+### **----NOTE: THIS OUTCOME IS UNDER CONSTRUCTION----**
+
+> Because only one patient is censored, the math with this outcome is currently funky. Deliberations are underway as to how to handle this statistically. These results are not final.
 
 We use time to event analysis with competing risks to explore the relationship
 between treatment group and readmission to the ICU within 90 days of first
