@@ -1678,7 +1678,7 @@ abcde_table %>%
 
 # Exploration of Missing Data & Potential Redundancy{#exploration}
 
-We examine all outcomes and covariates to determine how much missing data is present. In short, we have no missingness for our outcomes and very little for our covariates; therefore, we will perform complete case analysis only. Expand the `Details` section below for further information.
+We examine all outcomes and covariates to determine how much missing data is present. In short, we have no missingness for our outcomes and very little for our covariates; therefore, we will perform complete case analysis only. Expand below for further information.
 
 ```{r model_prep}
 ## -- Create dataset with only outcomes, covariates ----------------------------
@@ -1740,7 +1740,7 @@ pts_missany <- model_df %>%
   )
 
 ## Set datadist to this data.frame
-dd <- datadist(model_df)
+dd <- datadist(model_df, adjto.cat = "first")
 options(datadist = "dd")
 
 ## -- Create sparklines to show distributions ----------------------------------
@@ -1814,8 +1814,11 @@ spark_coma <- create_spark(
 ## -- Create model RHS for multiple uses ---------------------------------------
 ## How many knots for continuous covariates? Which ones are continuous?
 rcsknots <- 3
-cont_covars <- c("age_consent", "charlson_total", "frailty", "sofa_mod_imp_rand")
-notcont_covars <- setdiff(covariate_vars, cont_covars)
+cont_covars <- c(
+  "age_consent", "charlson_total", "frailty", "sofa_mod_imp_rand"
+)
+notcont_covars <- c(setdiff(covariate_vars, c(cont_covars, "trt")), "trt")
+ ## always put trt at the end - helpful for working with model.matrix()
 
 mod_rhs <- map_chr(cont_covars, ~ sprintf("rcs(%s, %s)", ., rcsknots)) %>%
   c(., notcont_covars) %>%
@@ -1876,7 +1879,8 @@ Hmisc::redun(
 
 <hr>
 
-Our full, prespecified Statistical Analysis Plan includes more detailed information on database management, data cleaning, study methods, and guiding statistical principles. [Google doc link, temporary; will change to OSF link once registered](https://docs.google.com/document/d/1BtivVYbGOlNiCtRMoiKvVQAp-_RW7wUhcsDzywWPh-k/edit?ts=5abfef33#heading=h.cup0kvg921mo)
+Our full, prespecified Statistical Analysis Plan includes more detailed information on database management, data cleaning, study methods, and guiding statistical principles. The current version is stored on the [Open Science
+Framework](https://osf.io/gkb6u/).
 
 ## Unadjusted Analysis{#unadjusted}
 
@@ -1895,16 +1899,23 @@ of a non-normal distribution.
 We describe and test for differences in time to death using Kaplan-Meier curves
 and the log-rank test, respectively.
 
-Our other time-to-event outcomes, ICU and hospital discharge and liberation from
-mechanical ventilation, have a competing risk of death, meaning that patients
-who die do not have the opportunity to experience the outcome. Traditional
-survival analysis assumes that that the reason for censoring is independent of
-the outcome; here, that is not the case. Kaplan-Meier curves would be misleading
-in these scenarios, because they do not take this "competing risk" into account.
+Our other time-to-event outcomes (ICU and hospital discharge, liberation from
+mechanical ventilation, and ICU readmission), have a competing risk of death,
+with an additional competing risk of hospital discharge for the latter two. This means that patients who experience death (or discharge) do not have the
+opportunity to experience the outcome of interest. Traditional survival analysis
+assumes that that the reason for censoring is independent of the outcome; here,
+that is not the case. Kaplan-Meier curves would be misleading in these
+scenarios, because they do not take these "competing risks" into account.
 Therefore, we describe together the cumulative incidences of both the outcome of
-interest and death, along with score tests for the difference between groups in
-the subdistribution of interest. Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients who withdrew in the hospital with no discharge or death information available are censored at the time of withdrawal; we censor at x.01 days anyone who has experienced neither death nor the outcome of interest by x days, where x is the time frame for the
-specified outcome. More details on censoring are provided with each analysis.
+interest and death (and discharge, if applicable), along with score tests for
+the difference between groups in the subdistribution of interest.
+
+Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))`
+patients who withdrew in the hospital with no discharge or death information
+available are censored at the time of withdrawal; we censor at `x.01` days
+anyone who has experienced neither outcome of interest nor the competing risks
+by `x` days, where `x` is the time frame for the specified outcome. More details
+on censoring are provided with each analysis.
 
 ## Adjusted Analysis{#adjusted}
 
@@ -1937,10 +1948,11 @@ event outcomes (ICU and hospital discharge and liberation from mechanical
 ventilation), we use competing risks regression[^fg], treating death as our
 competing risk. Generally, the `r with(ptsummary_df, sum(studywd_ih == "Yes" & hospdis_noinfo))` patients who withdrew in the hospital with no discharge or
 death information available are censored at the time of withdrawal; we censor at
-x.01 days anyone who has experienced neither death nor the outcome of interest
-by x days, where x is the time frame in question (14 days for liberation from
-mechanical ventilation; 90 days for ICU and hospital discharge). More details on
-censoring are provided with each analysis.
+`x.01` days anyone who has experienced neither death nor the outcome of interest
+by `x` days, where `x` is the time frame in question (30 days for liberation
+from mechanical ventilation; 90 days for ICU and hospital discharge and ICU
+readmission; both time points for mortality). More details on censoring are
+provided with each analysis.
 
 [^fg]: Fine, J., & Gray, R. (1999). A Proportional Hazards Model for the Subdistribution of a Competing Risk. *Journal of the American Statistical Association*, 94(446), 496-509. doi:10.2307/2670170
 
@@ -1967,21 +1979,28 @@ addition to treatment group:
 - Preexisting frailty, via the CSHA Clinical Frailty Score
 - Preexisting comorbidities, via the Charlson Comorbidities Index
 - SOFA on the day of randomization, excluding the CNS component
-- Level of arousal at randomization, via the RASS closest to the time of randomization
+- Level of arousal at randomization, via the RASS closest to the time of randomization. Categorized as:
+    - Deeply sedated (RASS -3)
+    - Lightly sedated (RASS -2 or -1)
+    - Normal (RASS 0)
+    - Agitated (RASS > 0)
 
-Age, CFS, and Charlson are all allowed to have a nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distribution of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) has too little variability to allow this flexibility.
+Age, CFS, Charlson, and modified SOFA at randomization are all allowed to have a
+nonlinear relationship with our outcome, using restricted cubic splines with `r rcsknots` knots. The distribution of IQCODE `r spark_iqcode` (`r rndformat(mean_na(model_df$iqcode_total_ph == 3) * 100, 0)`% of patients had a score of exactly 3) has too little variability to allow this flexibility. (Level
+of arousal and treatment are both categorical covariates, and thus nonlinearity
+does not apply.)
 
 ## Effect Modification
 
 We are interested in whether any association between treatment group and our
-main outcomes is modified by several factors. In secondary analyses, we include
-interaction (or cross-product) terms in our multivariable models between
-treatment and the following variables:
+main outcomes is modified by several factors. In secondary analyses `(NOTE: THIS IS STILL TO BE ADDED)`, we will include interaction (or cross-product) terms in
+our multivariable models between treatment and the following variables:
 
 - Age at consent
 - Severity of illness, measured by modified SOFA on the day of randomization
 - Pre-existing cognitive impairment, measured by IQCODE at consent
-- Medical vs surgical patient as defined by meeting at least one of the
+- Sepsis at randomization, as defined by... [probably something similar to this JAMA paper](https://jamanetwork.com/journals/jama/fullarticle/2654187)
+- Medical vs surgical patient, as defined by meeting at least one of the
 following criteria:
     - Recorded primary ICU admission reason involving "surgery"
     - Emergency or elective surgery between hospital admission and ICU admission
@@ -2001,8 +2020,8 @@ further rationale and details.
 
 ## Software Summary
 
-We used `r R.version$version.string` for all analyses. Full package details can
-be found [below](#software); specific packages used for major components include:
+We used `r R.version$version.string` for all analyses and data management. Full
+package details can be found [below](#software); specific packages used for major components include:
 
 ```{r main_pkgs}
 ## Join table indicating purposes for major packages we want to highlight
@@ -2028,6 +2047,9 @@ devtools::session_info()$packages %>%
 
 ```
 
+We also used R for all data management. Links to all R code for both data
+management and this analysis can be found on the [Open Science Framework](https://osf.io/mq38r/).
+
 In addition, we use the [`checkpoint`](https://cran.r-project.org/package=checkpoint) package for
 **reproducibility**. This package downloaded R package versions on CRAN as of
 May 14, 2018, and will use these versions going forward, regardless of future
@@ -2041,56 +2063,6 @@ This section includes analyses for the entire randomized cohort, with no potenti
 <hr>
 
 ```{r mental_outcomes_prep}
-## -- Info and text strings for % of days that had to be imputed ---------------
-# ## How many assessments are missing status which should have it?
-# miss_mental <- sum(
-#   is.na(
-#     subset(
-#       padasmts_int_df,
-#       study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
-#     )$braindys_raw
-#   )
-# )
-# asmts_inhosp <- nrow(
-#   subset(
-#     padasmts_int_df,
-#     study_day < 14 & study_status %in% c("Intervention", "Withdrawn")
-#   )
-# )
-# 
-# ## How many *days* in the hospital have no status?
-# asmts_day_inhosp <- padasmts_int_df %>%
-#   filter(study_day < 14 & study_status %in% c("Intervention", "Withdrawn")) %>%
-#   group_by(id, redcap_event_name) %>%
-#   summarise(asmts_avail_raw = sum(!is.na(braindys_raw))) %>%
-#   ungroup() %>%
-#   mutate(has_asmt_raw = asmts_avail_raw > 0)
-# 
-# ## Caption to include on all mental status charts
-# asmts_miss_caption <- glue(
-#   "\n\nAmong assessments on in-hospital days, ",
-#   "{rndformat((miss_mental / days_inhosp) * 100, 0)}%",
-#   " had insufficient CAM and/or RASS available to determine mental",
-#   " status;\n",
-#   "among all days in the intervention period (including those after death or",
-#   " discharge), this percentage is ",
-#   "{rndformat((miss_mental / days_all) * 100, 0)}%."
-# )
-# 
-# ## What % of in-hospital days had to be imputed?
-# pct_imputed_ih <-
-#   with(subset(daily_int_df, study_status %in% c("Intervention", "Withdrawn")), {
-#     round(mean(is.na(mental_status_raw)) * 100)
-#   })
-# 
-# ## Text string for each section of mental status outcomes
-# mental_imp_text <- glue(
-#   "***Note**: We use single imputation to reduce potential bias from the ",
-#   "{pct_imputed_ih}% of patient-days during the intervention period without ",
-#   " sufficient RASS and/or CAM information to determine mental status. Please ",
-#   " see [Notes on Variable Calculation](#dcfds) for further rationale.*"
-# )
-
 ## -- Setup for Liu & Shepherd's functions to calculate conditional median, ----
 ## -- CI for POLR models (see chunk orm_functions) -----------------------------
 
@@ -2155,7 +2127,14 @@ distribution of this outcome between the three treatment groups. Please see [the
 Methods section](#unadjusted) for more details. All `r n_rand` randomized
 patients are included.
 
-`[insert general summary of results here]`
+We see no association between treatment group and DCFDs. 
+
+```{r dcfds_describe}
+label(inhosp_desc_df$dcfd_int) <- "Days alive, free of delirium & coma"
+my_html(summaryM(dcfd_int ~ trt, data = inhosp_desc_df, test = TRUE),
+        caption = "DCFDs")
+
+```
 
 ```{r dcfds_unadj, results = "hide"}
 ## -- Test DCFDs by treatment group --------------------------------------------
@@ -2175,7 +2154,9 @@ dcfd_plot
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for all baseline covariates, we again see no significant
+association between treatment and days alive and free of delirium and coma
+during the intervention period.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -2231,8 +2212,6 @@ We show the odds ratios (using placebo as reference) and adjusted medians for
 DCFDs by treatment group. All results are shown visually, with tables included
 for exact numbers if desired.
 
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
-
 ##### Adjusted Odds Ratios
 
 Odds ratios **higher** than 1 are favorable, indicating higher odds of more
@@ -2260,11 +2239,22 @@ pred_df <- rep(list(pred_df_org), length(levels(model_df$trt))) %>%
     as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
     .
   ) %>%
+  ## Could not get the contrasts argument to give me placebo as reference.
+  ## Wrangle this thing by hand.
   as.data.frame() %>%
-  dplyr::select(-1) %>%
+  dplyr::select(-1, -starts_with("trt")) %>%
+  bind_cols(as.data.frame(contr.treatment(levels(model_df$trt), base = 1))) %>%
   ## colnames must be the same as names(coef(model))
   ## We're using the same covariates for all models, so we can just use one
-  set_names(str_subset(names(coef(dcfd_mod)), "^[^y>=]"))
+  set_names(
+    c(
+      str_subset(
+        str_subset(names(coef(dcfd_mod)), "^[^y>=]"),
+        "^[^trt=]"
+      ),
+      paste0("trt=", c("Haloperidol", "Ziprasidone"))
+    )
+  )
 
 ## -- Calculate, plot odds ratios for both treatments vs placebo ---------------
 dcfd_ors <- trt_ratios(mod = dcfd_mod)
@@ -2325,7 +2315,15 @@ differences in distribution of this outcome between the three treatment groups.
 Please see [the Methods section](#unadjusted) for more details. All `r n_rand`
 randomized patients are included.
 
-`[insert general summary of results here]`
+We see no association between treatment and days of delirium during the
+intervention period.
+
+```{r del_describe}
+label(inhosp_desc_df$del_int_all) <- "Days of delirium"
+my_html(summaryM(del_int_all ~ trt, data = inhosp_desc_df, test = TRUE),
+        caption = "Days of Delirium")
+
+```
 
 ```{r del_unadj, results = "hide"}
 ## -- Test delirium duration by treatment group --------------------------------
@@ -2345,7 +2343,8 @@ del_plot
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for all baseline covariates, we again see no significant association between treatment and days of delirium during the intervention
+period.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -2403,8 +2402,6 @@ We show the odds ratios (using placebo as reference) and adjusted medians for
 delirium duration by treatment group. All results are shown visually, with
 tables included for exact numbers if desired.
 
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
-
 ##### Adjusted Odds Ratios
 
 Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
@@ -2423,7 +2420,6 @@ del_ors_plot <- plot_trt_ratios(
 del_ors_plot
 
 ```
-
 
 ##### Adjusted Medians
 
@@ -2468,7 +2464,19 @@ Due to the non-normal distribution of hyperactive delirium duration `r spark_hyp
 treatment groups. Please see [the Methods section](#unadjusted) for more
 details. All `r n_rand` randomized patients are included.
 
-`[insert general summary of results here]`
+We see no association between treatment and days of hyperactive delirium during
+the intervention period.
+
+```{r hyperdel_describe}
+label(inhosp_desc_df$hyperdel_int_all) <- "Days of hyperactive delirium"
+my_html(
+  summaryM(
+    hyperdel_int_all ~ trt, data = inhosp_desc_df, test = TRUE, continuous = 5
+  ),
+  caption = "Days of Hyperactive Delirium"
+)
+
+```
 
 ```{r hyperdel_unadj, results = "hide"}
 ## -- Test duration by treatment group -----------------------------------------
@@ -2490,15 +2498,16 @@ hyperdel_plot
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for all baseline covariates, we again see no significant association between treatment and days of hyperactive delirium during the
+intervention period.
 
 #### Model Fitting and Assumptions {.tabset}
 
 ##### Model Fitting
 
 We use proportional odds logistic regression to look at the association between
-treatment and duration of hyperactive during the intervention period, adjusting
-for baseline patient characteristics. Please see [the Methods section](#adjusted) for more details. All `r n_rand_comp` randomized patients
+treatment and duration of hyperactive delirium during the intervention period,
+adjusting for baseline patient characteristics. Please see [the Methods section](#adjusted) for more details. All `r n_rand_comp` randomized patients
 with complete covariate data are included.
 
 ```{r hyperdel_adj}
@@ -2542,9 +2551,7 @@ JTHelpers::rms_po_assume(
 We show the odds ratios (using placebo as reference) and adjusted medians for
 delirium duration by treatment group. All results are shown visually, with
 tables included for exact numbers if desired.
-
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
-
+  
 ##### Adjusted Odds Ratios
 
 Odds ratios **lower** than 1 are favorable, indicating lower odds of more days
@@ -2563,7 +2570,6 @@ hyperdel_ors_plot <- plot_trt_ratios(
 hyperdel_ors_plot
 
 ```
-
 
 ##### Adjusted Medians
 
@@ -2596,17 +2602,11 @@ rms_results_kable(hyperdel_mod_lrm)
 
 ```
 
-
-
-
-
-
-
 ## Duration of **Hypoactive** Delirium
 
 In addition to *any* delirium, we are interested in any differential association
 between treatment and either hypoactive or hypoactive delirium. Here, we look
-at treatment vs hypoactive delirium, defined as delirium with a RASS > 0.
+at treatment vs hypoactive delirium, defined as delirium with a RASS <= 0.
 
 ### Unadjusted Analysis
 
@@ -2614,7 +2614,15 @@ Due to the non-normal distribution of hypoactive delirium duration `r spark_hypo
 treatment groups. Please see [the Methods section](#unadjusted) for more
 details. All `r n_rand` randomized patients are included.
 
-`[insert general summary of results here]`
+We see no association between treatment group and days of hypoactive delirium
+during the intervention period.
+
+```{r hypodel_describe}
+label(inhosp_desc_df$hypodel_int_all) <- "Days of hypoactive delirium"
+my_html(summaryM(hypodel_int_all ~ trt, data = inhosp_desc_df, test = TRUE),
+        caption = "Days of Hypoactive Delirium")
+
+```
 
 ```{r hypodel_unadj, results = "hide"}
 ## -- Test duration by treatment group -----------------------------------------
@@ -2636,7 +2644,8 @@ hypodel_plot
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for all baseline covariates, we again see no significant association between treatment and days of hypoactive delirium during the
+intervention period.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -2686,8 +2695,6 @@ JTHelpers::rms_po_assume(
 We show the odds ratios (using placebo as reference) and adjusted medians for
 duration of hypoactive delirium by treatment group. All results are shown
 visually, with tables included for exact numbers if desired.
-
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Adjusted Odds Ratios
 
@@ -2755,7 +2762,15 @@ differences in distribution of this outcome between the three treatment groups.
 Please see [the Methods section](#unadjusted) for more details. All `r n_rand`
 randomized patients are included.
 
-`[insert general summary of results here]`
+We see no association between treatment and days of coma during the intervention
+period.
+
+```{r coma_describe}
+label(inhosp_desc_df$coma_int_all) <- "Days of coma"
+my_html(summaryM(coma_int_all ~ trt, data = inhosp_desc_df, test = TRUE),
+        caption = "Days of Coma")
+
+```
 
 ```{r coma_unadj, results = "hide"}
 ## -- Test coma duration by treatment group ------------------------------------
@@ -2775,7 +2790,7 @@ coma_plot
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+After adjusting for all baseline covariates, we again see no significant association between treatment and days of coma during the intervention period.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -2832,8 +2847,6 @@ JTHelpers::rms_po_assume(
 We show the odds ratios (using placebo as reference) and adjusted medians for
 coma duration by treatment group. All results are shown visually, with tables
 included for exact numbers if desired.
-
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Adjusted Odds Ratios
 
@@ -4085,9 +4098,20 @@ All summary variables (delirium/coma-free days, delirium duration, and coma dura
 
 ---
 
-`r devtools::session_info()$platform$version` was used for all analyses. `r table_nums('package_info', display = 'cite')` shows all add-on packages loaded.
+`r devtools::session_info()$platform$version` was used for all analyses. `r table_nums('package_info', display = 'cite')`, collapsed below, shows all add-on
+packages loaded.
+
+We also used R for all data management. Links to all R code for both data
+management and this analysis can be found on the [Open Science Framework](https://osf.io/mq38r/).
+
+We use the [`checkpoint`](https://cran.r-project.org/package=checkpoint) package
+for **reproducibility**. This package downloaded R package versions on CRAN as
+of May 14, 2018, and will use these versions going forward, regardless of future
+software updates. (The `ggthemr` and `JTHelpers` packages, solely housed on
+Github, were also installed in this directory on the same date.)
 
 <details>
+<summary>R Packages Used for Analysis</summary>
 
 #### `r table_nums('package_info')`
 
