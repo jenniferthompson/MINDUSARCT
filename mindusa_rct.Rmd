@@ -793,7 +793,8 @@ rand_cont <- randtable_df %>%
   summarise_at(
     vars(
       hrs_random_drug, num_drug_days, num_drug_doses, mean_drug_daily_ml,
-      mean_drug_daily_mg
+      mean_drug_daily_mg, max_drug_dose_ml, max_drug_dose_mg,
+      total_drug_dose_ml, total_drug_dose_mg
     ),
     funs(q25, q50, q75, "mean" = mean_na, "sd" = sd_na)
   )
@@ -844,18 +845,36 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
     mean_drug_daily_mg = describe_cont(
       mean_drug_daily_mg_q50, mean_drug_daily_mg_q25, mean_drug_daily_mg_q75,
       mean_drug_daily_mg_mean, mean_drug_daily_mg_sd
+    ),
+    max_drug_dose_ml = describe_cont(
+      max_drug_dose_ml_q50, max_drug_dose_ml_q25, max_drug_dose_ml_q75,
+      max_drug_dose_ml_mean, max_drug_dose_ml_sd
+    ),
+    max_drug_dose_mg = describe_cont(
+      max_drug_dose_mg_q50, max_drug_dose_mg_q25, max_drug_dose_mg_q75,
+      max_drug_dose_mg_mean, max_drug_dose_mg_sd
+    ),
+    total_drug_dose_ml = describe_cont(
+      total_drug_dose_ml_q50, total_drug_dose_ml_q25, total_drug_dose_ml_q75,
+      total_drug_dose_ml_mean, total_drug_dose_ml_sd
+    ),
+    total_drug_dose_mg = describe_cont(
+      total_drug_dose_mg_q50, total_drug_dose_mg_q25, total_drug_dose_mg_q75,
+      total_drug_dose_mg_mean, total_drug_dose_mg_sd
     )
   ) %>%
   ## Remove all NAs (result of placebo group)
-  mutate(
-    mean_drug_daily_mg = ifelse(
-      mean_drug_daily_mg == "NA [NA, NA]\\\n  NaN +/-   NA", "[no values]",
-      mean_drug_daily_mg
+  mutate_at(
+    vars(matches("\\_mg$")),
+    ~ ifelse(
+      str_replace_all(., " +", " ") == "NA [NA, NA]\\\n NaN +/- NA",
+      "[no values]",
+      .
     )
   ) %>%
   dplyr::select(
     trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
-    mean_drug_daily_ml, mean_drug_daily_mg,
+    ends_with("_ml"), ends_with("_mg"),
     npct_held, matches("^npct\\_held\\_"), npct_permdc,
     matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig
   ) %>%
@@ -869,15 +888,19 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "drug_days" ~ 4,
       table_row == "drug_doses" ~ 5,
       table_row == "mean_drug_daily_ml" ~ 6,
-      table_row == "mean_drug_daily_mg" ~ 7,
-      table_row == "npct_held" ~ 8,
-      table_row == "npct_permdc" ~ 9,
-      table_row == "npct_died" ~ 10,
-      table_row == "npct_wd" ~ 11,
-      table_row == "npct_elig" ~ 12,
-      str_detect(table_row, "^npct\\_held\\_") ~ 13,
-      str_detect(table_row, "^npct\\_permdc\\_") ~ 14,
-      TRUE ~ 15),
+      table_row == "max_drug_dose_ml" ~ 7,
+      table_row == "total_drug_dose_ml" ~ 8,
+      table_row == "mean_drug_daily_mg" ~ 9,
+      table_row == "max_drug_dose_mg" ~ 10,
+      table_row == "total_drug_dose_mg" ~ 11,
+      table_row == "npct_held" ~ 12,
+      table_row == "npct_permdc" ~ 13,
+      table_row == "npct_died" ~ 14,
+      table_row == "npct_wd" ~ 15,
+      table_row == "npct_elig" ~ 16,
+      str_detect(table_row, "^npct\\_held\\_") ~ 17,
+      str_detect(table_row, "^npct\\_permdc\\_") ~ 18,
+      TRUE ~ 19),
     table_row = case_when(
       table_row == "randomized"              ~ "Randomized",
       table_row == "npct_studydrug"          ~ "Received >=1 dose study drug",
@@ -886,6 +909,10 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "drug_doses"              ~ "Doses of study drug",
       table_row == "mean_drug_daily_ml"      ~ "Mean daily dose of study drug (mL)",
       table_row == "mean_drug_daily_mg"      ~ "Mean daily dose of study drug (mg)",
+      table_row == "max_drug_dose_ml"        ~ "Maximum daily dose (ml)",
+      table_row == "max_drug_dose_mg"        ~ "Maximum daily dose (mg)",
+      table_row == "total_drug_dose_ml"      ~ "Total drug given (ml)",
+      table_row == "total_drug_dose_mg"      ~ "Total drug given (mg)",
       table_row == "npct_held"               ~ "Ever had study drug temporarily held",
       table_row == "npct_permdc"             ~ "Had study drug permanently discontinued",
       table_row == "npct_died"               ~ "Died in the hospital",
@@ -922,9 +949,9 @@ rand_table %>%
     align = c("l", rep("r", 3))
   ) %>%
   mykablestyle %>%
-  group_rows("Randomized Patients", 2, 12) %>%
-  group_rows("Reasons Study Drug Temporarily Held", 13, 20) %>%
-  group_rows("Reasons Study Drug Permanently Discontinued", 21, 28)
+  group_rows("Randomized Patients", 2, 16) %>%
+  group_rows("Reasons Study Drug Temporarily Held", 17, 24) %>%
+  group_rows("Reasons Study Drug Permanently Discontinued", 25, 32)
 
 ```
 
