@@ -610,6 +610,7 @@ inhosp_vars <- c(
   paste("benzo", medsum_vars, sep = "_"),
   paste("opioid", medsum_vars, sep = "_"),
   paste("propofol", medsum_vars, sep = "_"),
+  paste("dex", medsum_vars, sep = "_"),
   paste("halop", medsum_vars, sep = "_"),
   paste("zipras", medsum_vars, sep = "_"),
   paste("antipsyc", medsum_vars, sep = "_"),
@@ -964,14 +965,8 @@ permanently, for adverse clinical reasons; it does not include instances where
 study drug was not administered due to resolution of delirium or patient
 unavailability (including ICU discharge, death, study withdrawal, being off the floor, or being placed on comfort care measures/hospice).
 
-> Study staff continued to document dose opportunities after permanent
-discontinuation; therefore, patients could have >1 dose in that category in this
-table. Note, however, that it is probably more helpful to look at reasons for
-permanent discontinuation by *patient* (previous table) rather than by
-individual doses. (For example, 24 doses in the placebo group were held due to
-coma due to structural brain damage, but these doses all came from three
-patients; similarly, the 22 doses discontinued for suspected NMS all came from
-one patient.)
+*Study staff sometimes continued to document dose opportunities after permanent
+discontinuation; therefore, describing permanent discontinuation by dose would be misleading, and it is omitted from this table. (For example, 24 doses in the placebo group were held due to coma due to structural brain damage, but these doses all came from three patients; similarly, the 22 doses discontinued for suspected NMS all came from one patient.)*
 
 Nearly all randomized patients received at least one dose of study drug. Two patients had study drug held due to either oversedation or prolonged QTc during
 their remaining ICU stay, and never received a dose of study drug.
@@ -1080,6 +1075,8 @@ dose_table <- doses_df %>%
          permdc_nms:permdc_other) %>%
   gather(key = table_row, value = dose_value, -trt) %>%
   spread(key = trt, value = dose_value) %>%
+  ## Remove permanent discontinuation rows
+  filter(!str_detect(table_row, "^permdc")) %>%
   ## Table formatting
   mutate(
     sort_order = case_when(
@@ -1173,8 +1170,7 @@ dose_table %>%
   group_rows("All Dose Opportunities", 2, 4) %>%
   group_rows("Doses Given", 5, 16) %>%
   group_rows("Doses Temporarily Held", 17, 24) %>%
-  group_rows("Actual RASS for Doses Held due to Oversedation", 25, 30) %>%
-  group_rows("Doses Permanently Discontinued", 31, 38)
+  group_rows("Actual RASS for Doses Held due to Oversedation", 25, 30)
 
 ```
 
