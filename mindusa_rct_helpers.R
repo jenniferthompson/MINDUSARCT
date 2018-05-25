@@ -506,9 +506,17 @@ cuminc_test <- function(cuminc_obj){
   ## Could not figure out how to automate/map this into a bquote() object,
   ##  and I'm sad about it. I know my competing risks will always have two
   ##  events so I'll live.
-  bquote(
-    .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "."
-  )
+  ## These^ are famous last words, since we added the additional competing risk
+  ## of hospital discharge. Hilarious. **At this point** we always have 2 or 3.
+  if(nrow(df) == 2){
+    bquote(
+      .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "."
+    )
+  } else if(nrow(df) == 3){
+    bquote(
+      .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "." ~ .(df$subdist[3]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[3], 2)) * "; df," ~ .(df$df[3]) * "; P," ~ .(formatp(df$pv[3])) * "."
+    )
+  }
   
 }
 
@@ -676,7 +684,8 @@ cif_plot <- function(
           legend.justification = c(0, 1),
           legend.text.align = 0,
           legend.background = element_blank(),
-          legend.direction = "vertical")
+          legend.direction = "vertical",
+          plot.subtitle = element_text(size = basetext_size * 0.75))
 }
 
 ## Function to combine results of cif_plot, cr_risktable_plot
