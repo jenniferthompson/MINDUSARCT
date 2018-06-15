@@ -173,6 +173,48 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
   return(p)
 }
 
+## Calculate medians, bounds for model with interaction term (effect modifier)
+calc_medians_em <- function(mod, df, em_vals, em_var){
+  quantile_orm_df(
+    mod = mod,
+    new.data = set_names(df, str_subset(names(coef(mod)), "^[^y>=]")),
+    trt_levels = rep(levels(model_df$trt), each = length(em_vals))
+  ) %>%
+    bind_cols(dplyr::select(df, one_of(em_var))) %>%
+    mutate(
+      outcome = as.character(mod$sformula[[2]]),
+      p_int =
+        anova(mod)[paste(em_var, "* trt  (Factor+Higher Order Factors)"), "P"]
+    )
+}
+
+## Plot medians, bounds for mental status outcomes with interaction terms
+## median_df assumed to have cols: quantile, lb, ub, trt, em_text, outcome_text
+mental_medians_plot_em <- function(median_df, em_string){
+  ggplot(data = median_df, aes(y = quantile, x = trt)) +
+    facet_grid(em_text ~ outcome_text) +
+    geom_pointrange(
+      aes(ymin = lb, ymax = ub),
+      colour = as.character(palette_colors["dred"]), size = 0.25
+    ) +
+    scale_y_continuous(
+      breaks = seq(0, 14, 2), name = "Adjusted Median (95% Confidence Interval)"
+    ) +
+    coord_flip() +
+    labs(
+      caption = glue(
+        "Adjusted analysis using proportional odds logistic regression.\n",
+        "P-values for overall {em_string} * treatment interaction."
+      )
+    ) +
+    theme(
+      axis.title.y = element_blank(),
+      panel.spacing.y = unit(0.5, "cm"),
+      strip.text.x = element_text(vjust = 0),
+      plot.caption = element_text(face = "italic")
+    )
+}
+
 ## -- Helper functions for any rms model object --------------------------------
 ## Wrapper for rms_calc_comparisons; adds outcome variable as a column
 ## (Tested on lrm, cph fits)
