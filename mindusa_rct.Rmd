@@ -2033,8 +2033,8 @@ does not apply.)
 ## Effect Modification
 
 We are interested in whether any association between treatment group and our
-main outcomes is modified by several factors. In secondary analyses `(NOTE: THIS IS STILL TO BE ADDED)`, we will include interaction (or cross-product) terms in
-our multivariable models between treatment and the following variables:
+main outcomes is modified by several factors. In secondary analyses, we will include interaction (or cross-product) terms in our multivariable models between
+treatment and the following variables:
 
 - Age at consent
 - Severity of illness, measured by modified SOFA on the day of randomization
@@ -3963,6 +3963,166 @@ comparison between two specific values of the covariate, as noted in the table.
 rms_results_kable(readm_90_mod)
 
 ```
+
+# Effect Modification Analyses
+
+Our goal in this section is to determine whether there is any difference in the
+association between treatment and each outcome depending on any of the following
+baseline factors:
+  
+1. Age at study consent
+1. Severity of illness at randomization, measured by modified SOFA
+1. Preexisting cognitive impairment, measured by IQCODE
+1. Medical vs surgical admission reason
+1. Sepsis at ICU admission
+
+Detailed definitions for each of these potential modifiers of treatment effect will be included with each section.
+
+## Age at Study Consent
+
+```{r em_prep_age}
+## -- Vector of mental outcome variable names ----------------------------------
+mental_outcome_vars <- c(
+  "dcfd_int", "del_int_all", "hyperdel_int_all", "hypodel_int_all",
+  "coma_int_all"
+)
+
+## -- Create model RHS ---------------------------------------------------------
+mod_rhs_age <- map_chr(
+  setdiff(cont_covars, "age_consent"), ~ sprintf("rcs(%s, %s)", ., rcsknots)
+) %>%
+  c(., setdiff(notcont_covars, "trt")) %>%
+  c(., sprintf("rcs(age_consent, %s) * trt", rcsknots)) %>%
+  paste(collapse = " + ")
+
+## -- Create dataset of values to use when calculating conditional medians -----
+## Use same values (median/mode) for everything except treatment and age
+## Applies to all mental status outcomes
+
+## Specify age values
+## Cohort roughly maps to 25th %ile = 50 (51.4), 50th = 60, 75th = 70 (68.7)
+vals_age <- c(50, 60, 70)
+## Determine spline terms for these, based on model_df
+## ** This will need to be changed if we increase to >3 knots **
+age_knots <- rcspline.eval(
+  model_df$age_consent, nk = rcsknots, knots.only = TRUE
+)
+vals_age_rcs <- rcspline.eval(vals_age, knots = age_knots, inclx = TRUE) %>%
+  as.data.frame() %>%
+  set_names(c("age_consent", "age_consent_2"))
+
+## Get matrix of treatment indicators:
+##  Could not get the contrasts argument of model.matrix() to give me placebo
+##  as reference. Create by hand.
+trt_matrix_age <- bind_rows(
+  ## Get treatment indicator values, repeat as needed given vals_age
+  rep(
+    list(as.data.frame(contr.treatment(levels(model_df$trt), base = 1))),
+    nrow(vals_age_rcs)
+  )
+) %>%
+  ## Sort to group all placebo, haloperidol, ziprasidone rows together
+  arrange(Ziprasidone, Haloperidol)
+
+## Replace age columns in pred_df_org with updated age values
+pred_df_age_prep <- pred_df_org %>%
+  dplyr::select(-starts_with("age_consent")) %>%
+  bind_rows(rep(list(.), nrow(vals_age_rcs) - 1)) %>%
+  bind_cols(vals_age_rcs)
+
+## Repeat those values for each treatment
+pred_df_age <- rep(list(pred_df_age_prep), length(levels(model_df$trt))) %>%
+  bind_rows() %>%
+  ## Add treatment levels to dataset
+  bind_cols(trt = rep(levels(model_df$trt), nrow(pred_df_age_prep))) %>%
+  
+  ## Create a model.matrix object, then leave out the intercept
+  ##   model.matrix() handles dummy variables for categoricals nicely
+  model.matrix(
+    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
+    .
+  ) %>%
+  ## Could not get the contrasts argument to give me placebo as reference.
+  ## Wrangle this thing by hand.
+  as.data.frame() %>%
+  ## Remove intercept, original treatment columns
+  dplyr::select(-1, -starts_with("trt")) %>%
+  ## Add my own treatment columns, created above
+  bind_cols(trt_matrix_age) %>%
+  
+  ## Create interaction values
+  mutate(
+    age_halop = age_consent * Haloperidol,
+    age2_halop = age_consent_2 * Haloperidol,
+    age_zipras = age_consent * Ziprasidone,
+    age2_zipras = age_consent_2 * Ziprasidone
+  )
+  
+```
+
+### Mental Status Outcomes
+
+Medians are adjusted to the median/mode values of all covariates except age and
+treatment, so that each represents the expected median number of DCFDs for a
+patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population.
+
+```{r mental_outcomes_age}
+## -- Fit models for each outcome, including age interaction -------------------
+mental_mods_age <- map(
+  mental_outcome_vars,
+  ~ orm(
+    as.formula(paste(., mod_rhs_age, sep = " ~ ")),
+    data = model_df,
+    x = TRUE, y = TRUE
+  ) %>%
+    robcov(cluster = model_df$study_site)
+)
+
+## -- Get adj medians + bounds for each treatment group, outcome; combine ------
+mental_medians_age <- map_dfr(
+  mental_mods_age, calc_medians_em,
+  df = pred_df_age, em_vals = vals_age, em_var = "age_consent"
+) %>%
+  mutate(
+    outcome_string = case_when(
+      outcome == "dcfd_int" ~ "DCFDs",
+      outcome == "del_int_all" ~ "Delirium",
+      outcome == "hyperdel_int_all" ~ "Hyperactive\nDelirium",
+      outcome == "hypodel_int_all" ~ "Hypoactive\nDelirium",
+      outcome == "coma_int_all" ~ "Coma",
+      TRUE ~ "other"
+    ),
+    p_sep = ifelse(p_int < 0.001, "", "= "),
+    outcome_text =
+      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+    outcome_text = fct_shift(factor(outcome_text)),
+    em_text = paste("Age =", age_consent),
+    trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+  )
+
+## Plot medians + CIs
+mental_medplot_age <- mental_medians_plot_em(
+  median_df = mental_medians_age, em_string = "age"
+)
+
+mental_medplot_age
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Notes on Variable Calculation{#varcalc}
 
