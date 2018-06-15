@@ -3709,8 +3709,6 @@ We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
 favorable for this outcome. `r mvlib_30_text[["Haloperidol"]]`
 
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
-
 ##### Visual Form
 
 ```{r mvlib_30_hrs_plot, fig.width = 5, fig.height = 3.5}
@@ -3757,10 +3755,6 @@ rms_results_kable(mvlib_30_mod)
 
 ## Time to ICU Readmission
 
-### **----NOTE: THIS OUTCOME IS UNDER CONSTRUCTION----**
-
-> Because only one patient is censored, the math with this outcome is currently funky. Deliberations are underway as to how to handle this statistically. These results are not final.
-
 We use time to event analysis with competing risks to explore the relationship
 between treatment group and readmission to the ICU within 90 days of first
 discharge during the index hospitalization, among the `r sum_na(ptsummary_df$elig_readm)` patients who survived their first ICU stay and
@@ -3768,7 +3762,7 @@ remained in the study. We treat death and hospital discharge without readmission
 during this time as separate competing risks.
 
 Although the question of how _many_ times each patient was readmitted is also
-of interest, we had so few patients who were readmitted >1 time (`r with(subset(ptsummary_df, elig_readm), sum_na(icu_readmit_number > 1))`, or `with(subset(ptsummary_df, elig_readm), round(mean_na(icu_readmit_number >1) * 100))`%) that it was not feasible to address this specific issue.
+of interest, we had so few patients who were readmitted >1 time (`r with(subset(ptsummary_df, elig_readm), sum_na(icu_readmit_number > 1))`, or `r with(subset(ptsummary_df, elig_readm), round(mean_na(icu_readmit_number > 1) * 100))`%) that it was not feasible to address this specific issue.
 
 **Censoring and time to events:**
 
@@ -3790,7 +3784,9 @@ covariates. Please see the [Methods section](#unadjusted) for more details. All
 `r  sum_na(ptsummary_df$elig_readm)` randomized patients who survived their
 initial ICU admission and remained in the study are included.
 
-`[insert general summary of results here]`
+We see no association between treatment group and rates of ICU readmission
+during the index hospitalization among those patients who were discharged alive
+from their first ICU stay.
 
 ```{r cuminc_readm_unadj, warning = FALSE, fig.height = 6, fig.width = 8}
 ## Prep: Smaller df including only patients who survived first ICU stay
@@ -3847,7 +3843,8 @@ cr_combine_plots(
 
 ### Adjusted Analysis
 
-`[insert general summary of results here]`
+We see no significant relationship between treatment group and ICU readmission
+rate during the index hospitalization.
 
 #### Model Fitting and Assumptions {.tabset}
 
@@ -3882,24 +3879,14 @@ readm_90_mod <- cph(
 
 ##### Assumptions
 
+Due to only a single patient being censored, the interaction between transformed
+time and Schoenfeld residuals could not be properly calculated. We instead look
+at the log(-log(Survival time)) vs log(time) for treatment groups only, looking for parallel lines which indicate that the proportional hazards assumption is
+met. We do not calculate a p-value.
+
 ```{r readm_90_assume}
 ## -- Check proportional hazard assumption -------------------------------------
-readm_90_zph <- cox.zph(readm_90_mod, transform = 'log')
-
-## Extract p-value for global PH assumption; create reproducible statement
-readm_90_phtext <- text_ph_assume(readm_90_zph)
-
-```
-
-We graphically check our assumption of proportional hazards for the ICU
-readmission subdistribution, paying particular attention to treatment group and
-looking for generally flat lines in each panel. `r readm_90_phtext`
-
-**NOTE:** THIS IS NOT WORKING, ALL NANs
-
-```{r readm_90_assumeplot}
-# plot_ph_assume(readm_90_zph)
-
+survplot(readm_90_mod, trt, loglog = TRUE, logt = TRUE)
 ```
 
 #### Model Results {.tabset}
@@ -3917,8 +3904,6 @@ readm_90_text <-
 We show the subdistribution hazard ratios for ICU readmission for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **lower** than 1 are
 favorable for this outcome. `r readm_90_text[["Haloperidol"]]`
-
-TREATMENTS ARE ONCE AGAIN COMPLETELY FAKE
 
 ##### Visual Form
 
