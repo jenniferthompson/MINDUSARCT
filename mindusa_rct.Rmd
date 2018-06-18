@@ -3981,11 +3981,12 @@ Detailed definitions for each of these potential modifiers of treatment effect w
 ## Age at Study Consent
 
 ```{r em_prep_age}
-## -- Vector of mental outcome variable names ----------------------------------
+## -- Vectors of mental outcome variable names, competing risk datasets --------
 mental_outcome_vars <- c(
   "dcfd_int", "del_int_all", "hyperdel_int_all", "hypodel_int_all",
   "coma_int_all"
 )
+cr_outcome_fgs <- list(icudis_90_fg, hospdis_90_fg, mvlib_30_fg, readm_90_fg)
 
 ## -- Create model RHS ---------------------------------------------------------
 mod_rhs_age <- map_chr(
@@ -4109,6 +4110,116 @@ mental_medplot_age
 
 ```
 
+
+### Time-to-Event Outcomes
+
+For models involving competing risks (all outcomes other than mortality), only
+the subdistribution hazard ratio for the outcome of interest is presented.
+
+```{r tte_outcomes_age}
+## -- Fit models for each outcome, including age interaction -------------------
+## Death: No competing risks
+death_30_mod_age <- cph(
+  as.formula(paste("surv_death_30 ~", mod_rhs_age)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+death_90_mod_age <- cph(
+  as.formula(paste("surv_death_90 ~", mod_rhs_age)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+## -- Fit competing risks models using finegray() objects prev. created --------
+cr_mods_age <- map(
+  cr_outcome_fgs,
+  ~ cph(
+    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_age)),
+    data = .,
+    weights = fgwt,
+    x = TRUE, y = TRUE
+  )
+)
+
+tte_mods_age <- c(list(death_30_mod_age, death_90_mod_age), cr_mods_age)
+
+## -- Create a data.frame with one HR, CI per age * trt * model combination ----
+get_ratios_age <- function(mod, age_val, outcome_name){
+  if(missing(outcome_name)){
+    outcome_name <- as.character(mod$sformula)[2]
+  }
+  
+  ## Extract p-value for interaction from mod
+  p_int <- anova(mod)["age_consent * trt  (Factor+Higher Order Factors)", "P"]
+  
+  tmp <- summary(
+    mod,
+    trt = "Placebo", age_consent = age_val,
+    est.all = FALSE, antilog = FALSE
+  ) %>%
+    as.data.frame() %>%
+    mutate(variable = rownames(.)) %>%
+    separate(variable, into = c("vname", "comp")) %>%
+    filter(vname == "trt") %>%
+    dplyr::select(4, 6, 7, 10) %>%
+    set_names(c("effect", "lcl", "ucl", "comp.c")) %>%
+    ## Add a row for placebo
+    bind_rows(
+      data.frame("effect" = 0, "lcl" = 0, "ucl" = 0, "comp.c" = "Placebo")
+    ) %>%
+    ## Put everything on HR scale
+    mutate_at(vars(-comp.c), exp) %>%
+    mutate(
+      outcome = outcome_name,
+      age_consent = age_val,
+      ref.c = "Placebo",
+      p_int = p_int
+    )
+  
+  return(tmp)
+}
+
+## Create list of arguments
+tte_args_prep_age <- cross2(.x = tte_mods_age, .y = vals_age)
+tte_args_age <- list(
+  "mod" = map(tte_args_prep_age, 1),
+  "age_val" = map_dbl(tte_args_prep_age, 2),
+  "outcome_name" = rep(
+    c("death_30", "death_90", "icudis_90", "hospdis_90", "mvlib_30",
+      "readm_90"),
+    times = length(vals_age)
+  )
+)
+
+tte_ratios_age <- pmap_df(.l = tte_args_age, .f = get_ratios_age) %>%
+  mutate(
+    outcome_string = case_when(
+      outcome == "death_30" ~ "Death,\n30 Days",
+      outcome == "death_90" ~ "Death,\n90 Days",
+      outcome == "icudis_90" ~ "ICU Discharge,\n90 Days",
+      outcome == "hospdis_90" ~ "Hospital Discharge,\n90 Days",
+      outcome == "mvlib_30" ~ "Liberation from MV,\n30 Days",
+      outcome == "readm_90" ~ "ICU Readmission,\n90 Days",
+      TRUE ~ "other"
+    ),
+    p_sep = ifelse(p_int < 0.001, "", "= "),
+    outcome_text =
+      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+    # outcome_text = fct_shift(factor(outcome_text)),
+    em_text = paste("Age =", age_consent),
+    comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+  )
+
+tte_plot_age <- plot_trt_ratios_em(
+  ratio_df = tte_ratios_age, em_string = "age", ratio_type = "Hazard"
+)
+
+tte_plot_age
+
+```
 
 
 
