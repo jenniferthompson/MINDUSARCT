@@ -346,6 +346,57 @@ plot_trt_ratios <- function(
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()
+
+  return(p)  
+}
+
+plot_trt_ratios_em <- function(
+  ratio_df,     ## data.frame w/ one row per treatment per outcome
+                ## columns include effect, lcl, ucl, comp.c, ref.c
+  em_string,    ## Text describing effect modifier
+  ratio_type = c("Hazard", "Odds"),
+  facet_formula = "em_text ~ outcome_text" ## string specifying how to facet
+){
+  
+  if(ratio_type == "Hazard"){
+    caption_text <- "Adjusted mortality outcomes use standard Cox proportional hazards regression.\nOther outcomes use Fine-Gray competing risks regression, with competing risk of death\n(and ICU discharge without the event for MV liberation and ICU readmission)."
+  } else{
+    caption_text <- "Adjusted analysis using proportional odds logistic regression."
+  }
+
+  p <- ggplot(data = ratio_df, aes(y = effect, x = comp.c)) +
+    ## Facet for each outcome, interacting value
+    facet_grid(facet_formula) +
+    ## Fake row to set up order properly
+    geom_point(shape = NA) +
+    ## Reference line at 1 (no effect)
+    geom_hline(yintercept = 1, linetype = "solid",
+               colour = palette_colors["lgray"], size = 1) +
+    ## Plot a point for control group
+    geom_point(
+      shape = 15, colour = "black", size = 2,
+      data = ratio_df %>% filter(comp.c == ref.c)
+    ) +
+    ## Add ratios, CIs for treatment groups vs control
+    geom_pointrange(
+      aes(ymin = lcl, ymax = ucl),
+      position = position_dodge(width = 0.5),
+      shape = 16, size = 0.5, colour = as.character(palette_colors["dred"]),
+      data = ratio_df %>% filter(comp.c != ref.c)
+    ) +
+    labs(
+      title = glue("Treatment vs {capitalize(em_string)}"),
+      y = glue("{ratio_type} Ratio (95% Confidence Interval)"),
+      caption = caption_text
+    ) +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      # axis.text.y = element_text(vjust = 1),
+      plot.caption = element_text(size = basetext_size * 0.7)
+    ) +
+    coord_flip()
   
   return(p)  
 }
