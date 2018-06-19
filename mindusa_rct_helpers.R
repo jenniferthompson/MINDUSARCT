@@ -191,11 +191,11 @@ calc_medians_em <- function(mod, df, em_vals, em_var){
 ## Plot medians, bounds for mental status outcomes with interaction terms
 ## median_df assumed to have cols: quantile, lb, ub, trt, em_text, outcome_text
 mental_medians_plot_em <- function(median_df, em_string){
-  ggplot(data = median_df, aes(y = quantile, x = trt)) +
+  ggplot(data = median_df, aes(y = quantile, x = trt_short)) +
     facet_grid(em_text ~ outcome_text) +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
-      colour = as.character(palette_colors["dred"]), size = 0.25
+      colour = as.character(palette_colors["dred"]), size = 0.5
     ) +
     scale_y_continuous(
       breaks = seq(0, 14, 2), name = "Adjusted Median (95% Confidence Interval)"
@@ -209,6 +209,8 @@ mental_medians_plot_em <- function(median_df, em_string){
     ) +
     theme(
       axis.title.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text = element_text(size = basetext_size * 0.7),
       panel.spacing.y = unit(0.5, "cm"),
       strip.text.x = element_text(vjust = 0),
       plot.caption = element_text(face = "italic")
@@ -359,12 +361,20 @@ plot_trt_ratios_em <- function(
 ){
   
   if(ratio_type == "Hazard"){
-    caption_text <- "Adjusted mortality outcomes use standard Cox proportional hazards regression.\nOther outcomes use Fine-Gray competing risks regression, with competing risk of death\n(and ICU discharge without the event for MV liberation and ICU readmission)."
+    caption_text <- glue(
+      "Adjusted mortality outcomes use standard Cox proportional hazards regression.\n",
+      "Other outcomes use Fine-Gray competing risks regression, with competing risk of death\n",
+      "(and ICU discharge without the event for MV liberation and ICU readmission).\n\n",
+      "P-values for overall {em_string} * treatment interaction."
+    )
   } else{
-    caption_text <- "Adjusted analysis using proportional odds logistic regression."
+    caption_text <- glue(
+      "Adjusted analysis using proportional odds logistic regression.\n",
+      "P-values for overall {em_string} * treatment interaction."
+    )
   }
 
-  p <- ggplot(data = ratio_df, aes(y = effect, x = comp.c)) +
+  p <- ggplot(data = ratio_df, aes(y = effect, x = comp.c_short)) +
     ## Facet for each outcome, interacting value
     facet_grid(facet_formula) +
     ## Fake row to set up order properly
@@ -393,7 +403,9 @@ plot_trt_ratios_em <- function(
       legend.position = "none",
       axis.ticks.y = element_blank(),
       axis.title.y = element_blank(),
+      axis.text = element_text(size = basetext_size * 0.7),
       strip.text.x = element_text(vjust = 0),
+      panel.spacing.y = unit(0.5, "cm"),
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()
