@@ -4372,6 +4372,8 @@ or death, if that time is less than 48 hours. (In other words, if a patient was 
 
 This primary outcome variable is calculated over the 14 days including and immediately following randomization. It is defined as days alive and without brain dysfunction.
 
+For example, a patient who was delirious on the day of consent and the day following; had one day of normal status; again became delirious for one day; and was then comatose for two days before dying in the ICU would have `14 - (3 days delirium + 2 days coma + 8 days deceased) =` 1 DCFD.
+
 ### Determining Mental Status Using CAM and RASS
 
 We determined mental status for a given *assessment* using the following criteria:
