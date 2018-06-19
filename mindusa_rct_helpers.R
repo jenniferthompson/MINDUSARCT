@@ -393,7 +393,7 @@ plot_trt_ratios_em <- function(
       legend.position = "none",
       axis.ticks.y = element_blank(),
       axis.title.y = element_blank(),
-      # axis.text.y = element_text(vjust = 1),
+      strip.text.x = element_text(vjust = 0),
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()

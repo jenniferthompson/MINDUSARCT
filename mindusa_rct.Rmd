@@ -4199,10 +4199,10 @@ tte_ratios_age <- pmap_df(.l = tte_args_age, .f = get_ratios_age) %>%
     outcome_string = case_when(
       outcome == "death_30" ~ "Death,\n30 Days",
       outcome == "death_90" ~ "Death,\n90 Days",
-      outcome == "icudis_90" ~ "ICU Discharge,\n90 Days",
-      outcome == "hospdis_90" ~ "Hospital Discharge,\n90 Days",
-      outcome == "mvlib_30" ~ "Liberation from MV,\n30 Days",
-      outcome == "readm_90" ~ "ICU Readmission,\n90 Days",
+      outcome == "icudis_90" ~ "ICU\nDischarge,\n90 Days",
+      outcome == "hospdis_90" ~ "Hospital\nDischarge,\n90 Days",
+      outcome == "mvlib_30" ~ "Liberation\nfrom MV,\n30 Days",
+      outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
     p_sep = ifelse(p_int < 0.001, "", "= "),
