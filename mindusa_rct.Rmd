@@ -3965,6 +3965,7 @@ rms_results_kable(readm_90_mod)
 ```
 
 # Effect Modification Analyses
+<hr>
 
 Our goal in this section is to determine whether there is any difference in the
 association between treatment and each outcome depending on any of the following
@@ -3979,6 +3980,11 @@ baseline factors:
 Detailed definitions for each of these potential modifiers of treatment effect will be included with each section.
 
 ## Age at Study Consent
+
+Age is included as a continuous variable in both the main effect and interaction terms of each model, using restricted cubic splines to allow a nonlinear
+association between age and each outcome. For purposes of interpretation, we
+present the relationships between treatment and outcome adjusted to the 10th,
+25th, 50th, 75th, and 90th percentiles of age in our randomized cohort.
 
 ```{r em_prep_age}
 ## -- Vectors of mental outcome variable names, competing risk datasets --------
@@ -4002,7 +4008,9 @@ mod_rhs_age <- map_chr(
 
 ## Specify age values
 ## Cohort roughly maps to 25th %ile = 50 (51.4), 50th = 60, 75th = 70 (68.7)
-vals_age <- c(50, 60, 70)
+vals_age <- quantile(
+  model_df$age_consent, probs = c(0.10, 0.25, 0.50, 0.75, 0.90), na.rm = TRUE
+)
 ## Determine spline terms for these, based on model_df
 ## ** This will need to be changed if we increase to >3 knots **
 age_knots <- rcspline.eval(
@@ -4061,13 +4069,25 @@ pred_df_age <- rep(list(pred_df_age_prep), length(levels(model_df$trt))) %>%
   
 ```
 
-### Mental Status Outcomes
+For most outcomes, associations between treatment and outcome are generally
+consistent regardless of age; for example, though the oldest patients tend to
+have the fewest days alive and free of delirium and coma as a group, the median
+DCFDs for each treatment group still overlap considerably at each age presented,
+indicating no difference in the effect of treatment on this outcome.
+
+One *possible* exception: Among the youngest patients, the ziprasidone group has
+fewer days of delirium, but also a slightly elevated hazard ratio for death
+compared to the placebo group. This big-picture interpretation is reflected by
+the lack of effect modification for the broad outcome of DCFDs, but may be worth
+further investigation.
+
+### Mental Status Outcomes{.tabset}
 
 Medians are adjusted to the median/mode values of all covariates except age and
 treatment, so that each represents the expected median number of DCFDs for a
 patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population.
 
-```{r mental_outcomes_age}
+```{r calc_mental_outcomes_age}
 ## -- Fit models for each outcome, including age interaction -------------------
 mental_mods_age <- map(
   mental_outcome_vars,
@@ -4097,7 +4117,8 @@ mental_medians_age <- map_dfr(
     outcome_text =
       sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
-    em_text = paste("Age =", age_consent),
+    em_text = paste("Age =", rndformat(age_consent, 0)),
+    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4106,12 +4127,45 @@ mental_medplot_age <- mental_medians_plot_em(
   median_df = mental_medians_age, em_string = "age"
 )
 
+## Create table
+mental_table_age <- mental_medians_age %>%
+  mutate(
+    effect_ci = glue(
+      "{rndformat(quantile)} ({rndformat(lb)}, {rndformat(ub)})"
+    )
+  ) %>%
+  dplyr::select(outcome_string, trt, age_consent, effect_ci, p_int) %>%
+  mutate(
+    outcome_string = str_replace(outcome_string, "\n", " "),
+    age_consent = rndformat(age_consent, 1),
+    p_int = formatp(p_int)
+  )
+
+```
+
+#### Visual Results
+
+```{r plot_mental_outcomes_age, fig.height = 8}
 mental_medplot_age
 
 ```
 
+#### Tabular Results
 
-### Time-to-Event Outcomes
+```{r table_mental_outcomes_age, fig.height = 8}
+DT::datatable(
+  mental_table_age,
+  rownames = FALSE,
+  colnames = c(
+    "Outcome", "Treatment", "Age at Consent", "Adjusted Median (95% CI)",
+    "P, Interaction"
+  ),
+  filter = "top"
+)
+
+```
+
+### Time-to-Event Outcomes{.tabset}
 
 For models involving competing risks (all outcomes other than mortality), only
 the subdistribution hazard ratio for the outcome of interest is presented.
@@ -4209,7 +4263,9 @@ tte_ratios_age <- pmap_df(.l = tte_args_age, .f = get_ratios_age) %>%
     outcome_text =
       sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
     # outcome_text = fct_shift(factor(outcome_text)),
-    em_text = paste("Age =", age_consent),
+    em_text = paste("Age =", rndformat(age_consent, 0)),
+    comp.c_short =
+      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4217,12 +4273,44 @@ tte_plot_age <- plot_trt_ratios_em(
   ratio_df = tte_ratios_age, em_string = "age", ratio_type = "Hazard"
 )
 
+## Create table
+tte_table_age <- tte_ratios_age %>%
+  mutate(
+    effect_ci = glue(
+      "{rndformat(effect)} ({rndformat(lcl)}, {rndformat(ucl)})"
+    )
+  ) %>%
+  ## Placebo rows are meaningless, needed only for plots
+  filter(comp.c != "Placebo") %>%
+  dplyr::select(outcome_string, comp.c, age_consent, effect_ci, p_int) %>%
+  mutate(
+    age_consent = rndformat(age_consent, 1),
+    p_int = formatp(p_int)
+  )
+
+```
+
+#### Visual Results
+
+```{r plot_tte_outcomes_age, fig.height = 8}
 tte_plot_age
 
 ```
 
+#### Tabular Results
 
+```{r table_tte_outcomes_age}
+DT::datatable(
+  tte_table_age,
+  rownames = FALSE,
+  colnames = c(
+    "Outcome", "Treatment (vs Placebo)", "Age at Consent",
+    "Adjusted Hazard Ratio (95% CI)", "P, Interaction"
+  ),
+  filter = "top"
+)
 
+```
 
 
 
