@@ -173,6 +173,50 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
   return(p)
 }
 
+## Calculate medians, bounds for model with interaction term (effect modifier)
+calc_medians_em <- function(mod, df, em_vals, em_var){
+  quantile_orm_df(
+    mod = mod,
+    new.data = set_names(df, str_subset(names(coef(mod)), "^[^y>=]")),
+    trt_levels = rep(levels(model_df$trt), each = length(em_vals))
+  ) %>%
+    bind_cols(dplyr::select(df, one_of(em_var))) %>%
+    mutate(
+      outcome = as.character(mod$sformula[[2]]),
+      p_int =
+        anova(mod)[paste(em_var, "* trt  (Factor+Higher Order Factors)"), "P"]
+    )
+}
+
+## Plot medians, bounds for mental status outcomes with interaction terms
+## median_df assumed to have cols: quantile, lb, ub, trt, em_text, outcome_text
+mental_medians_plot_em <- function(median_df, em_string){
+  ggplot(data = median_df, aes(y = quantile, x = trt_short)) +
+    facet_grid(em_text ~ outcome_text) +
+    geom_pointrange(
+      aes(ymin = lb, ymax = ub),
+      colour = as.character(palette_colors["dred"]), size = 0.5
+    ) +
+    scale_y_continuous(
+      breaks = seq(0, 14, 2), name = "Adjusted Median (95% Confidence Interval)"
+    ) +
+    coord_flip() +
+    labs(
+      caption = glue(
+        "Adjusted analysis using proportional odds logistic regression.\n",
+        "P-values for overall {em_string} * treatment interaction."
+      )
+    ) +
+    theme(
+      axis.title.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text = element_text(size = basetext_size * 0.7),
+      panel.spacing.y = unit(0.5, "cm"),
+      strip.text.x = element_text(vjust = 0),
+      plot.caption = element_text(face = "italic")
+    )
+}
+
 ## -- Helper functions for any rms model object --------------------------------
 ## Wrapper for rms_calc_comparisons; adds outcome variable as a column
 ## (Tested on lrm, cph fits)
@@ -301,6 +345,67 @@ plot_trt_ratios <- function(
       axis.ticks.y = element_blank(),
       axis.title.y = element_blank(),
       # axis.text.y = element_text(vjust = 1),
+      plot.caption = element_text(size = basetext_size * 0.7)
+    ) +
+    coord_flip()
+
+  return(p)  
+}
+
+plot_trt_ratios_em <- function(
+  ratio_df,     ## data.frame w/ one row per treatment per outcome
+                ## columns include effect, lcl, ucl, comp.c, ref.c
+  em_string,    ## Text describing effect modifier
+  ratio_type = c("Hazard", "Odds"),
+  facet_formula = "em_text ~ outcome_text" ## string specifying how to facet
+){
+  
+  if(ratio_type == "Hazard"){
+    caption_text <- glue(
+      "Adjusted mortality outcomes use standard Cox proportional hazards regression.\n",
+      "Other outcomes use Fine-Gray competing risks regression, with competing risk of death\n",
+      "(and ICU discharge without the event for MV liberation and ICU readmission).\n\n",
+      "P-values for overall {em_string} * treatment interaction."
+    )
+  } else{
+    caption_text <- glue(
+      "Adjusted analysis using proportional odds logistic regression.\n",
+      "P-values for overall {em_string} * treatment interaction."
+    )
+  }
+
+  p <- ggplot(data = ratio_df, aes(y = effect, x = comp.c_short)) +
+    ## Facet for each outcome, interacting value
+    facet_grid(facet_formula) +
+    ## Fake row to set up order properly
+    geom_point(shape = NA) +
+    ## Reference line at 1 (no effect)
+    geom_hline(yintercept = 1, linetype = "solid",
+               colour = palette_colors["lgray"], size = 1) +
+    ## Plot a point for control group
+    geom_point(
+      shape = 15, colour = "black", size = 2,
+      data = ratio_df %>% filter(comp.c == ref.c)
+    ) +
+    ## Add ratios, CIs for treatment groups vs control
+    geom_pointrange(
+      aes(ymin = lcl, ymax = ucl),
+      position = position_dodge(width = 0.5),
+      shape = 16, size = 0.5, colour = as.character(palette_colors["dred"]),
+      data = ratio_df %>% filter(comp.c != ref.c)
+    ) +
+    labs(
+      title = glue("Treatment vs {capitalize(em_string)}"),
+      y = glue("{ratio_type} Ratio (95% Confidence Interval)"),
+      caption = caption_text
+    ) +
+    theme(
+      legend.position = "none",
+      axis.ticks.y = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text = element_text(size = basetext_size * 0.7),
+      strip.text.x = element_text(vjust = 0),
+      panel.spacing.y = unit(0.5, "cm"),
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()
