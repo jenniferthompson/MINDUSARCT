@@ -3994,6 +3994,9 @@ mental_outcome_vars <- c(
 )
 cr_outcome_fgs <- list(icudis_90_fg, hospdis_90_fg, mvlib_30_fg, readm_90_fg)
 
+## -- Which quantiles for presenting results from continuous effect mod.s? -----
+em_quants <- c(0.1, 0.25, 0.5, 0.75, 0.9)
+
 ## -- Create model RHS ---------------------------------------------------------
 mod_rhs_age <- map_chr(
   setdiff(cont_covars, "age_consent"), ~ sprintf("rcs(%s, %s)", ., rcsknots)
@@ -4008,9 +4011,8 @@ mod_rhs_age <- map_chr(
 
 ## Specify age values
 ## Cohort roughly maps to 25th %ile = 50 (51.4), 50th = 60, 75th = 70 (68.7)
-vals_age <- quantile(
-  model_df$age_consent, probs = c(0.10, 0.25, 0.50, 0.75, 0.90), na.rm = TRUE
-)
+vals_age <- quantile(model_df$age_consent, probs = em_quants, na.rm = TRUE)
+
 ## Determine spline terms for these, based on model_df
 ## ** This will need to be changed if we increase to >3 knots **
 age_knots <- rcspline.eval(
@@ -4084,8 +4086,9 @@ further investigation.
 ### Mental Status Outcomes{.tabset}
 
 Medians are adjusted to the median/mode values of all covariates except age and
-treatment, so that each represents the expected median number of DCFDs for a
-patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population.
+treatment, so that each represents the expected median number of DCFDs (for
+example) for a patient in each treatment group who is otherwise part of a
+"typical" *(many air quotes)* population.
 
 ```{r calc_mental_outcomes_age}
 ## -- Fit models for each outcome, including age interaction -------------------
@@ -4312,13 +4315,344 @@ DT::datatable(
 
 ```
 
+## Severity of Illness at Randomization
 
+"Severity of illness" is here defined as the SOFA score for each patient on the
+day of randomization to study drug (excluding the SOFA's central nervous system
+component). For further details on how the SOFA was calculated, please see [below](#soi). Modified SOFA is included as a continuous variable in both the
+main effect and interaction terms of each model, using restricted cubic splines
+to allow a nonlinear association between it and each outcome. For purposes of
+interpretation, we present the relationships between treatment and outcome
+adjusted to the 10th, 25th, 50th, 75th, and 90th percentiles of modified SOFA in
+our randomized cohort.
 
+```{r em_prep_sofa}
+## -- Create model RHS ---------------------------------------------------------
+mod_rhs_sofa <- map_chr(
+  setdiff(
+    cont_covars, "sofa_mod_imp_rand"), ~ sprintf("rcs(%s, %s)", ., rcsknots)
+) %>%
+  c(., setdiff(notcont_covars, "trt")) %>%
+  c(., sprintf("rcs(sofa_mod_imp_rand, %s) * trt", rcsknots)) %>%
+  paste(collapse = " + ")
 
+## -- Create dataset of values to use when calculating conditional medians -----
+## Use same values (median/mode) for everything except treatment and age
+## Applies to all mental status outcomes
 
+## Specify SOFA values
+vals_sofa <- quantile(
+  model_df$sofa_mod_imp_rand, probs = em_quants, na.rm = TRUE
+)
 
+## Determine spline terms for these, based on model_df
+## ** This will need to be changed if we increase to >3 knots **
+sofa_knots <- rcspline.eval(
+  model_df$sofa_mod_imp_rand, nk = rcsknots, knots.only = TRUE
+)
+vals_sofa_rcs <- rcspline.eval(vals_sofa, knots = sofa_knots, inclx = TRUE) %>%
+  as.data.frame() %>%
+  set_names(c("sofa_mod_imp_rand", "sofa_mod_imp_rand_2"))
 
+## Get matrix of treatment indicators:
+##  Could not get the contrasts argument of model.matrix() to give me placebo
+##  as reference. Create by hand.
+trt_matrix_sofa <- bind_rows(
+  ## Get treatment indicator values, repeat as needed given vals_age
+  rep(
+    list(as.data.frame(contr.treatment(levels(model_df$trt), base = 1))),
+    nrow(vals_sofa_rcs)
+  )
+) %>%
+  ## Sort to group all placebo, haloperidol, ziprasidone rows together
+  arrange(Ziprasidone, Haloperidol)
 
+## Replace SOFA columns in pred_df_org with updated SOFA values
+pred_df_sofa_prep <- pred_df_org %>%
+  dplyr::select(-starts_with("sofa_mod_imp_rand")) %>%
+  bind_rows(rep(list(.), nrow(vals_sofa_rcs) - 1)) %>%
+  bind_cols(vals_sofa_rcs)
+
+## Repeat those values for each treatment
+pred_df_sofa <- rep(list(pred_df_sofa_prep), length(levels(model_df$trt))) %>%
+  bind_rows() %>%
+  ## Add treatment levels to dataset
+  bind_cols(trt = rep(levels(model_df$trt), nrow(pred_df_sofa_prep))) %>%
+  
+  ## Create a model.matrix object, then leave out the intercept
+  ##   model.matrix() handles dummy variables for categoricals nicely
+  model.matrix(
+    as.formula(sprintf("~ %s", paste(names(.), collapse = " + "))),
+    .
+  ) %>%
+  ## Could not get the contrasts argument to give me placebo as reference.
+  ## Wrangle this thing by hand.
+  as.data.frame() %>%
+  ## Remove intercept, original treatment columns
+  dplyr::select(-1, -starts_with("trt")) %>%
+  ## Add my own treatment columns, created above
+  bind_cols(trt_matrix_sofa) %>%
+  
+  ## Create interaction values
+  mutate(
+    sofa_halop = sofa_mod_imp_rand * Haloperidol,
+    sofa2_halop = sofa_mod_imp_rand_2 * Haloperidol,
+    sofa_zipras = sofa_mod_imp_rand * Ziprasidone,
+    sofa2_zipras = sofa_mod_imp_rand_2 * Ziprasidone
+  )
+  
+```
+
+For most outcomes, associations between treatment and outcome are generally
+consistent regardless of severity of illness at randomization; for example,
+though the sickest patients tend to have the fewest days alive and free of
+delirium and coma as a group, the median DCFDs for each treatment group still
+overlap considerably at each level of modified SOFA presented, indicating no
+difference in the effect of treatment on this outcome.
+
+There are some hints of effect modification; these don't tell a consistent story, and will need to be interpreted in light of their clinical significance. For example, the ziprasidone and placebo groups look quite similar in terms of overall delirium duration regardless of SOI at randomization, but the haloperidol shifts back and forth relative to those groups at various levels of SOI.
+
+Being in the haloperidol group may be a risk factor for a higher 90-day
+mortality rate for patients with less severe illness at randomization, but does
+not seem to be associated with mortality rates for the most sick patients. Given
+the lack of overall association between treatment and mortality, and the lack of
+effect modification between SOI and treatment for 30-day mortality, this should
+be interpreted with caution, and together with 12-month mortality results when
+those are available later in 2018.
+
+### Mental Status Outcomes{.tabset}
+
+Medians are adjusted to the median/mode values of all covariates except modified
+SOFA and treatment, so that each represents the expected median number of DCFDs
+(for example) for a patient in each treatment group who is otherwise part of a "typical" *(many air quotes)* population.
+
+```{r calc_mental_outcomes_sofa}
+## -- Fit models for each outcome, including SOFA interaction ------------------
+mental_mods_sofa <- map(
+  mental_outcome_vars,
+  ~ orm(
+    as.formula(paste(., mod_rhs_sofa, sep = " ~ ")),
+    data = model_df,
+    x = TRUE, y = TRUE
+  ) %>%
+    robcov(cluster = model_df$study_site)
+)
+
+## -- Get adj medians + bounds for each treatment group, outcome; combine ------
+mental_medians_sofa <- map_dfr(
+  mental_mods_sofa, calc_medians_em,
+  df = pred_df_sofa, em_vals = vals_sofa, em_var = "sofa_mod_imp_rand"
+) %>%
+  mutate(
+    outcome_string = case_when(
+      outcome == "dcfd_int" ~ "DCFDs",
+      outcome == "del_int_all" ~ "Delirium",
+      outcome == "hyperdel_int_all" ~ "Hyperactive\nDelirium",
+      outcome == "hypodel_int_all" ~ "Hypoactive\nDelirium",
+      outcome == "coma_int_all" ~ "Coma",
+      TRUE ~ "other"
+    ),
+    p_sep = ifelse(p_int < 0.001, "", "= "),
+    outcome_text =
+      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+    outcome_text = fct_shift(factor(outcome_text)),
+    em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
+    em_text = fct_reorder(em_text, sofa_mod_imp_rand),
+    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+  )
+
+## Plot medians + CIs
+mental_medplot_sofa <- mental_medians_plot_em(
+  median_df = mental_medians_sofa, em_string = "modified SOFA"
+)
+
+## Create table
+mental_table_sofa <- mental_medians_sofa %>%
+  mutate(
+    effect_ci = glue(
+      "{rndformat(quantile)} ({rndformat(lb)}, {rndformat(ub)})"
+    )
+  ) %>%
+  dplyr::select(outcome_string, trt, sofa_mod_imp_rand, effect_ci, p_int) %>%
+  mutate(
+    outcome_string = str_replace(outcome_string, "\n", " "),
+    age_consent = rndformat(sofa_mod_imp_rand, 1),
+    p_int = formatp(p_int)
+  )
+
+```
+
+#### Visual Results
+
+```{r plot_mental_outcomes_sofa, fig.height = 9}
+mental_medplot_sofa
+
+```
+
+#### Tabular Results
+
+```{r table_mental_outcomes_sofa}
+DT::datatable(
+  mental_table_sofa,
+  rownames = FALSE,
+  colnames = c(
+    "Outcome", "Treatment", "Modified SOFA at Randomization",
+    "Adjusted Median (95% CI)", "P, Interaction"
+  ),
+  filter = "top"
+)
+
+```
+
+### Time-to-Event Outcomes{.tabset}
+
+For models involving competing risks (all outcomes other than mortality), only
+the subdistribution hazard ratio for the outcome of interest is presented.
+
+```{r tte_outcomes_sofa}
+## -- Fit models for each outcome, including SOFA interaction ------------------
+## Death: No competing risks
+death_30_mod_sofa <- cph(
+  as.formula(paste("surv_death_30 ~", mod_rhs_sofa)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+death_90_mod_sofa <- cph(
+  as.formula(paste("surv_death_90 ~", mod_rhs_sofa)),
+  data = model_df,
+  x = TRUE, y = TRUE
+) %>%
+  robcov(cluster = model_df$study_site)
+
+## -- Fit competing risks models using finegray() objects prev. created --------
+cr_mods_sofa <- map(
+  cr_outcome_fgs,
+  ~ cph(
+    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_sofa)),
+    data = .,
+    weights = fgwt,
+    x = TRUE, y = TRUE
+  )
+)
+
+tte_mods_sofa <- c(list(death_30_mod_sofa, death_90_mod_sofa), cr_mods_sofa)
+
+## -- Create a data.frame with one HR, CI per SOFA * trt * model comb ----------
+get_ratios_sofa <- function(mod, sofa_val, outcome_name){
+  if(missing(outcome_name)){
+    outcome_name <- as.character(mod$sformula)[2]
+  }
+  
+  ## Extract p-value for interaction from mod
+  p_int <-
+    anova(mod)["sofa_mod_imp_rand * trt  (Factor+Higher Order Factors)", "P"]
+  
+  tmp <- summary(
+    mod,
+    trt = "Placebo", sofa_mod_imp_rand = sofa_val,
+    est.all = FALSE, antilog = FALSE
+  ) %>%
+    as.data.frame() %>%
+    mutate(variable = rownames(.)) %>%
+    separate(variable, into = c("vname", "comp")) %>%
+    filter(vname == "trt") %>%
+    dplyr::select(4, 6, 7, 10) %>%
+    set_names(c("effect", "lcl", "ucl", "comp.c")) %>%
+    ## Add a row for placebo
+    bind_rows(
+      data.frame("effect" = 0, "lcl" = 0, "ucl" = 0, "comp.c" = "Placebo")
+    ) %>%
+    ## Put everything on HR scale
+    mutate_at(vars(-comp.c), exp) %>%
+    mutate(
+      outcome = outcome_name,
+      sofa_mod_imp_rand = sofa_val,
+      ref.c = "Placebo",
+      p_int = p_int
+    )
+  
+  return(tmp)
+}
+
+## Create list of arguments
+tte_args_prep_sofa <- cross2(.x = tte_mods_sofa, .y = vals_sofa)
+tte_args_sofa <- list(
+  "mod" = map(tte_args_prep_sofa, 1),
+  "sofa_val" = map_dbl(tte_args_prep_sofa, 2),
+  "outcome_name" = rep(
+    c("death_30", "death_90", "icudis_90", "hospdis_90", "mvlib_30",
+      "readm_90"),
+    times = length(vals_sofa)
+  )
+)
+
+tte_ratios_sofa <- pmap_df(.l = tte_args_sofa, .f = get_ratios_sofa) %>%
+  mutate(
+    outcome_string = case_when(
+      outcome == "death_30" ~ "Death,\n30 Days",
+      outcome == "death_90" ~ "Death,\n90 Days",
+      outcome == "icudis_90" ~ "ICU\nDischarge,\n90 Days",
+      outcome == "hospdis_90" ~ "Hospital\nDischarge,\n90 Days",
+      outcome == "mvlib_30" ~ "Liberation\nfrom MV,\n30 Days",
+      outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
+      TRUE ~ "other"
+    ),
+    p_sep = ifelse(p_int < 0.001, "", "= "),
+    outcome_text =
+      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+    # outcome_text = fct_shift(factor(outcome_text)),
+    em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
+    em_text = fct_reorder(em_text, sofa_mod_imp_rand),
+    comp.c_short =
+      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+  )
+
+tte_plot_sofa <- plot_trt_ratios_em(
+  ratio_df = tte_ratios_sofa, em_string = "modified SOFA", ratio_type = "Hazard"
+)
+
+## Create table
+tte_table_sofa <- tte_ratios_sofa %>%
+  mutate(
+    effect_ci = glue(
+      "{rndformat(effect)} ({rndformat(lcl)}, {rndformat(ucl)})"
+    )
+  ) %>%
+  ## Placebo rows are meaningless, needed only for plots
+  filter(comp.c != "Placebo") %>%
+  dplyr::select(outcome_string, comp.c, sofa_mod_imp_rand, effect_ci, p_int) %>%
+  mutate(
+    sofa_mod_imp_rand = rndformat(sofa_mod_imp_rand, 1),
+    p_int = formatp(p_int)
+  )
+
+```
+
+#### Visual Results
+
+```{r plot_tte_outcomes_sofa, fig.height = 9}
+tte_plot_sofa
+
+```
+
+#### Tabular Results
+
+```{r table_tte_outcomes_sofa}
+DT::datatable(
+  tte_table_sofa,
+  rownames = FALSE,
+  colnames = c(
+    "Outcome", "Treatment (vs Placebo)", "Mod. SOFA at Randomization",
+    "Adjusted Hazard Ratio (95% CI)", "P, Interaction"
+  ),
+  filter = "top"
+)
+
+```
 
 
 
