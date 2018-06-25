@@ -109,6 +109,9 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
     stop("mod must be an rms model object", call. = FALSE)
   }
   
+  ## Reorder treatment variable
+  df$trt <- fct_relevel(df$trt, c("Placebo", "Haloperidol", "Ziprasidone"))
+  
   ## Max should be 13 for DCFDs, 14 for delirium/coma
   ## Font needs to be smaller for delirium duration to fit entire title
   if(mod$sformula[[2]] == "dcfd_int"){
@@ -148,7 +151,7 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
     df$trt <- forcats::fct_relabel(df$trt, ~ med_labels[.])
   }
   
-  p <- ggplot(data = df, aes(y = quantile, x = forcats::fct_rev(trt))) +
+  p <- ggplot(data = df, aes(y = quantile, x = trt)) +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
       shape = 16, size = 0.8, colour = as.character(palette_colors["dred"])
@@ -294,6 +297,11 @@ plot_trt_ratios <- function(
     model_type <- "proportional odds logistic"
   }
   
+  ## Reorder treatment variable
+  ratio_df$comp.c <- fct_relevel(
+    ratio_df$comp.c, c("Placebo", "Haloperidol", "Ziprasidone")
+  )
+  
   ## Add exact results as part of Y axis labels, if desired
   if(text_results){
     ## Create named vector of new factor labels
@@ -314,7 +322,7 @@ plot_trt_ratios <- function(
     )
   }
   
-  p <- ggplot(data = ratio_df, aes(y = effect, x = forcats::fct_rev(comp.c))) +
+  p <- ggplot(data = ratio_df, aes(y = effect, x = comp.c)) +
     ## Fake row to set up order properly
     geom_point(shape = NA) +
     ## Reference line at 1 (no effect)
