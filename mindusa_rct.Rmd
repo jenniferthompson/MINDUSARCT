@@ -5356,11 +5356,8 @@ pred_df_sepsis <-
   
 ```
 
-**update this section**
-
-Aside from coma duration (where any effect modification is clinically minimal),
-we see no effect modification from ICU type and the association between
-treatment and any of our primary or secondary outcomes.
+We see no effect modification from sepsis at ICU admission and the association
+between treatment and any of our primary or secondary outcomes.
 
 ### Mental Status Outcomes{.tabset}
 
