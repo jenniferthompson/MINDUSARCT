@@ -637,6 +637,8 @@ inhosp_desc_df <- ptsummary_df %>%
     zipras_ever_int = factor_tf(zipras_ever_int),
     antipsyc_ever_int = factor_tf(antipsyc_ever_int),
     ever_del_int = factor_tf(ever_del_int),
+    ever_hyperdel_int = factor_tf(ever_hyperdel_int),
+    ever_hypodel_int = factor_tf(ever_hypodel_int),
     ever_coma_int = factor_tf(ever_coma_int),
     ever_delcoma_int = factor_tf(ever_delcoma_int)
   )
@@ -4105,9 +4107,9 @@ mental_medians_age <- map_dfr(
       outcome == "coma_int_all" ~ "Coma",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Age =", rndformat(age_consent, 0)),
     em_text = fct_reorder(em_text, age_consent),
@@ -4131,7 +4133,7 @@ mental_table_age <- mental_medians_age %>%
   mutate(
     outcome_string = str_replace(outcome_string, "\n", " "),
     age_consent = rndformat(age_consent, 1),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -4252,9 +4254,9 @@ tte_ratios_age <- pmap_df(.l = tte_args_age, .f = get_ratios_age) %>%
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Age =", rndformat(age_consent, 0)),
     em_text = fct_reorder(em_text, age_consent),
@@ -4279,7 +4281,7 @@ tte_table_age <- tte_ratios_age %>%
   dplyr::select(outcome_string, comp.c, age_consent, effect_ci, p_int) %>%
   mutate(
     age_consent = rndformat(age_consent, 1),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -4443,9 +4445,9 @@ mental_medians_sofa <- map_dfr(
       outcome == "coma_int_all" ~ "Coma",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
     em_text = fct_reorder(em_text, sofa_mod_imp_rand),
@@ -4469,7 +4471,7 @@ mental_table_sofa <- mental_medians_sofa %>%
   mutate(
     outcome_string = str_replace(outcome_string, "\n", " "),
     sofa_mod_imp_rand = rndformat(sofa_mod_imp_rand, 1),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -4591,9 +4593,9 @@ tte_ratios_sofa <- pmap_df(.l = tte_args_sofa, .f = get_ratios_sofa) %>%
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
     em_text = fct_reorder(em_text, sofa_mod_imp_rand),
@@ -4618,7 +4620,7 @@ tte_table_sofa <- tte_ratios_sofa %>%
   dplyr::select(outcome_string, comp.c, sofa_mod_imp_rand, effect_ci, p_int) %>%
   mutate(
     sofa_mod_imp_rand = rndformat(sofa_mod_imp_rand, 1),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -4761,9 +4763,9 @@ mental_medians_iqcode <- map_dfr(
       outcome == "coma_int_all" ~ "Coma",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
@@ -4787,7 +4789,7 @@ mental_table_iqcode <- mental_medians_iqcode %>%
   mutate(
     outcome_string = str_replace(outcome_string, "\n", " "),
     iqcode_total_ph = rndformat(iqcode_total_ph, 3),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -4910,9 +4912,9 @@ tte_ratios_iqcode <- pmap_df(.l = tte_args_iqcode, .f = get_ratios_iqcode) %>%
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
@@ -4937,7 +4939,7 @@ tte_table_iqcode <- tte_ratios_iqcode %>%
   dplyr::select(outcome_string, comp.c, iqcode_total_ph, effect_ci, p_int) %>%
   mutate(
     iqcode_total_ph = rndformat(iqcode_total_ph, 3),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -5080,9 +5082,9 @@ mental_medians_medsurg <- map_dfr(
       outcome == "coma_int_all" ~ "Coma",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(med_surg, levels = 0:1, labels = c("Medical", "Surgical")),
     trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
@@ -5106,7 +5108,7 @@ mental_table_medsurg <- mental_medians_medsurg %>%
     outcome_string = str_replace(outcome_string, "\n", " "),
     med_surg =
       factor(med_surg, levels = 0:1, labels = c("Medical", "Surgical")),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -5230,9 +5232,9 @@ tte_ratios_medsurg <-
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(med_surg, levels = c("Medical", "Surgical")),
     # em_text = fct_reorder(em_text, iqcode_total_ph),
@@ -5256,8 +5258,7 @@ tte_table_medsurg <- tte_ratios_medsurg %>%
   filter(comp.c != "Placebo") %>%
   dplyr::select(outcome_string, comp.c, med_surg, effect_ci, p_int) %>%
   mutate(
-    # iqcode_total_ph = rndformat(iqcode_total_ph, 3),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -5391,9 +5392,9 @@ mental_medians_sepsis <- map_dfr(
       outcome == "coma_int_all" ~ "Coma",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(
       sepsis_adm, levels = 0:1, labels = c("Non-Septic", "Septic/Shock")
@@ -5419,7 +5420,7 @@ mental_table_sepsis <- mental_medians_sepsis %>%
     outcome_string = str_replace(outcome_string, "\n", " "),
     sepsis_adm =
       factor(sepsis_adm, levels = 0:1, labels = c("Medical", "Surgical")),
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -5543,9 +5544,9 @@ tte_ratios_sepsis <-
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
-    p_sep = ifelse(p_int < 0.001, "", "= "),
+    p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
-      sprintf("%s\n\nP %s%s", outcome_string, p_sep, formatp(p_int)),
+      sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(
       sepsis_adm, levels = c("Non-septic", "Sepsis/septic shock")
@@ -5573,7 +5574,7 @@ tte_table_sepsis <- tte_ratios_sepsis %>%
   filter(comp.c != "Placebo") %>%
   dplyr::select(outcome_string, comp.c, sepsis_adm, effect_ci, p_int) %>%
   mutate(
-    p_int = formatp(p_int)
+    p_int = formatp_nejm(p_int)
   )
 
 ```
@@ -5606,197 +5607,227 @@ These figures combine results included in separate sections earlier in this
 document. The goal is to create high-resolution graphics for both manuscript
 publication and future presentations.
 
+Listing of planned figures in primary manuscript:
+
+1. CONSORT information
+1. Mental status outcomes: medians, DCFDs, delirium, coma duration
+1. Survival: 90-day KM curve
+1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission
+
+Planned figures for supplement:
+
+1. Medians, hypoactive/hyperactive delirium
+1. Adjusted hazard ratios for all TTE outcomes
+1. Effect modification figures
+
 ## Mental Status Outcomes, Primary Analysis
 
 ```{r pubfig_mental}
-# ## -- Combine adj median data from primary analysis of all mental outcomes -----
-# ## Prep: Function to add outcome, p-values for treatment to median df
-# add_outcomep <- function(df, outcome_var, mod_obj){
-#   df %>%
-#     mutate(outcome = outcome_var, p_trt = anova(mod_obj)["trt", "P"])
-# }
-# 
-# ## Create big data.frame of all medians, CIs
-# mental_medians_primary <- pmap_dfr(
-#   .l = list(
-#     df = list(
-#       dcfd_adjmeds, del_adjmeds, hyperdel_adjmeds, hypodel_adjmeds, coma_adjmeds
-#     ),
-#     outcome_var = mental_outcome_vars,
-#     mod_obj = list(dcfd_mod, del_mod, hyperdel_mod, hypodel_mod, coma_mod)
-#   ),
-#   .f = add_outcomep
-# ) %>%
-#   ## Create facet labels: Outcome + p-value for treatment
-#   mutate(
-#     outcome_text = case_when(
-#       outcome == "dcfd_int"         ~ "Delirium/Coma-Free Days",
-#       outcome == "del_int_all"      ~ "Delirium (All)",
-#       outcome == "hyperdel_int_all" ~ "Hyperactive Delirium",
-#       outcome == "hypodel_int_all"  ~ "Hypoactive Delirium",
-#       TRUE                          ~ "Coma"
-#     ),
-#     outcome_sep = ifelse(p_trt < 0.001, " ", " = "),
-#     p_trt = formatp(p_trt),
-#     
-#     ## Order variables for facets, axis labels
-#     trt_short = factor(substr(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
-#     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
-#     
-#     ## facet_text will be a factor ordered by this variable
-#     plot_order = case_when(
-#       outcome == "dcfd_int"         ~ 1,
-#       outcome == "del_int_all"      ~ 2,
-#       outcome == "hyperdel_int_all" ~ 3,
-#       outcome == "hypodel_int_all"  ~ 4,
-#       TRUE                          ~ 5
-#     ),
-#     facet_text = glue("{outcome_text}\n\nP{outcome_sep}{p_trt}"),
-#     facet_text = fct_reorder(facet_text, plot_order)
-#   )
-# 
-# mental_medians_plot_pub <- ggplot(
-#   data = mental_medians_primary, aes(x = trt_short, y = quantile)
-# ) +
-#   facet_wrap(~ facet_text, ncol = 1) +
-#   geom_segment(
-#     aes(xend = trt_short, y = lb, yend = ub),
-#     color = as.character(palette_colors["dred"])
-#   ) +
-#   geom_point(color = "black", shape = 15) +
-#   ## Axes should accurately reflect our intervention period
-#   scale_y_continuous(
-#     limits = c(0, 14),
-#     breaks = seq(0, 14, 2),
-#     name = "Adjusted  Median  Days  (95%  Confidence  Interval)"
-#   ) +
-#   coord_flip() +
-#   theme(
-#     axis.title.y = element_blank()
-#   )
-# 
-# ggsave(
-#   filename = "mindusa_mental_medians.pdf",
-#   mental_medians_plot_pub,
-#   ## cairo_pdf instead of regular pdf, because regular pdf ignored the spaces,
-#   ## gave what I believe to be an error related to the TrueType-ness of Lato (?)
-#   device = cairo_pdf,
-#   path = "pubfigures/pdf",
-#   width = 7, height = 10, units = "in"
-# )
-# 
-# ggsave(
-#   filename = "mindusa_mental_medians.png",
-#   mental_medians_plot_pub,
-#   type = "cairo",
-#   path = "pubfigures/png",
-#   width = 7, height = 10, units = "in",
-#   dpi = 400
-# )
-# 
-# ## Tried this with device = pdf
-# # Sys.setenv(R_GSCMD = "/usr/bin/gs")
-# # embed_fonts("pubfigures/pdf/mindusa_mental_medians.pdf")
-# 
-# ## Helpful links for using Lato:
-# ## Using a non-default font by Zev Ross
-# ## https://www.zevross.com/blog/2014/07/30/tired-of-using-helvetica-in-your-r-graphics-heres-how-to-use-the-fonts-you-like-2/
-# ## Why didn't my spaces show up?
-# ## https://stackoverflow.com/questions/27542302/ggplot-embedded-fonts-in-pdf
-# ## Doing the same with png by Andrew Heiss
-# ## https://www.andrewheiss.com/blog/2017/09/27/working-with-r-cairo-graphics-custom-fonts-and-ggplot/
-# 
-# ## -- Tack Two: DCFDs, delirium, coma, mortality all in one --------------------
-# ## Create separate plots for each
-# plot_medians_pub <- function(med_df, mod_obj, title_string){
-#   ## Make sure treatment is in correct order
-#   med_df <- med_df %>%
-#     mutate(
-#       trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
-#     )
-#   
-#   p <- ggplot(data = med_df, aes(x = trt, y = quantile)) +
-#     geom_pointrange(
-#       aes(ymin = lb, ymax = ub), color = as.character(palette_colors[["dred"]])
-#     ) +
-#     scale_y_continuous(
-#       limits = c(0, 14),
-#       breaks = seq(0, 14, 2),
-#       name = "Adjusted Median Days (95% Confidence Interval)"
-#     ) +
-#     coord_flip() +
-#     theme(
-#       axis.title.y = element_blank(),
-#       axis.ticks.y = element_blank()
-#     ) +
-#     labs(
-#       title = title_string,
-#       subtitle = glue(
-#         'P {ifelse(anova(mod_obj)["trt", "P"] < 0.001, "", "= ")}',
-#         '{formatp(anova(mod_obj)["trt", "P"])}'
-#       )
-#     )
-#   
-#   return(p)
-# }
-# 
-# medians_dcfd_pub <- plot_medians_pub(
-#   med_df = dcfd_adjmeds,
-#   mod_obj = dcfd_mod,
-#   title_string = "Delirium/Coma-Free Days"
-# )
-# 
-# medians_del_pub <- plot_medians_pub(
-#   med_df = del_adjmeds, mod_obj = del_mod, title_string = "Delirium"
-# )
-# 
-# medians_coma_pub <- plot_medians_pub(
-#   med_df = coma_adjmeds, mod_obj = coma_mod, title_string = "Coma"
-# )
-# 
-# make_pub_vsn <- function(ggobj, xlims, xbreaks, title_string){
-#   ggobj +
-#     scale_y_continuous(limits = xlims, breaks = xbreaks) +
-#     labs(title = title_string, caption = NULL)
-# }
-# 
-# dcfd_adjmeds_pub <- make_pub_vsn(
-#   dcfd_adjmeds_plot,
-#   xlims = c(0, 14), xbreaks = seq(0, 14, 2),
-#   title_string = "Delirium/Coma-Free Days"
-# )
-# del_adjmeds_pub <- make_pub_vsn(
-#   del_adjmeds_plot,
-#   xlims = c(0, 14), xbreaks = seq(0, 14, 2),
-#   title_string = "Delirium"
-# )
-# coma_adjmeds_pub <- make_pub_vsn(
-#   coma_adjmeds_plot,
-#   xlims = c(0, 14), xbreaks = seq(0, 14, 2),
-#   title_string = "Coma"
-# )
-# death_30_hrs_pub <- make_pub_vsn(
-#   death_30_hrs_plot,
-#   xlims = c(0.7, 1.5), xbreaks = c(1, seq(0.7, 1.5, 0.2)),
-#   title_string = "30-Day Death"
-# )
-# death_90_hrs_pub <- make_pub_vsn(
-#   death_90_hrs_plot,
-#   xlims = c(0.7, 1.5), xbreaks = c(1, seq(0.7, 1.5, 0.2)),
-#   title_string = "90-Day Death"
-# )
-# 
-# ggsave(
-#   filename = "fig2.pdf",
-#   multiplot(
-#     dcfd_adjmeds_pub, del_adjmeds_pub, coma_adjmeds_pub,
-#     death_30_hrs_pub, death_90_hrs_pub,
-#     layout = matrix(c(1, 1, 4, 2, 3, 5), byrow = TRUE, nrow = 2)
-#   ),
-#   path = "pubfigures/pdf",
-#   device = cairo_pdf,
-#   width = 10, height = 6.5, units = "in"
-# )
+## -- Combine adj median data from primary analysis of all mental outcomes -----
+## Prep: Function to add outcome, p-values for treatment to median df
+add_outcomep <- function(df, outcome_var, mod_obj){
+  df %>%
+    mutate(outcome = outcome_var, p_trt = anova(mod_obj)["trt", "P"])
+}
+
+## Create big data.frame of all medians, CIs
+mental_medians_primary <- pmap_dfr(
+  .l = list(
+    df = list(dcfd_adjmeds, del_adjmeds, coma_adjmeds),
+    outcome_var = c("dcfd_int", "del_int_all", "coma_int_all"),
+    mod_obj = list(dcfd_mod, del_mod, coma_mod)
+  ),
+  .f = add_outcomep
+) %>%
+  ## Create facet labels: Outcome + p-value for treatment
+  mutate(
+    outcome_text = case_when(
+      outcome == "dcfd_int"         ~ "Delirium/Coma-Free Days",
+      outcome == "del_int_all"      ~ "Delirium (All)",
+      outcome == "hyperdel_int_all" ~ "Hyperactive Delirium",
+      outcome == "hypodel_int_all"  ~ "Hypoactive Delirium",
+      TRUE                          ~ "Coma"
+    ),
+    outcome_sep = ifelse(p_trt < 0.001, " ", " = "),
+    p_trt = formatp_nejm(p_trt),
+
+    ## Order variables for facets, axis labels
+    trt_short = factor(substr(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
+
+    ## facet_text will be a factor ordered by this variable
+    plot_order = case_when(
+      outcome == "dcfd_int"         ~ 1,
+      outcome == "del_int_all"      ~ 2,
+      outcome == "hyperdel_int_all" ~ 3,
+      outcome == "hypodel_int_all"  ~ 4,
+      TRUE                          ~ 5
+    ),
+    facet_text = glue("{outcome_text}\n\nP{outcome_sep}{p_trt}"),
+    facet_text = fct_reorder(facet_text, plot_order)
+  )
+
+mental_medians_plot_pub <- ggplot(
+  data = mental_medians_primary, aes(x = trt_short, y = quantile)
+) +
+  facet_wrap(~ facet_text, ncol = 1) +
+  geom_segment(
+    aes(xend = trt_short, y = lb, yend = ub),
+    color = as.character(palette_colors["dred"])
+  ) +
+  geom_point(color = "black", shape = 15) +
+  ## Axes should accurately reflect our intervention period
+  scale_y_continuous(
+    limits = c(0, 14),
+    breaks = seq(0, 14, 2),
+    name = "Adjusted  Median  Days  (95%  Confidence  Interval)"
+  ) +
+  coord_flip() +
+  theme(
+    axis.title.y = element_blank()
+  )
+
+ggsave(
+  filename = "mindusa_mental_medians.pdf",
+  mental_medians_plot_pub,
+  ## cairo_pdf instead of regular pdf, because regular pdf ignored the spaces,
+  ## gave what I believe to be an error related to the TrueType-ness of Lato (?)
+  device = cairo_pdf,
+  path = "pubfigures/pdf",
+  width = 7, height = 10, units = "in"
+)
+
+ggsave(
+  filename = "mindusa_mental_medians.png",
+  mental_medians_plot_pub,
+  type = "cairo",
+  path = "pubfigures/png",
+  width = 7, height = 10, units = "in",
+  dpi = 400
+)
+
+## Tried this with device = pdf
+# Sys.setenv(R_GSCMD = "/usr/bin/gs")
+# embed_fonts("pubfigures/pdf/mindusa_mental_medians.pdf")
+
+## Helpful links for using Lato:
+## Using a non-default font by Zev Ross
+## https://www.zevross.com/blog/2014/07/30/tired-of-using-helvetica-in-your-r-graphics-heres-how-to-use-the-fonts-you-like-2/
+## Why didn't my spaces show up?
+## https://stackoverflow.com/questions/27542302/ggplot-embedded-fonts-in-pdf
+## Doing the same with png by Andrew Heiss
+## https://www.andrewheiss.com/blog/2017/09/27/working-with-r-cairo-graphics-custom-fonts-and-ggplot/
+
+## -- Tack Two: DCFDs, delirium, coma all in one -------------------------------
+## Row 1: DCFDs; Row 2: Delirium + Coma
+## Facet all for consistency
+
+## Prep function: Create text string with title, p-value for treatment given
+##  a model + title
+make_outcome_string <- function(mod_obj, title_string){
+  p_trt <- anova(mod_obj)["trt", "P"]
+  sprintf(
+    "%s; P%s%s",
+    title_string, ifelse(p_trt < 0.001, '', '='), formatp_nejm(p_trt)
+  )
+}
+
+## Create separate plots for each
+plot_medians_pub <- function(
+  med_df, ## Needs columns: trt; quantile; lb; ub; title_text
+  facet_outcome = TRUE,
+  trt_abb = TRUE,
+  use_xtitle = TRUE
+){
+  ## Make sure treatment is in correct order
+  med_df <- med_df %>%
+    mutate(
+      trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
+      trt_short = forcats::fct_relabel(
+        trt, ~ ifelse(. == "Placebo", "Plac", str_sub(., 1, 3))
+      )
+    )
+
+  if(trt_abb){
+    p <- ggplot(data = med_df, aes(x = trt_short, y = quantile))
+  } else{
+    p <- ggplot(data = med_df, aes(x = trt, y = quantile))
+  }
+  
+  p <- p +
+    geom_pointrange(
+      aes(ymin = lb, ymax = ub),
+      color = as.character(palette_colors[["dred"]]), size = 1#, shape = 1
+    ) +
+    scale_y_continuous(
+      limits = c(0, 14),
+      breaks = seq(0, 14, 2),
+      name = "Adjusted Median Days (95% Confidence Interval)"
+    ) +
+    coord_flip() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_text(face = "bold", size = basetext_size)
+    )
+
+  if(facet_outcome){
+    p <- p +
+      facet_wrap(~ title_text, nrow = 1) +
+      theme(
+        strip.text.x = element_text(hjust = 0, size = basetext_size * 1.3),
+        strip.background = element_blank()
+      )
+  } else{
+    p <- p +
+      labs(
+        title = unique(med_df$title_text)
+      )
+  }
+  
+  if(!use_xtitle){
+    p <- p +
+      theme(axis.title.x = element_blank())
+  } else{
+    p <- p +
+      theme(axis.title.x = element_text(vjust = 0))
+  }
+
+  return(p)
+}
+
+medians_dcfd_pub <- plot_medians_pub(
+  med_df = dcfd_adjmeds %>%
+    mutate(
+      title_text = make_outcome_string(dcfd_mod, "Delirium/Coma-Free Days")
+    ),
+  use_xtitle = FALSE
+)
+
+medians_delcoma_pub <- plot_medians_pub(
+  med_df = bind_rows(
+    del_adjmeds %>%
+      mutate(title_text = make_outcome_string(del_mod, "Delirium Days")),
+    coma_adjmeds %>%
+      mutate(title_text = make_outcome_string(coma_mod, "Coma Days"))
+  ) %>%
+    mutate(
+      ## Put delirium on lefthand side
+      title_text = forcats::fct_rev(factor(title_text))
+    ),
+  use_xtitle = TRUE
+)
+
+ggsave(
+  filename = "fig2.pdf",
+  multiplot(
+    medians_dcfd_pub, medians_delcoma_pub,
+    layout = matrix(c(1, 2), byrow = TRUE, nrow = 2)
+  ),
+  path = "pubfigures/pdf",
+  device = cairo_pdf,
+  width = 8, height = 6.5, units = "in"
+)
 
 ```
 

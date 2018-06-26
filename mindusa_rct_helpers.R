@@ -58,6 +58,14 @@ mykablestyle <- function(obj, stripes = FALSE, ...){
   
 }
 
+## Format p-values per NEJM style
+formatp_nejm <- function(p){
+  ifelse(p < 0.0001, '<0.0001',
+  ifelse(p < 0.001, '<0.001',
+  ifelse(p < 0.01, rndformat(p, digits = 3),
+         rndformat(p, digits = 2))))
+}
+
 ## -- Continuous outcomes: Modeling/results helper functions -------------------
 ## Create string with results of Kruskal-Wallis test
 kw_results <- function(kw_obj){
