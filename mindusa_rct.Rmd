@@ -111,8 +111,9 @@ mindusa_palette <- ggthemr::define_palette(
 
 ## Set ggplot2 theme options directly
 basetext_size <- 13
+basetext_family <- "Lato"
 mindusa_theme <- function(base_size = basetext_size){
-  theme_bw(base_size = base_size, base_family = "Lato") +
+  theme_bw(base_size = base_size, base_family = basetext_family) +
     theme(
       text = element_text(colour = as.character(palette_colors["dgray"])),
       plot.title = element_text(face = "bold"),
@@ -1760,7 +1761,6 @@ model_df <- ptsummary_df %>%
   ## Create category for level of arousal at randomization,
   ##   using RASS closest to time of randomization within 5 hours
   mutate(
-    trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
     arousal_rand = factor(
       case_when(
         is.na(rass_rand) ~ as.numeric(NA),
@@ -2990,11 +2990,23 @@ We see no association between treatment group and death at either 30 or 90 days.
 ## -- Create Surv, survfit objects for time to death ---------------------------
 surv_death_30 <-
   with(model_df, Surv(time = tte_death_30, event = event_death_30))
-sf_death_30 <- survfit(surv_death_30 ~ trt, data = model_df)
+sf_death_30 <- survfit(
+  surv_death_30 ~ trt,
+  data = model_df %>%
+    mutate(
+      trt = factor(trt, levels = c("Ziprasidone", "Haloperidol", "Placebo"))
+    )
+)
 
 surv_death_90 <-
   with(model_df, Surv(time = tte_death_90, event = event_death_90))
-sf_death_90 <- survfit(surv_death_90 ~ trt, data = model_df)
+sf_death_90 <- survfit(
+  surv_death_90 ~ trt,
+  data = model_df %>%
+    mutate(
+      trt = factor(trt, levels = c("Ziprasidone", "Haloperidol", "Placebo"))
+    )
+)
 
 ## -- Log-rank test ------------------------------------------------------------
 logrank_death_30 <- survdiff(surv_death_30 ~ trt, data = model_df)
@@ -5762,6 +5774,44 @@ ggsave(
   ),
   path = "pubfigures/png",
   type = "cairo", dpi = 400, width = 8, height = 6.5, units = "in"
+)
+
+```
+
+## 90-Day Survival
+
+```{r pubfig_death}
+## -- Start with KM already created; add *adj* p-vals, tweak labels/legend -----
+death_90_pub <- km_death_90
+
+death_90_pub$plot <- death_90_pub$plot +
+  labs(
+    subtitle = glue(
+      "Adjusted P for treatment, ",
+      "30 days: {formatp_nejm(anova(death_30_mod)['trt', 'P'])}; ",
+      "90 days: {formatp_nejm(anova(death_90_mod)['trt', 'P'])}"
+    )
+  ) +
+  theme(legend.position = c(0.015, 0.03))
+
+death_90_pub$table <- death_90_pub$table +
+  scale_y_discrete(labels = c("Plac", "Hal", "Zip"))
+
+## Save as pdf, png
+## ggsave() can't draw ggsurvplot objects; use multiplot
+ggsave(
+  filename = "mindusa_km.pdf",
+  multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2)),
+  path = "pubfigures/pdf",
+  device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
+  width = 7, height = 6.5, units = "in"
+)
+
+ggsave(
+  filename = "mindusa_km.png",
+  multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2)),
+  path = "pubfigures/png",
+  type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
 )
 
 ```
