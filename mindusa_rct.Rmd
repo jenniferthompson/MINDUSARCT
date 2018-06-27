@@ -92,6 +92,15 @@ palette_colors <- c(
   "lgray"   = "#92A3A3"
 )
 
+mindusa_trtcols_long <- c(
+  "Ziprasidone" = "#315C8D",
+  "Haloperidol" = "#448942",
+  "Placebo"     = "#767676"
+)
+
+mindusa_trtcols_short <-
+  set_names(mindusa_trtcols_long, c("Zip", "Hal", "Plac"))
+
 ## Use ggthemr to define the full palette
 mindusa_palette <- ggthemr::define_palette(
   swatch = as.character(palette_colors),
@@ -1751,6 +1760,7 @@ model_df <- ptsummary_df %>%
   ## Create category for level of arousal at randomization,
   ##   using RASS closest to time of randomization within 5 hours
   mutate(
+    trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
     arousal_rand = factor(
       case_when(
         is.na(rass_rand) ~ as.numeric(NA),

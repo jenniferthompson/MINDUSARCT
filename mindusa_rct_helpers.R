@@ -97,6 +97,7 @@ mental_plot <- function(xvar, xtitle, kw_obj){
   ggplot(data = model_df, aes_string(x = xvar)) +
     facet_wrap(~ trt, nrow = 1) +
     geom_histogram(aes(fill = trt), binwidth = 1) +
+    scale_fill_manual(values = mindusa_trtcols_long) +
     scale_x_continuous(name = xtitle, breaks = seq(0, xmax, 2)) +
     scale_y_continuous(name = "Patient Count") +
     theme(
@@ -504,7 +505,7 @@ km_plot_death <- function(
     legend.labs = gsub("trt=", "", names(sf$strata)),
     
     ## Use specified themes, colors
-    palette = as.character(palette_colors[c("dred", "dgray", "dgreen")]),
+    palette = mindusa_trtcols_long,
     ggtheme = mindusa_theme(), tables.theme = mindusa_theme()
   )
   
@@ -702,6 +703,10 @@ cr_risktable <- function(
 cr_risktable_plot <- function(sf_sum, main_event, event_string){
   df <- cr_risktable(sf_sum, main_event = main_event)
   
+  # ## Put plot in correct order - BUT can't quickly figure this out for
+  # ##  ggcompetingrisks, so leave alphabetical for now :(
+  # df$trt <- factor(df$trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+  
   ## Set plot title
   plot_title <- ifelse(
     "Discharge" %in% names(df),
@@ -715,7 +720,11 @@ cr_risktable_plot <- function(sf_sum, main_event, event_string){
   
   ggplot(data = df, aes(x = time, y = 1, colour = trt)) +
     facet_wrap(~ trt, nrow = 1) +
-    geom_text(aes(label = risk_string), size = basetext_size * 0.15) +
+    geom_text(
+      aes(label = risk_string),
+      size = basetext_size * 0.15, color = palette_colors[["dgray"]]
+    ) +
+    # scale_colour_manual(values = mindusa_trtcols_long) +
     scale_x_continuous(
       name = "Days after Randomization",
       breaks = unique(sf_sum$time),
