@@ -5621,7 +5621,7 @@ Listing of planned figures in primary manuscript:
 
 1. CONSORT information
 1. Mental status outcomes: medians, DCFDs, delirium, coma duration
-1. Survival: 90-day KM curve
+1. Survival: 90-day KM curve, including results from 30 + 90-day models
 1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission
 
 Planned figures for supplement:
@@ -5633,93 +5633,6 @@ Planned figures for supplement:
 ## Mental Status Outcomes, Primary Analysis
 
 ```{r pubfig_mental}
-## -- Combine adj median data from primary analysis of all mental outcomes -----
-## Prep: Function to add outcome, p-values for treatment to median df
-add_outcomep <- function(df, outcome_var, mod_obj){
-  df %>%
-    mutate(outcome = outcome_var, p_trt = anova(mod_obj)["trt", "P"])
-}
-
-## Create big data.frame of all medians, CIs
-mental_medians_primary <- pmap_dfr(
-  .l = list(
-    df = list(dcfd_adjmeds, del_adjmeds, coma_adjmeds),
-    outcome_var = c("dcfd_int", "del_int_all", "coma_int_all"),
-    mod_obj = list(dcfd_mod, del_mod, coma_mod)
-  ),
-  .f = add_outcomep
-) %>%
-  ## Create facet labels: Outcome + p-value for treatment
-  mutate(
-    outcome_text = case_when(
-      outcome == "dcfd_int"         ~ "Delirium/Coma-Free Days",
-      outcome == "del_int_all"      ~ "Delirium (All)",
-      outcome == "hyperdel_int_all" ~ "Hyperactive Delirium",
-      outcome == "hypodel_int_all"  ~ "Hypoactive Delirium",
-      TRUE                          ~ "Coma"
-    ),
-    outcome_sep = ifelse(p_trt < 0.001, " ", " = "),
-    p_trt = formatp_nejm(p_trt),
-
-    ## Order variables for facets, axis labels
-    trt_short = factor(substr(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
-    trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
-
-    ## facet_text will be a factor ordered by this variable
-    plot_order = case_when(
-      outcome == "dcfd_int"         ~ 1,
-      outcome == "del_int_all"      ~ 2,
-      outcome == "hyperdel_int_all" ~ 3,
-      outcome == "hypodel_int_all"  ~ 4,
-      TRUE                          ~ 5
-    ),
-    facet_text = glue("{outcome_text}\n\nP{outcome_sep}{p_trt}"),
-    facet_text = fct_reorder(facet_text, plot_order)
-  )
-
-mental_medians_plot_pub <- ggplot(
-  data = mental_medians_primary, aes(x = trt_short, y = quantile)
-) +
-  facet_wrap(~ facet_text, ncol = 1) +
-  geom_segment(
-    aes(xend = trt_short, y = lb, yend = ub),
-    color = as.character(palette_colors["dred"])
-  ) +
-  geom_point(color = "black", shape = 15) +
-  ## Axes should accurately reflect our intervention period
-  scale_y_continuous(
-    limits = c(0, 14),
-    breaks = seq(0, 14, 2),
-    name = "Adjusted  Median  Days  (95%  Confidence  Interval)"
-  ) +
-  coord_flip() +
-  theme(
-    axis.title.y = element_blank()
-  )
-
-ggsave(
-  filename = "mindusa_mental_medians.pdf",
-  mental_medians_plot_pub,
-  ## cairo_pdf instead of regular pdf, because regular pdf ignored the spaces,
-  ## gave what I believe to be an error related to the TrueType-ness of Lato (?)
-  device = cairo_pdf,
-  path = "pubfigures/pdf",
-  width = 7, height = 10, units = "in"
-)
-
-ggsave(
-  filename = "mindusa_mental_medians.png",
-  mental_medians_plot_pub,
-  type = "cairo",
-  path = "pubfigures/png",
-  width = 7, height = 10, units = "in",
-  dpi = 400
-)
-
-## Tried this with device = pdf
-# Sys.setenv(R_GSCMD = "/usr/bin/gs")
-# embed_fonts("pubfigures/pdf/mindusa_mental_medians.pdf")
-
 ## Helpful links for using Lato:
 ## Using a non-default font by Zev Ross
 ## https://www.zevross.com/blog/2014/07/30/tired-of-using-helvetica-in-your-r-graphics-heres-how-to-use-the-fonts-you-like-2/
@@ -5728,7 +5641,7 @@ ggsave(
 ## Doing the same with png by Andrew Heiss
 ## https://www.andrewheiss.com/blog/2017/09/27/working-with-r-cairo-graphics-custom-fonts-and-ggplot/
 
-## -- Tack Two: DCFDs, delirium, coma all in one -------------------------------
+## DCFDs, delirium, coma all in one figure -------------------------------------
 ## Row 1: DCFDs; Row 2: Delirium + Coma
 ## Facet all for consistency
 
@@ -5742,12 +5655,12 @@ make_outcome_string <- function(mod_obj, title_string){
   )
 }
 
-## Create separate plots for each
+## -- Function to create separate plots for each mental outcome/set ------------
 plot_medians_pub <- function(
-  med_df, ## Needs columns: trt; quantile; lb; ub; title_text
-  facet_outcome = TRUE,
-  trt_abb = TRUE,
-  use_xtitle = TRUE
+  med_df,               ## Needs columns: trt; quantile; lb; ub; title_text
+  facet_outcome = TRUE, ## Use facets? If not, info gets put in title
+  trt_abb       = TRUE, ## Use abbreviated treatment names?
+  use_xtitle    = TRUE  ## Include X axis title?
 ){
   ## Make sure treatment is in correct order
   med_df <- med_df %>%
@@ -5758,12 +5671,14 @@ plot_medians_pub <- function(
       )
     )
 
+  ## Set aes() according to whether we want full or abbreviated treatment names
   if(trt_abb){
     p <- ggplot(data = med_df, aes(x = trt_short, y = quantile))
   } else{
     p <- ggplot(data = med_df, aes(x = trt, y = quantile))
   }
   
+  ## Bulk of plot
   p <- p +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
@@ -5781,6 +5696,7 @@ plot_medians_pub <- function(
       axis.text.y = element_text(face = "bold", size = basetext_size)
     )
 
+  ## Include outcome/testing info in either facet titles or plot title
   if(facet_outcome){
     p <- p +
       facet_wrap(~ title_text, nrow = 1) +
@@ -5789,23 +5705,20 @@ plot_medians_pub <- function(
         strip.background = element_blank()
       )
   } else{
-    p <- p +
-      labs(
-        title = unique(med_df$title_text)
-      )
+    p <- p + labs(title = unique(med_df$title_text))
   }
   
+  ## Remove or format X axis title
   if(!use_xtitle){
-    p <- p +
-      theme(axis.title.x = element_blank())
+    p <- p + theme(axis.title.x = element_blank())
   } else{
-    p <- p +
-      theme(axis.title.x = element_text(vjust = 0))
+    p <- p + theme(axis.title.x = element_text(vjust = 0))
   }
 
   return(p)
 }
 
+## -- Create one plot for DCFDs, one for delirium + coma -----------------------
 medians_dcfd_pub <- plot_medians_pub(
   med_df = dcfd_adjmeds %>%
     mutate(
@@ -5828,15 +5741,27 @@ medians_delcoma_pub <- plot_medians_pub(
   use_xtitle = TRUE
 )
 
+## Save plots as pdf, png
+## A Heiss's cool %T>% trick he tweeted me doesn't work with multiplot(), sadly
 ggsave(
-  filename = "fig2.pdf",
+  filename = "mindusa_mentaloutcomes.pdf",
   multiplot(
     medians_dcfd_pub, medians_delcoma_pub,
     layout = matrix(c(1, 2), byrow = TRUE, nrow = 2)
   ),
   path = "pubfigures/pdf",
-  device = cairo_pdf,
+  device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
   width = 8, height = 6.5, units = "in"
+)
+
+ggsave(
+  filename = "mindusa_mentaloutcomes.png",
+  multiplot(
+    medians_dcfd_pub, medians_delcoma_pub,
+    layout = matrix(c(1, 2), byrow = TRUE, nrow = 2)
+  ),
+  path = "pubfigures/png",
+  type = "cairo", dpi = 400, width = 8, height = 6.5, units = "in"
 )
 
 ```
