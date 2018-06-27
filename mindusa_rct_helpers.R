@@ -506,7 +506,8 @@ km_plot_death <- function(
     
     ## Use specified themes, colors
     palette = mindusa_trtcols_long,
-    ggtheme = mindusa_theme(), tables.theme = mindusa_theme()
+    ggtheme = mindusa_theme(), tables.theme = mindusa_theme(),
+    font.family = basetext_family
   )
   
   ## -- More finely control plot options ---------------------------------------
@@ -530,7 +531,7 @@ km_plot_death <- function(
     theme(
       ## X axis label will be at the bottom of the table; no need to duplicate
       axis.title.x = element_blank(),
-      legend.position = c(0, 0),
+      legend.position = c(0.01, 0.025),
       legend.background = element_blank(),
       legend.title = element_blank(),
       legend.justification = c(0, 0),
@@ -722,7 +723,8 @@ cr_risktable_plot <- function(sf_sum, main_event, event_string){
     facet_wrap(~ trt, nrow = 1) +
     geom_text(
       aes(label = risk_string),
-      size = basetext_size * 0.15, color = palette_colors[["dgray"]]
+      size = basetext_size * 0.15, family = basetext_family,
+      color = palette_colors[["dgray"]]
     ) +
     # scale_colour_manual(values = mindusa_trtcols_long) +
     scale_x_continuous(
