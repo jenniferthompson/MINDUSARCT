@@ -5634,15 +5634,20 @@ Listing of planned figures in primary manuscript:
 1. CONSORT information
 1. Mental status outcomes: medians, DCFDs, delirium, coma duration
 1. Survival: 90-day KM curve, including results from 30 + 90-day models
-1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission
+1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission (outcomes of interest only)
 
 Planned figures for supplement:
 
 1. Medians, hypoactive/hyperactive delirium
 1. Adjusted hazard ratios for all TTE outcomes
+1. Complete cumulative incidence curves for all TTE outcomes, including curves for death/discharge and N at risk
 1. Effect modification figures
 
 ## Mental Status Outcomes, Primary Analysis
+
+*Suggested caption:*
+
+[This figure] presents median values and 95% confidence intervals by treatment group for days alive and free of delirium and coma (DCFDs), days of delirium, and days of coma. Medians and p-values are calculated using proportional odds logistic regression clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r pubfig_mental}
 ## Helpful links for using Lato:
@@ -5776,9 +5781,18 @@ ggsave(
   type = "cairo", dpi = 400, width = 8, height = 6.5, units = "in"
 )
 
+multiplot(
+  medians_dcfd_pub, medians_delcoma_pub,
+  layout = matrix(c(1, 2), byrow = TRUE, nrow = 2)
+)
+
 ```
 
 ## 90-Day Survival
+
+*Suggested caption:*
+
+[This figure] presents Kaplan-Meier curves by treatment group up to 90 days after randomization. P-values for 30- and 90-day death are calculated using Cox proportional hazards models clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization. 
 
 ```{r pubfig_death}
 ## -- Start with KM already created; add *adj* p-vals, tweak labels/legend -----
@@ -5787,9 +5801,8 @@ death_90_pub <- km_death_90
 death_90_pub$plot <- death_90_pub$plot +
   labs(
     subtitle = glue(
-      "Adjusted P for treatment, ",
-      "30 days: {formatp_nejm(anova(death_30_mod)['trt', 'P'])}; ",
-      "90 days: {formatp_nejm(anova(death_90_mod)['trt', 'P'])}"
+      "At 30 days, adjusted P={formatp_nejm(anova(death_30_mod)['trt', 'P'])};",
+      " at 90 days, adjusted P={formatp_nejm(anova(death_90_mod)['trt', 'P'])}"
     )
   ) +
   theme(legend.position = c(0.015, 0.03))
@@ -5813,6 +5826,8 @@ ggsave(
   path = "pubfigures/png",
   type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
 )
+
+multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2))
 
 ```
 
