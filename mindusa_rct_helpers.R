@@ -495,6 +495,8 @@ km_plot_death <- function(
   km_death <- survminer::ggsurvplot(
     sf, ## survfit() object
     
+    # linetype = "strata",
+    
     ## CIs
     conf.int = TRUE, conf.int.alpha = 0.15,
     
