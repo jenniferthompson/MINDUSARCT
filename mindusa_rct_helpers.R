@@ -496,7 +496,7 @@ km_plot_death <- function(
     sf, ## survfit() object
     
     ## CIs
-    conf.int = TRUE, conf.int.alpha = 0.20,
+    conf.int = TRUE, conf.int.alpha = 0.15,
     
     ## Show N, cumulative events every time_breaks days; color text by trt
     xlim = c(0, time + 1),
