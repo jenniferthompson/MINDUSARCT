@@ -3011,7 +3011,6 @@ sf_death_90 <- survfit(
 ## -- Log-rank test ------------------------------------------------------------
 logrank_death_30 <- survdiff(surv_death_30 ~ trt, data = model_df)
 logrank_death_90 <- survdiff(surv_death_90 ~ trt, data = model_df)
-
 ## -- Create KM curves, N at risk tables ---------------------------------------
 km_death_30 <- km_plot_death(sf = sf_death_30, lr = logrank_death_30, time = 30)
 km_death_90 <- km_plot_death(sf = sf_death_90, lr = logrank_death_90, time = 90)
@@ -5830,6 +5829,202 @@ ggsave(
 multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2))
 
 ```
+
+## Cumulative Incidence Curves
+
+In the main manuscript, we will include only the cumulative incidence curves for
+the primary distribution of interest (eg, only ICU discharge, not death), in order to create a single paneled figure with all outcomes. In the supplement, we
+will include full CIF curves as well as the N at risk tables for each outcome.
+
+### Main Paper
+
+```{r pubfig_cif_main}
+################################################################################
+## ggcompetingrisks() (and cuminc()) cut off graph at the final observed time,
+## even if it's well before the end of the time period. We need some data
+## management to extend our figures to the very end.
+################################################################################
+
+## -- Goal: Data set w/ one record per time + trt, one column per outcome ------
+## -- Function to do dataset prep for one outcome ------------------------------
+prep_cuminc_df <- function(cuminc_obj, censor_time, cph_mod){
+  ## Extract p-value for treatment
+  p_trt <- anova(cph_mod)["trt", "P"]
+
+  ## We want to extract data from all elements of the cuminc() object except
+  ##  the test string
+  cif_names <- setdiff(names(cuminc_obj), "Tests")
+
+  ## 1. Create data.frame out of time, est, var components
+  df <- map(
+    cuminc_obj[names(cuminc_obj) != "Tests"],
+    bind_cols
+  ) %>%
+  ## For each df, add record for time of administrative censoring if not present
+  map(
+    ~ bind_rows(., tail(., n = 1) %>% mutate(time = censor_time)) %>% unique()
+  ) %>%
+  ## Add primary outcome, treatment, overall outcome to each df;
+  ##  combine into one big df
+  map2_df(
+    .y = cif_names,
+    ~ .x %>%
+      mutate(
+        trt_curve = .y,
+        tte_outcome = rownames(cuminc_obj$Tests)[1],
+        p_trt = p_trt
+      )
+  )
+  
+  return(df)
+
+}
+
+cif_data <- pmap_df(
+  .l = list(
+    cuminc_obj =
+      list(icudis_90_cif, hospdis_90_cif, mvlib_30_cif, readm_90_cif),
+    censor_time = c(90, 90, 30, 90),
+    cph_mod = list(icudis_90_mod, hospdis_90_mod, mvlib_30_mod, readm_90_mod)
+  ),
+  .f = prep_cuminc_df
+) %>%
+  ## Separate outcome, treatment variables
+  ##  extra = "merge": keep everything before first space separate; merge
+  ##   everything else into "subdist" column
+  separate(
+    trt_curve, into = c("trt", "subdist"), sep = " ", extra = "merge"
+  ) %>%
+  ## Add CIs
+  mutate(
+    lb = est - qnorm(0.975) * sqrt(var),
+    lb = ifelse(lb < 0, 0, lb),
+    ub = est + qnorm(0.975) * sqrt(var),
+    ## Order factors
+    trt = factor(trt, levels = c("Ziprasidone", "Haloperidol", "Placebo")),
+    outcome_order = case_when(
+      tte_outcome == "ICU Discharge" ~ 1,
+      tte_outcome == "Hospital Discharge" ~ 2,
+      tte_outcome == "Readmission" ~ 3,
+      TRUE ~ 4
+    ),
+    tte_outcome2 = case_when(
+      tte_outcome == "MV Liberation" ~ "Liberation from MV",
+      tte_outcome == "Readmission" ~ "ICU Readmission",
+      TRUE ~ tte_outcome
+    ),
+    ## Two-line, one-line versions of outcome + p-values
+    tte_outcome_2l = glue(
+      "{tte_outcome2}\n\nP{ifelse(p_trt < 0.001, '', '=')}{formatp_nejm(p_trt)}"
+    ),
+    tte_outcome_2l = fct_reorder(tte_outcome_2l, .x = outcome_order),
+    tte_outcome_1l = glue(
+      "{tte_outcome2}; P{ifelse(p_trt < 0.001, '', '=')}{formatp_nejm(p_trt)}"
+    ),
+    tte_outcome_1l = fct_reorder(tte_outcome_1l, .x = outcome_order),
+    ## Indicator for whether this is the subdistribution of primary interest
+    is_subdist = tte_outcome == subdist
+  )
+
+# ## Small multiples version
+# cif_pub_sm <- ggplot(
+#   data = cif_data %>% filter(is_subdist),
+#   aes(x = time, y = est, color = trt, fill = trt)
+# ) +
+#   facet_grid(tte_outcome_2l ~ trt) +
+#   geom_ribbon(
+#     aes(ymin = lb, ymax = ub), colour = NA, alpha = 0.15
+#   ) +
+#   geom_step() +
+#   scale_color_manual(values = mindusa_trtcols_long, guide = FALSE) +
+#   scale_fill_manual(values = mindusa_trtcols_long, guide = FALSE) +
+#   scale_x_continuous(name = "Days after Randomization") +
+#   scale_y_continuous(
+#     name = "Cumulative Probability",
+#     limits = c(0, 1),
+#     breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
+#   )
+
+## Faceted version: perfect except X axis breaks
+cif_pub_facet <- ggplot(
+  data = cif_data %>% filter(is_subdist),
+  aes(x = time, y = est, color = trt, fill = trt)
+) +
+  facet_wrap(~ tte_outcome_1l, scales = "free_x") +
+  geom_ribbon(
+    aes(ymin = lb, ymax = ub), colour = NA, alpha = 0.15
+  ) +
+  geom_step() +
+  scale_color_manual(values = mindusa_trtcols_long) +
+  scale_fill_manual(values = mindusa_trtcols_long) +
+  scale_x_continuous(
+    name = "Days after Randomization",
+    breaks = seq(0, 90, length.out = 7)
+  ) +
+  scale_y_continuous(
+    name = "Cumulative Probability",
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
+  ) +
+  theme(
+    strip.text = element_text(hjust = 0, size = basetext_size * 1.1),
+    strip.background = element_blank(),
+    legend.title = element_blank(),
+    legend.background = element_blank(),
+    legend.position = c(0.89, 0.1),
+    legend.direction = "vertical",
+    legend.text.align = 1
+  )
+
+cif_pub_facet %T>%
+  ggsave(
+    filename = "mindusa_tteoutcomes.pdf", ., path = "pubfigures/pdf",
+    device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
+    width = 7, height = 6.5, units = "in"
+  ) %T>%
+ggsave(
+  filename = "mindusa_tteoutcomes.png", ., path = "pubfigures/png",
+  type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
+)
+
+# ## -- Function to create single TTE plot ---------------------------------------
+# plot_cif_ind <- function(outcome, subdist_only = TRUE, main_df = cif_data){
+#   
+#   if(subdist_only){
+#     df <- main_df %>% filter(is_subdist & tte_outcome2 == outcome)
+#   } else{
+#     df <- main_df %>% filter(tte_outcome2 == outcome)
+#   }
+#   
+#   ggplot(data = df, aes(x = time, y = est, color = trt, fill = trt)) +
+#     facet_wrap(~ tte_outcome_1l, nrow = 1) +
+#     geom_ribbon(
+#       aes(ymin = lb, ymax = ub), colour = NA, alpha = 0.15
+#     ) +
+#     geom_step() +
+#     scale_color_manual(values = mindusa_trtcols_long, guide = FALSE) +
+#     scale_fill_manual(values = mindusa_trtcols_long, guide = FALSE) +
+#     scale_x_continuous(
+#       name = "Days after Randomization",
+#       breaks = seq(0, floor(max(df$time)), length.out = 7)
+#     ) +
+#     scale_y_continuous(
+#       name = "Cumulative Probability",
+#       limits = c(0, 1),
+#       breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
+#     ) +
+#     theme(
+#       strip.text = element_text(hjust = 0),
+#       strip.background = element_blank()
+#     )
+# 
+# }
+#   
+# cif_pub_separate <- map(levels(cif_data$tte_outcome), plot_cif_ind)
+# multiplot(plotlist = cif_pub_separate, layout = matrix(1:4, ncol = 2))
+
+```
+
 
 # Notes on Variable Calculation{#varcalc}
 
