@@ -516,7 +516,7 @@ km_plot_death <- function(
   km_death$plot <- km_death$plot +
     ## Change Y axis to % labels, not proportion
     scale_y_continuous(
-      name = "Percent Alive",
+      name = "Probability of Overall Survival (%)",
       breaks = seq(0, 1, 0.25),
       labels = paste0(seq(0, 1, 0.25) * 100, "%")
     ) +
