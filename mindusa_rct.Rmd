@@ -92,10 +92,12 @@ palette_colors <- c(
   "lgray"   = "#92A3A3"
 )
 
+## Taken from the "berlin" color palette in the scico package
+## scico::scico(9, palette = "berlin")
 mindusa_trtcols_long <- c(
-  "Ziprasidone" = "#315C8D",
-  "Haloperidol" = "#448942",
-  "Placebo"     = "#767676"
+  "Ziprasidone" = "#7B321C",
+  "Haloperidol" = "#286886",
+  "Placebo" = "#180B09"
 )
 
 mindusa_trtcols_short <-
@@ -233,7 +235,7 @@ ptsummary_df$antipsyc_adm_pr <- with(ptsummary_df, {
 
 ```
 
-# Screening, Consent, and Randomization
+# Screening, Consent, and Randomization{#screening}
 
 <hr>
 
@@ -1880,7 +1882,7 @@ mod_rhs <- map_chr(cont_covars, ~ sprintf("rcs(%s, %s)", ., rcsknots)) %>%
   paste(collapse = " + ")
 
 ## For testing purposes: RHS, no splines
-mod_rhs_lin <- paste(c(covariate_vars, em_vars), collapse = " + ")
+mod_rhs_lin <- paste(c(covariate_vars, em_vars, "study_site"), collapse = " + ")
 
 ```
 
@@ -3302,7 +3304,8 @@ icudis_90_mod <- cph(
   data = icudis_90_fg,
   weights = fgwt,
   x = TRUE, y = TRUE
-)
+) %>%
+  robcov(cluster = icudis_90_fg$study_site)
 
 ```
 
@@ -3496,7 +3499,8 @@ hospdis_90_mod <- cph(
   data = hospdis_90_fg,
   weights = fgwt,
   x = TRUE, y = TRUE
-)
+) %>%
+  robcov(cluster = hospdis_90_fg$study_site)
 
 ```
 
@@ -3696,7 +3700,8 @@ mvlib_30_mod <- cph(
   data = mvlib_30_fg,
   weights = fgwt,
   x = TRUE, y = TRUE
-)
+) %>%
+  robcov(cluster = mvlib_30_fg$study_site)
 
 ```
 
@@ -3900,7 +3905,8 @@ readm_90_mod <- cph(
   data = readm_90_fg,
   weights = fgwt,
   x = TRUE, y = TRUE
-)
+) %>%
+  robcov(cluster = readm_90_fg$study_site)
 
 ```
 
@@ -5630,7 +5636,7 @@ publication and future presentations.
 
 Listing of planned figures in primary manuscript:
 
-1. CONSORT information
+1. CONSORT information (done by clinical authors; information provided in [*Screening, Consent, and Randomization*](#screening))
 1. Mental status outcomes: medians, DCFDs, delirium, coma duration
 1. Survival: 90-day KM curve, including results from 30 + 90-day models
 1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission (outcomes of interest only)
@@ -5646,7 +5652,10 @@ Planned figures for supplement:
 
 *Suggested caption:*
 
-[This figure] presents median values and 95% confidence intervals by treatment group for days alive and free of delirium and coma (DCFDs), days of delirium, and days of coma. Medians and p-values are calculated using proportional odds logistic regression clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+[This figure] presents adjusted median values and 95% confidence intervals by
+treatment group for days alive and free of delirium and coma (DCFDs); days of delirium; and days of coma during the 14-day intervention period. P-values refer
+to the entire association between treatment and the outcome. Medians and
+p-values are calculated using proportional odds logistic regression clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r pubfig_mental}
 ## Helpful links for using Lato:
@@ -5698,7 +5707,7 @@ plot_medians_pub <- function(
   p <- p +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
-      color = as.character(palette_colors[["dred"]]), size = 1#, shape = 1
+      color = as.character(palette_colors[["dred"]]), size = 0.8#, shape = 1
     ) +
     scale_y_continuous(
       limits = c(0, 14),
@@ -5738,7 +5747,7 @@ plot_medians_pub <- function(
 medians_dcfd_pub <- plot_medians_pub(
   med_df = dcfd_adjmeds %>%
     mutate(
-      title_text = make_outcome_string(dcfd_mod, "Delirium/Coma-Free Days")
+      title_text = make_outcome_string(dcfd_mod, "A: Delirium/Coma-Free Days")
     ),
   use_xtitle = FALSE
 )
@@ -5746,9 +5755,9 @@ medians_dcfd_pub <- plot_medians_pub(
 medians_delcoma_pub <- plot_medians_pub(
   med_df = bind_rows(
     del_adjmeds %>%
-      mutate(title_text = make_outcome_string(del_mod, "Delirium Days")),
+      mutate(title_text = make_outcome_string(del_mod, "B: Delirium Days")),
     coma_adjmeds %>%
-      mutate(title_text = make_outcome_string(coma_mod, "Coma Days"))
+      mutate(title_text = make_outcome_string(coma_mod, "C: Coma Days"))
   ) %>%
     mutate(
       ## Put delirium on lefthand side
@@ -5791,7 +5800,14 @@ multiplot(
 
 *Suggested caption:*
 
-[This figure] presents Kaplan-Meier curves by treatment group up to 90 days after randomization. P-values for 30- and 90-day death are calculated using Cox proportional hazards models clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization. 
+[This figure] presents Kaplan-Meier curves by treatment group for death up to 90
+days after randomization. P-values for 30- and 90-day death refer to the entire
+association between treatment and mortality and are calculated using Cox
+proportional hazards models clustered by study site. Models are adjusted for age
+at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA
+Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and
+severity of illness (modified SOFA) and level of arousal (RASS) at
+randomization.
 
 ```{r pubfig_death}
 ## -- Start with KM already created; add *adj* p-vals, tweak labels/legend -----
@@ -5838,6 +5854,15 @@ will include full CIF curves as well as the N at risk tables for each outcome.
 
 ### Main Paper
 
+*Suggested caption:*
+
+[This figure] presents the cumulative incidence probabilities for time-to-event
+outcomes. All four outcomes have a competing risk of death prior to the event; ICU readmission and liberation from mechanical ventilation also have a competing risk of ICU discharge prior to the event. *(Full cumulative incidence functions,
+including death and ICU discharge and N at risk, and adjusted hazard ratios for each treatment are provided in the online supplement.)* P-values refer to the
+overall effect of treatment. They are calculated using the Fine-Gray method for
+competing risks (clustered by study site), and adjusted for age at study
+consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+
 ```{r pubfig_cif_main}
 ################################################################################
 ## ggcompetingrisks() (and cuminc()) cut off graph at the final observed time,
@@ -5848,7 +5873,7 @@ will include full CIF curves as well as the N at risk tables for each outcome.
 ## -- Goal: Data set w/ one record per time + trt, one column per outcome ------
 ## -- Function to do dataset prep for one outcome ------------------------------
 prep_cuminc_df <- function(cuminc_obj, censor_time, cph_mod){
-  ## Extract p-value for treatment
+  ## Extract p-value, subdistribution HR, CI for treatment
   p_trt <- anova(cph_mod)["trt", "P"]
 
   ## We want to extract data from all elements of the cuminc() object except
@@ -5908,6 +5933,7 @@ cif_data <- pmap_df(
       tte_outcome == "Readmission" ~ 3,
       TRUE ~ 4
     ),
+    outcome_label = LETTERS[outcome_order],
     tte_outcome2 = case_when(
       tte_outcome == "MV Liberation" ~ "Liberation from MV",
       tte_outcome == "Readmission" ~ "ICU Readmission",
@@ -5919,6 +5945,7 @@ cif_data <- pmap_df(
     ),
     tte_outcome_2l = fct_reorder(tte_outcome_2l, .x = outcome_order),
     tte_outcome_1l = glue(
+      "{outcome_label}: ",
       "{tte_outcome2}; P{ifelse(p_trt < 0.001, '', '=')}{formatp_nejm(p_trt)}"
     ),
     tte_outcome_1l = fct_reorder(tte_outcome_1l, .x = outcome_order),
@@ -5945,7 +5972,9 @@ cif_data <- pmap_df(
 #     breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
 #   )
 
-## Faceted version: perfect except X axis breaks
+## Wrapper function for facet axis breaks (thanks, Jim Hester!)
+my_breaks <- function(x) if (max(x) <= 40) seq(0, 30, 5) else seq(0, 90, 15)
+
 cif_pub_facet <- ggplot(
   data = cif_data %>% filter(is_subdist),
   aes(x = time, y = est, color = trt, fill = trt)
@@ -5957,10 +5986,7 @@ cif_pub_facet <- ggplot(
   geom_step() +
   scale_color_manual(values = mindusa_trtcols_long) +
   scale_fill_manual(values = mindusa_trtcols_long) +
-  scale_x_continuous(
-    name = "Days after Randomization",
-    breaks = seq(0, 90, length.out = 7)
-  ) +
+  scale_x_continuous(name = "Days after Randomization", breaks = my_breaks) +
   scale_y_continuous(
     name = "Cumulative Probability",
     limits = c(0, 1),
