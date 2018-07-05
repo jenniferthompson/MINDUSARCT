@@ -6103,11 +6103,18 @@ consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frail
 
 *Suggested captions:*
 
-[These figures] present the relationship between treatment and time-to-event outcomes at various levels of [age, IQCODE, sepsis, ICU type, SOFA]. Death and
-hospital and ICU discharge are analyzed among all `r n_rand` randomized
-patients. Liberation from mechanical ventilation is analyzed among the `r sum_na(ptsummary_df$on_mv_rand24)` randomized patients who received either type
-of mechanical ventilation at or within 24 hours after randomization. ICU
-readmission is analyzed only among the `r sum_na(ptsummary_df$elig_readm)` randomized patients who survived their initial ICU stay and were discharged to the floor.
+[These figures] present the adjusted hazard ratios for haloperidol and ziprasidone vs placebo for each time-to-event outcome at various levels of [age,
+IQCODE, sepsis, ICU type, SOFA]. Hazard ratios are calculated using Cox proportional hazards regression (death) or Fine-Gray competing risks models (all other outcomes), with competing risks of death and, for MV liberation and ICU readmission, discharge prior to the primary event of interest. All are adjusted
+for age at study consent; preexisting cognitive impairment (IQCODE), frailty
+(CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at
+randomization.
+
+Death and hospital and ICU discharge are analyzed among all `r n_rand` randomized patients. Liberation from mechanical ventilation is analyzed among
+the `r sum_na(ptsummary_df$on_mv_rand24)` randomized patients who received
+either type of mechanical ventilation at or within 24 hours after randomization.
+ICU readmission is analyzed only among the `r sum_na(ptsummary_df$elig_readm)`
+randomized patients who survived their initial ICU stay and were discharged to
+the floor.
 
 ```{r pubfig_em}
 ## -- Wrappers to create pub versions (with title_string) and save -------------
