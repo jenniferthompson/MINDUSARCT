@@ -3251,9 +3251,9 @@ icudis_90_tests_unadj <- cuminc_test(icudis_90_cif)
 
 ## -- Plot CIFs, N at risk -----------------------------------------------------
 ## Create plot for competing risks
-icudis_90_cif_plot <- cif_plot(
+icudis_90_cif_plot <- create_cif_manual(
   cuminc_obj = icudis_90_cif,
-  legend_string = "ICU Discharge",
+  main_event = "ICU Discharge",
   event_string = "Successful ICU Discharge",
   test_string = icudis_90_tests_unadj,
   caption_string = '"Successful" is defined as final ICU discharge followed by at least 48 hours alive.'
@@ -3449,9 +3449,9 @@ hospdis_90_tests_unadj <- cuminc_test(hospdis_90_cif)
 
 ## -- Plot CIFs, N at risk -----------------------------------------------------
 ## Create plot for competing risks
-hospdis_90_cif_plot <- cif_plot(
+hospdis_90_cif_plot <- create_cif_manual(
   cuminc_obj = hospdis_90_cif,
-  legend_string = "Hospital Discharge",
+  main_event = "Hospital Discharge",
   event_string = "Successful Hospital Discharge",
   test_string = hospdis_90_tests_unadj,
   caption_string = '"Successful" is defined as hospital discharge followed by at least 48 hours alive.'
@@ -3648,9 +3648,9 @@ mvlib_30_tests_unadj <- cuminc_test(mvlib_30_cif)
 
 ## -- Plot CIFs, N at risk -----------------------------------------------------
 ## Create plot for competing risks
-mvlib_30_cif_plot <- cif_plot(
+mvlib_30_cif_plot <- create_cif_manual(
   cuminc_obj = mvlib_30_cif,
-  legend_string = "Liberation from MV",
+  main_event = "MV Liberation",
   event_string = "Successful Liberation from MV",
   test_string = mvlib_30_tests_unadj,
   caption_string = '"Successful" is defined as discontinuation of MV, followed by at least 48 hours alive without reinitiation.'
@@ -3855,9 +3855,9 @@ readm_90_tests_unadj <- cuminc_test(readm_90_cif)
 
 ## -- Plot CIFs, N at risk -----------------------------------------------------
 ## Create plot for competing risks
-readm_90_cif_plot <- cif_plot(
+readm_90_cif_plot <- create_cif_manual(
   cuminc_obj = readm_90_cif,
-  legend_string = "ICU Readmission",
+  main_event = "Readmission",
   event_string = "ICU Readmission",
   test_string = readm_90_tests_unadj,
   caption_string = ''
@@ -3868,7 +3868,7 @@ cr_combine_plots(
   cif = readm_90_cif_plot,
   rt = readm_90_risk_plot,
   xmax = 91, time_breaks = c(0, seq(5, 90, 15)),
-  caption_string = ''
+  caption_string = 'Note: This outcome is only measured among patients who survived their first ICU stay.'
 )
 
 ```
@@ -4140,7 +4140,10 @@ mental_medians_age <- map_dfr(
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Age =", rndformat(age_consent, 0)),
     em_text = fct_reorder(em_text, age_consent),
-    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt_short = factor(
+      ifelse(trt == "Placebo", "Plac", str_sub(trt, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4281,14 +4284,25 @@ tte_ratios_age <- pmap_df(.l = tte_args_age, .f = get_ratios_age) %>%
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
+    outcome_order = case_when(
+      outcome == "death_30" ~ 1,
+      outcome == "death_90" ~ 2,
+      outcome == "mvlib_30" ~ 3,
+      outcome == "icudis_90" ~ 4,
+      outcome == "readm_90" ~ 5,
+      outcome == "hospdis_90" ~ 6,
+      TRUE ~ 7
+    ),
     p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
       sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
-    # outcome_text = fct_shift(factor(outcome_text)),
+    outcome_text = fct_reorder(factor(outcome_text), outcome_order),
     em_text = paste("Age =", rndformat(age_consent, 0)),
     em_text = fct_reorder(em_text, age_consent),
-    comp.c_short =
-      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    comp.c_short = factor(
+      ifelse(comp.c == "Placebo", "Plac", str_sub(comp.c, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4478,7 +4492,10 @@ mental_medians_sofa <- map_dfr(
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
     em_text = fct_reorder(em_text, sofa_mod_imp_rand),
-    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt_short = factor(
+      ifelse(trt == "Placebo", "Plac", str_sub(trt, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4626,8 +4643,10 @@ tte_ratios_sofa <- pmap_df(.l = tte_args_sofa, .f = get_ratios_sofa) %>%
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
     em_text = fct_reorder(em_text, sofa_mod_imp_rand),
-    comp.c_short =
-      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    comp.c_short = factor(
+      ifelse(comp.c == "Placebo", "Plac", str_sub(comp.c, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4796,7 +4815,10 @@ mental_medians_iqcode <- map_dfr(
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
-    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt_short = factor(
+      ifelse(trt == "Placebo", "Plac", str_sub(trt, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -4945,8 +4967,10 @@ tte_ratios_iqcode <- pmap_df(.l = tte_args_iqcode, .f = get_ratios_iqcode) %>%
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
-    comp.c_short =
-      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    comp.c_short = factor(
+      ifelse(comp.c == "Placebo", "Plac", str_sub(comp.c, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -5114,7 +5138,10 @@ mental_medians_medsurg <- map_dfr(
       sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(med_surg, levels = 0:1, labels = c("Medical", "Surgical")),
-    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt_short = factor(
+      ifelse(trt == "Placebo", "Plac", str_sub(trt, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -5265,8 +5292,10 @@ tte_ratios_medsurg <-
     # outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(med_surg, levels = c("Medical", "Surgical")),
     # em_text = fct_reorder(em_text, iqcode_total_ph),
-    comp.c_short =
-      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    comp.c_short = factor(
+      ifelse(comp.c == "Placebo", "Plac", str_sub(comp.c, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -5426,7 +5455,10 @@ mental_medians_sepsis <- map_dfr(
     em_text = factor(
       sepsis_adm, levels = 0:1, labels = c("Non-Septic", "Septic/Shock")
     ),
-    trt_short = factor(str_sub(trt, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    trt_short = factor(
+      ifelse(trt == "Placebo", "Plac", str_sub(trt, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -5579,8 +5611,10 @@ tte_ratios_sepsis <-
       sepsis_adm, levels = c("Non-septic", "Sepsis/septic shock")
     ),
     # em_text = fct_reorder(em_text, iqcode_total_ph),
-    comp.c_short =
-      factor(str_sub(comp.c, 1, 3), levels = c("Pla", "Hal", "Zip")),
+    comp.c_short = factor(
+      ifelse(comp.c == "Placebo", "Plac", str_sub(comp.c, 1, 3)),
+      levels = c("Plac", "Hal", "Zip")
+    ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
   )
 
@@ -5758,11 +5792,7 @@ medians_delcoma_pub <- plot_medians_pub(
       mutate(title_text = make_outcome_string(del_mod, "B: Delirium Days")),
     coma_adjmeds %>%
       mutate(title_text = make_outcome_string(coma_mod, "C: Coma Days"))
-  ) %>%
-    mutate(
-      ## Put delirium on lefthand side
-      title_text = forcats::fct_rev(factor(title_text))
-    ),
+  ),
   use_xtitle = TRUE
 )
 
@@ -5864,47 +5894,6 @@ competing risks (clustered by study site), and adjusted for age at study
 consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r pubfig_cif_main}
-################################################################################
-## ggcompetingrisks() (and cuminc()) cut off graph at the final observed time,
-## even if it's well before the end of the time period. We need some data
-## management to extend our figures to the very end.
-################################################################################
-
-## -- Goal: Data set w/ one record per time + trt, one column per outcome ------
-## -- Function to do dataset prep for one outcome ------------------------------
-prep_cuminc_df <- function(cuminc_obj, censor_time, cph_mod){
-  ## Extract p-value, subdistribution HR, CI for treatment
-  p_trt <- anova(cph_mod)["trt", "P"]
-
-  ## We want to extract data from all elements of the cuminc() object except
-  ##  the test string
-  cif_names <- setdiff(names(cuminc_obj), "Tests")
-
-  ## 1. Create data.frame out of time, est, var components
-  df <- map(
-    cuminc_obj[names(cuminc_obj) != "Tests"],
-    bind_cols
-  ) %>%
-  ## For each df, add record for time of administrative censoring if not present
-  map(
-    ~ bind_rows(., tail(., n = 1) %>% mutate(time = censor_time)) %>% unique()
-  ) %>%
-  ## Add primary outcome, treatment, overall outcome to each df;
-  ##  combine into one big df
-  map2_df(
-    .y = cif_names,
-    ~ .x %>%
-      mutate(
-        trt_curve = .y,
-        tte_outcome = rownames(cuminc_obj$Tests)[1],
-        p_trt = p_trt
-      )
-  )
-  
-  return(df)
-
-}
-
 cif_data <- pmap_df(
   .l = list(
     cuminc_obj =
@@ -5914,66 +5903,7 @@ cif_data <- pmap_df(
   ),
   .f = prep_cuminc_df
 ) %>%
-  ## Separate outcome, treatment variables
-  ##  extra = "merge": keep everything before first space separate; merge
-  ##   everything else into "subdist" column
-  separate(
-    trt_curve, into = c("trt", "subdist"), sep = " ", extra = "merge"
-  ) %>%
-  ## Add CIs
-  mutate(
-    lb = est - qnorm(0.975) * sqrt(var),
-    lb = ifelse(lb < 0, 0, lb),
-    ub = est + qnorm(0.975) * sqrt(var),
-    ## Order factors
-    trt = factor(trt, levels = c("Ziprasidone", "Haloperidol", "Placebo")),
-    outcome_order = case_when(
-      tte_outcome == "ICU Discharge" ~ 1,
-      tte_outcome == "Hospital Discharge" ~ 2,
-      tte_outcome == "Readmission" ~ 3,
-      TRUE ~ 4
-    ),
-    outcome_label = LETTERS[outcome_order],
-    tte_outcome2 = case_when(
-      tte_outcome == "MV Liberation" ~ "Liberation from MV",
-      tte_outcome == "Readmission" ~ "ICU Readmission",
-      TRUE ~ tte_outcome
-    ),
-    ## Two-line, one-line versions of outcome + p-values
-    tte_outcome_2l = glue(
-      "{tte_outcome2}\n\nP{ifelse(p_trt < 0.001, '', '=')}{formatp_nejm(p_trt)}"
-    ),
-    tte_outcome_2l = fct_reorder(tte_outcome_2l, .x = outcome_order),
-    tte_outcome_1l = glue(
-      "{outcome_label}: ",
-      "{tte_outcome2}; P{ifelse(p_trt < 0.001, '', '=')}{formatp_nejm(p_trt)}"
-    ),
-    tte_outcome_1l = fct_reorder(tte_outcome_1l, .x = outcome_order),
-    ## Indicator for whether this is the subdistribution of primary interest
-    is_subdist = tte_outcome == subdist
-  )
-
-# ## Small multiples version
-# cif_pub_sm <- ggplot(
-#   data = cif_data %>% filter(is_subdist),
-#   aes(x = time, y = est, color = trt, fill = trt)
-# ) +
-#   facet_grid(tte_outcome_2l ~ trt) +
-#   geom_ribbon(
-#     aes(ymin = lb, ymax = ub), colour = NA, alpha = 0.15
-#   ) +
-#   geom_step() +
-#   scale_color_manual(values = mindusa_trtcols_long, guide = FALSE) +
-#   scale_fill_manual(values = mindusa_trtcols_long, guide = FALSE) +
-#   scale_x_continuous(name = "Days after Randomization") +
-#   scale_y_continuous(
-#     name = "Cumulative Probability",
-#     limits = c(0, 1),
-#     breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
-#   )
-
-## Wrapper function for facet axis breaks (thanks, Jim Hester!)
-my_breaks <- function(x) if (max(x) <= 40) seq(0, 30, 5) else seq(0, 90, 15)
+  mutate(trt = factor(trt, levels = c("Ziprasidone", "Haloperidol", "Placebo")))
 
 cif_pub_facet <- ggplot(
   data = cif_data %>% filter(is_subdist),
@@ -5986,7 +5916,7 @@ cif_pub_facet <- ggplot(
   geom_step() +
   scale_color_manual(values = mindusa_trtcols_long) +
   scale_fill_manual(values = mindusa_trtcols_long) +
-  scale_x_continuous(name = "Days after Randomization", breaks = my_breaks) +
+  scale_x_continuous(name = "Days after Randomization", breaks = cif_breaks) +
   scale_y_continuous(
     name = "Cumulative Probability",
     limits = c(0, 1),
@@ -6013,44 +5943,168 @@ ggsave(
   type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
 )
 
-# ## -- Function to create single TTE plot ---------------------------------------
-# plot_cif_ind <- function(outcome, subdist_only = TRUE, main_df = cif_data){
-#   
-#   if(subdist_only){
-#     df <- main_df %>% filter(is_subdist & tte_outcome2 == outcome)
-#   } else{
-#     df <- main_df %>% filter(tte_outcome2 == outcome)
-#   }
-#   
-#   ggplot(data = df, aes(x = time, y = est, color = trt, fill = trt)) +
-#     facet_wrap(~ tte_outcome_1l, nrow = 1) +
-#     geom_ribbon(
-#       aes(ymin = lb, ymax = ub), colour = NA, alpha = 0.15
-#     ) +
-#     geom_step() +
-#     scale_color_manual(values = mindusa_trtcols_long, guide = FALSE) +
-#     scale_fill_manual(values = mindusa_trtcols_long, guide = FALSE) +
-#     scale_x_continuous(
-#       name = "Days after Randomization",
-#       breaks = seq(0, floor(max(df$time)), length.out = 7)
-#     ) +
-#     scale_y_continuous(
-#       name = "Cumulative Probability",
-#       limits = c(0, 1),
-#       breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
-#     ) +
-#     theme(
-#       strip.text = element_text(hjust = 0),
-#       strip.background = element_blank()
-#     )
-# 
-# }
-#   
-# cif_pub_separate <- map(levels(cif_data$tte_outcome), plot_cif_ind)
-# multiplot(plotlist = cif_pub_separate, layout = matrix(1:4, ncol = 2))
+```
+
+### Online Supplement
+
+*Suggested caption:*
+
+[These figures] present the cumulative incidence probabilities for time-to-event
+outcomes, alongside those for competing risks of death and (where appropriate)
+ICU discharge prior to the event of interest. All four outcomes have a competing risk of death prior to the event; ICU readmission and liberation from mechanical ventilation also have a competing risk of ICU discharge prior to the event.
+P-values refer to the overall effect of treatment. They are calculated using the
+Fine-Gray method for competing risks (clustered by study site), and adjusted for
+age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA
+Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and
+severity of illness (modified SOFA) and level of arousal (RASS) at
+randomization.
+
+```{r pubfig_cif_supp}
+## -- Wrapper function ---------------------------------------------------------
+save_cif_suppplots <- function(
+  cuminc_obj,
+  sf_sum,
+  main_event,
+  event_string_cif,
+  event_string_rt,
+  cph_mod,
+  xmax = 95, time_breaks = seq(0, 90, 15), text_size,
+  file_prefix
+){
+  cif_supp <- create_cif_manual(
+    cuminc_obj = cuminc_obj,
+    main_event = main_event,
+    event_string = event_string_cif,
+    cph_mod = cph_mod
+  ) +
+    theme(
+      legend.text = element_text(size = basetext_size * 0.6),
+      legend.key.size = unit(0.45, "cm")
+    )
+  rt_supp <- cr_risktable_plot(
+    sf_sum = sf_sum,
+    main_event = main_event,
+    event_string = event_string_rt,
+    text_size = text_size
+  )
+
+  ggsave(
+    filename = sprintf("mindusa_%s_cif.pdf", file_prefix),
+    cr_combine_plots(
+      cif = cif_supp,
+      rt = rt_supp,
+      xmax = xmax,
+      time_breaks = time_breaks,
+      caption_string = NULL
+    ),
+    path = "pubfigures/pdf",
+    device = cairo_pdf,
+    width = 8, height = 5.5, units = "in"
+  )
+  ggsave(
+    filename = sprintf("mindusa_%s_cif.png", file_prefix),
+    cr_combine_plots(
+      cif = cif_supp,
+      rt = rt_supp,
+      xmax = xmax,
+      time_breaks = time_breaks,
+      caption_string = NULL
+    ),
+    path = "pubfigures/png",
+    type = "cairo", dpi = 400, width = 8, height = 5.5, units = "in"
+  )
+}
+
+pwalk(
+  .l = list(
+    cuminc_obj = list(
+      icudis_90_cif, hospdis_90_cif, mvlib_30_cif, readm_90_cif
+    ),
+    sf_sum = list(
+      icudis_90_sfsum, hospdis_90_sfsum, mvlib_30_sfsum, readm_90_sfsum
+    ),
+    main_event =
+      c("ICU Discharge", "Hospital Discharge", "MV Liberation", "Readmission"),
+    event_string_cif = c(
+      "ICU discharge", "hospital discharge", "MV liberation", "readmission"
+    ),
+    event_string_rt = c(
+      "of ICU discharges", "of hospital discharges", "liberated from MV",
+      "readmitted"
+    ),
+    cph_mod = list(icudis_90_mod, hospdis_90_mod, mvlib_30_mod, readm_90_mod),
+    xmax = c(95, 95, 32.5, 95),
+    time_breaks = list(
+      seq(0, 90, 15), seq(0, 90, 15), seq(0, 30, 5), seq(0, 90, 15)
+    ),
+    text_size = c(0.2, 0.2, 0.15, 0.125),
+    file_prefix = c("icudis", "hospdis", "mvlib", "readm")
+  ),
+  .f = save_cif_suppplots
+)
 
 ```
 
+## Effect Modification Figures
+
+*Suggested captions:*
+
+```{r pubfig_em}
+## -- Wrapper to create pub versions (with title_string) and save --------------
+save_tte_em_pub <- function(
+  ratio_df,
+  em_string,
+  title_text,
+  file_text,
+  file_ht
+){
+  em_pub <- plot_trt_ratios_em(
+    ratio_df = ratio_df,
+    em_string = em_string,
+    title_string = sprintf(
+      "Treatment vs Time-to-Event Outcomes,\nModified by %s", title_text
+    ),
+    ratio_type = "Hazard"
+  )
+
+  em_pub %T>%
+    ggsave(
+      filename = sprintf("mindusa_tteby%s.pdf", file_text),
+      .,
+      path = "pubfigures/pdf",
+      device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
+      width = 7, height = file_ht, units = "in"
+    ) %T>%
+    ggsave(
+      filename = sprintf("mindusa_tteby%s.png", file_text),
+      .,
+      path = "pubfigures/png",
+      type = "cairo", dpi = 400, width = 7, height = file_ht, units = "in"
+    )
+  
+}
+
+## Save all effect modification plots
+pwalk(
+  .l = list(
+    ratio_df = list(
+      tte_ratios_age, tte_ratios_iqcode, tte_ratios_medsurg, tte_ratios_sepsis,
+      tte_ratios_sofa
+    ),
+    em_string = c("age", "IQCODE", "ICU type", "sepsis", "modified SOFA"),
+    title_text = c(
+      "Age at Consent", "IQCODE at Consent",
+      "Medical vs Surgical ICU Admission",
+      "Sepsis/Septic Shock at ICU Admission",
+      "Severity of Illness at Randomization"
+    ),
+    file_text = c("age", "iqcode", "medsurg", "sepsis", "modsofa"),
+    file_ht = c(10, 7.5, 6, 6.5, 10)
+  ),
+  .f = save_tte_em_pub
+)
+
+```
 
 # Notes on Variable Calculation{#varcalc}
 
