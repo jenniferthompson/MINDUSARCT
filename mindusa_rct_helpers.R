@@ -30,6 +30,12 @@ describe_cont <- function(
   )
 }
 
+## -- Wrapper functions for facet axis breaks (thanks, Jim Hester!) ------------
+cif_breaks <- function(x) if (max(x) <= 40) seq(0, 30, 5) else seq(0, 90, 15)
+tteem_breaks <- function(x){
+  sort(unique(c(1, round(seq(min(x), max(x), length.out = 3), 0.5))))
+}
+
 ## -- Printing helper functions ------------------------------------------------
 ## Wrapper with my preferred options for printing summaryM objects
 my_html <- function(sMobj, caption){
@@ -79,7 +85,7 @@ kw_results <- function(kw_obj){
   bquote(
     "Kruskal-Wallis test:" ~
       X^2 * "," ~ .(rndformat(kw_obj$statistic, 2)) * "; df," ~
-      .(kw_obj$parameter) * "; P," ~ .(formatp(kw_obj$p.value))
+      .(kw_obj$parameter) * "; P," ~ .(formatp_nejm(kw_obj$p.value))
   )
 }
 
@@ -168,7 +174,7 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
     scale_y_continuous(limits = c(0, xmax), breaks = seq(0, xmax, 2)) +
     labs(
       title = glue("Adjusted Median {outcome} by Treatment"),
-      subtitle = glue("P: {formatp(anova(mod)['trt', 'P'])}"),
+      subtitle = glue("P: {formatp_nejm(anova(mod)['trt', 'P'])}"),
       y = glue("Adjusted Median (95% Confidence Interval)"),
       caption =
         "\nAdjusted analysis using proportional odds logistic regression."
@@ -202,21 +208,24 @@ calc_medians_em <- function(mod, df, em_vals, em_var){
 
 ## Plot medians, bounds for mental status outcomes with interaction terms
 ## median_df assumed to have cols: quantile, lb, ub, trt, em_text, outcome_text
-mental_medians_plot_em <- function(median_df, em_string){
-  ggplot(data = median_df, aes(y = quantile, x = trt_short)) +
+mental_medians_plot_em <- function(median_df, em_string, title_string = NULL){
+  p <- ggplot(data = median_df, aes(y = quantile, x = trt_short)) +
     facet_grid(em_text ~ outcome_text) +
     geom_pointrange(
       aes(ymin = lb, ymax = ub),
       colour = as.character(palette_colors["dred"]), size = 0.5
     ) +
     scale_y_continuous(
-      breaks = seq(0, 14, 2), name = "Adjusted Median (95% Confidence Interval)"
+      limits = c(0, 14), breaks = c(0, 3, 7, 10, 14),
+      name = "Adjusted Median (95% Confidence Interval)"
     ) +
     coord_flip() +
     labs(
+      subtitle =
+        glue("P-values test total {em_string} * treatment interaction."),
       caption = glue(
         "Adjusted analysis using proportional odds logistic regression.\n",
-        "P-values for overall {em_string} * treatment interaction."
+        "P-values test total {em_string} * treatment interaction."
       )
     ) +
     theme(
@@ -225,8 +234,16 @@ mental_medians_plot_em <- function(median_df, em_string){
       axis.text = element_text(size = basetext_size * 0.7),
       panel.spacing.y = unit(0.5, "cm"),
       strip.text.x = element_text(vjust = 0),
+      plot.subtitle = element_text(face = "italic"),
       plot.caption = element_text(face = "italic")
     )
+  
+  if(!is.null(title_string)){
+    p <- p + labs(title = title_string)
+  }
+  
+  return(p)
+  
 }
 
 ## -- Helper functions for any rms model object --------------------------------
@@ -351,7 +368,7 @@ plot_trt_ratios <- function(
     ) +
     labs(
       title = glue("Treatment vs {outcome_text}"),
-      subtitle = glue("P: {formatp(anova(mod)['trt', 'P'])}"),
+      subtitle = glue("P: {formatp_nejm(anova(mod)['trt', 'P'])}"),
       y = glue("{ratio_type} Ratio (95% Confidence Interval)"),
       caption = glue(
         "\nAdjusted analysis using {model_type} regression.\n{extra_text}"
@@ -373,6 +390,7 @@ plot_trt_ratios_em <- function(
   ratio_df,     ## data.frame w/ one row per treatment per outcome
                 ## columns include effect, lcl, ucl, comp.c, ref.c
   em_string,    ## Text describing effect modifier
+  title_string = NULL, ## Text for plot title
   ratio_type = c("Hazard", "Odds"),
   facet_formula = "em_text ~ outcome_text" ## string specifying how to facet
 ){
@@ -382,12 +400,17 @@ plot_trt_ratios_em <- function(
       "Adjusted mortality outcomes use standard Cox proportional hazards regression.\n",
       "Other outcomes use Fine-Gray competing risks regression, with competing risk of death\n",
       "(and ICU discharge without the event for MV liberation and ICU readmission).\n\n",
-      "P-values for overall {em_string} * treatment interaction."
+      "P-values test total {em_string} * treatment interaction.\n\n",
+      "NOTE: MV liberation includes only the {sum_na(ptsummary_df$on_mv_rand24)}",
+      " patients on any type of MV at or within 24h of randomization.\n",
+      "ICU readmission includes only the {sum_na(ptsummary_df$elig_readm)} ",
+      "patients who survived and were discharged from their first ICU stay.\n",
+      "All other analyses include all {n_rand} randomized patients."
     )
   } else{
     caption_text <- glue(
       "Adjusted analysis using proportional odds logistic regression.\n",
-      "P-values for overall {em_string} * treatment interaction."
+      "P-values test total {em_string} * treatment interaction."
     )
   }
 
@@ -411,8 +434,10 @@ plot_trt_ratios_em <- function(
       shape = 16, size = 0.5, colour = as.character(palette_colors["dred"]),
       data = ratio_df %>% filter(comp.c != ref.c)
     ) +
+    # scale_y_continuous(breaks = tteem_breaks) + ## didn't actually go so well
     labs(
-      title = glue("Treatment vs {capitalize(em_string)}"),
+      subtitle =
+        glue("P-values test total {em_string} * treatment interaction."),
       y = glue("{ratio_type} Ratio (95% Confidence Interval)"),
       caption = caption_text
     ) +
@@ -423,9 +448,14 @@ plot_trt_ratios_em <- function(
       axis.text = element_text(size = basetext_size * 0.7),
       strip.text.x = element_text(vjust = 0),
       panel.spacing.y = unit(0.5, "cm"),
+      plot.subtitle = element_text(face = "italic"),
       plot.caption = element_text(size = basetext_size * 0.7)
     ) +
     coord_flip()
+  
+  if(!is.null(title_string)){
+    p <- p + labs(title = title_string)
+  }
   
   return(p)  
 }
@@ -526,7 +556,7 @@ km_plot_death <- function(
       ## inclusion of variables
       subtitle = bquote(
         "Log-rank test for difference between treatments:" ~ X^2 ~ ", " ~
-          .(rndformat(chis, 1)) * "; df, " ~ .(df) * "; P, " ~ .(formatp(pval))
+          .(rndformat(chis, 1)) * "; df, " ~ .(df) * "; P, " ~ .(formatp_nejm(pval))
       )
     ) +
     ## Place legend in bottom lefthand corner, vertically so full trt names fit
@@ -572,12 +602,12 @@ text_ph_assume <- function(mod_zph){
     global_phtest < 0.05,
     glue(
       "The global test for proportional hazards indicates the assumption is ",
-      "not fully met (p: {formatp(global_phtest)}); please see the figures ",
+      "not fully met (p: {formatp_nejm(global_phtest)}); please see the figures ",
       "below for further detail."
     ),
     glue(
       "The global test for proportional hazards indicates no major concern ",
-      "(p = {formatp(global_phtest)}); please see the figures below for ",
+      "(p = {formatp_nejm(global_phtest)}); please see the figures below for ",
       "further detail."
     )
   )
@@ -635,11 +665,11 @@ cuminc_test <- function(cuminc_obj){
   ## of hospital discharge. Hilarious. **At this point** we always have 2 or 3.
   if(nrow(df) == 2){
     bquote(
-      .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "."
+      .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp_nejm(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp_nejm(df$pv[2])) * "."
     )
   } else if(nrow(df) == 3){
     bquote(
-      .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp(df$pv[2])) * "." ~ .(df$subdist[3]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[3], 2)) * "; df," ~ .(df$df[3]) * "; P," ~ .(formatp(df$pv[3])) * "."
+      .(df$subdist[1]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[1], 2)) * "; df," ~ .(df$df[1]) * "; P," ~ .(formatp_nejm(df$pv[1])) * "." ~ .(df$subdist[2]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[2], 2)) * "; df," ~ .(df$df[2]) * "; P," ~ .(formatp_nejm(df$pv[2])) * "." ~ .(df$subdist[3]) * ":" ~ X^2 * "," ~ .(rndformat(df$stat[3], 2)) * "; df," ~ .(df$df[3]) * "; P," ~ .(formatp_nejm(df$pv[3])) * "."
     )
   }
   
@@ -648,11 +678,23 @@ cuminc_test <- function(cuminc_obj){
 ## -- Functions to extract and plot the N at risk, cumulative events given -----
 ## -- a summary(survfit(...)) object -------------------------------------------
 cr_risktable <- function(
-  sf_sum,    ## summary(survfit(...))
+  sf_sum,       ## summary(survfit(...))
   main_event ## character string; one of the event types in sf_sum
 ){
   ## Get character strings of event types
   event_types <- colnames(sf_sum$p0)[1:(ncol(sf_sum$n.event) - 1)]
+  
+  ## -- Create dummy dataset for merging treatments/times ----------------------
+  ## Get all time points specified in any group in sf_sum
+  sf_times <- unique(sf_sum$time)
+  ## Want N, etc at risk at all specified time points; LOCF time points in each
+  ## treatment group if all pts are out of risk set
+  dummy_times <- cross_df(
+    list(
+      trt = unique(str_replace(sf_sum$strata, "trt=", "")),
+      time = sort(unique(sf_sum$time))
+    )
+  )
 
   ## For our purposes, we assume competing risks are "Death" and possibly
   ## "Discharge". Issue a warning if this is not the case.
@@ -671,11 +713,17 @@ cr_risktable <- function(
     n_risk = sf_sum$n.risk[, ncol(sf_sum$n.risk)],
     n_censored = sf_sum$n.censor
   ) %>%
+    ## Add Ns for each event type
     bind_cols(
       as.data.frame(sf_sum$n.event[, 1:(ncol(sf_sum$n.event) - 1)]) %>%
         set_names(event_types)
     ) %>%
+    ## Fill in values for times after last time available in sf_sum
+    right_join(dummy_times, by = c("trt", "time")) %>%
+    arrange(trt, time) %>%
     group_by(trt) %>%
+    fill(-trt, -time) %>%
+    ## Calculate *cumulative* Ns at each time point
     mutate_at(vars(event_types, "n_censored"), cumsum) %>%
     ungroup() %>%
     set_names(
@@ -695,7 +743,7 @@ cr_risktable <- function(
   } else{
     df$risk_string <- with(df, {
       ifelse(time == 0, as.character(n_risk),
-             sprintf("%s\n(%s; %s)", n_risk, primary, Death))
+             sprintf("%s\n(%s)\n(%s)", n_risk, primary, Death))
     })
   }
 
@@ -703,21 +751,30 @@ cr_risktable <- function(
   
 }
 
-cr_risktable_plot <- function(sf_sum, main_event, event_string){
+cr_risktable_plot <- function(
+  sf_sum,              ## survfit() object
+  main_event,          ## main event of interest as represented in ftype variable
+  event_string,        ## Text for main event
+  text_size = 0.2,     ## Multiplier for plot text size (default = in report)
+  order_trts = TRUE    ## Whether to order treatments the way we really want
+    ## If using cif_plot()/ggcompetingrisks, probably want to use FALSE
+){
   df <- cr_risktable(sf_sum, main_event = main_event)
-  
-  # ## Put plot in correct order - BUT can't quickly figure this out for
-  # ##  ggcompetingrisks, so leave alphabetical for now :(
-  # df$trt <- factor(df$trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+
+  if(order_trts){
+    ## Put plot in correct order - BUT can't quickly figure this out for
+    ##  ggcompetingrisks, so leave it as an option
+    df$trt <- factor(df$trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
+  }  
   
   ## Set plot title
   plot_title <- ifelse(
     "Discharge" %in% names(df),
     glue(
-    "Number at risk (cumulative number of {event_string}) (deaths; discharges)"
+    "Number at risk (cumulative number {event_string}) (deaths; discharges)"
     ),
     glue(
-      "Number at risk (cumulative number of {event_string}; deaths)"
+      "Number at risk (cumulative number {event_string}) (deaths)"
     )
   )
   
@@ -725,7 +782,7 @@ cr_risktable_plot <- function(sf_sum, main_event, event_string){
     facet_wrap(~ trt, nrow = 1) +
     geom_text(
       aes(label = risk_string),
-      size = basetext_size * 0.15, family = basetext_family,
+      size = basetext_size * text_size, family = basetext_family,
       color = palette_colors[["dgray"]]
     ) +
     # scale_colour_manual(values = mindusa_trtcols_long) +
@@ -751,7 +808,7 @@ cr_risktable_plot <- function(sf_sum, main_event, event_string){
   
 }
 
-## -- Function to create plot for cumulative incidence functions ---------------
+## -- Create plot for cumulative incidence functions with ggcompetingrisks -----
 ## Relies on survminer::ggcompetingrisks
 ## test_string should be result of cuminc_test()
 cif_plot <- function(
@@ -822,25 +879,235 @@ cif_plot <- function(
           plot.subtitle = element_text(size = basetext_size * 0.75))
 }
 
-## Function to combine results of cif_plot, cr_risktable_plot
-cr_combine_plots <- function(cif, rt, xmax, time_breaks, caption_string){
+################################################################################
+## ggcompetingrisks() (and cuminc()) cut off graph at the final observed time,
+## even if it's well before the end of the time period. We need some data
+## management to extend our data to the very end, then plot manually.
+################################################################################
+
+## -- Goal: Data set w/ one record per time + trt, one column per outcome ------
+## -- Function to do dataset prep for one outcome ------------------------------
+## Arguments can take *lists* - intended to be used with purrr::pmap() functions
+prep_cuminc_df <- function(
+  cuminc_obj,    ## cmprsk::cuminc() object
+  censor_time,   ## administrative censoring time
+  cph_mod = NULL ## cph() model object, if p-value desired
+){
+  
+  if(!is.null(cph_mod)){
+    ## Extract p-value for treatment, if cph() model object provided
+    p_trt <- anova(cph_mod)["trt", "P"]
+  } else{
+    p_trt <- NA
+  }
+  
+  ## We want to extract data from all elements of the cuminc() object except
+  ##  the test string
+  cif_names <- setdiff(names(cuminc_obj), "Tests")
+  
+  ## 1. Create data.frame out of time, est, var components
+  df <- map(
+    cuminc_obj[names(cuminc_obj) != "Tests"],
+    bind_cols
+  ) %>%
+    ## For each df, add record for time of administrative censoring if not present
+    map(
+      ~ bind_rows(., tail(., n = 1) %>% mutate(time = censor_time)) %>% unique()
+    ) %>%
+    ## Add primary outcome, treatment, overall outcome to each df;
+    ##  combine into one big df
+    map2_df(
+      .y = cif_names,
+      ~ .x %>%
+        mutate(
+          trt_curve = .y,
+          tte_outcome = rownames(cuminc_obj$Tests)[1],
+          p_trt = p_trt
+        )
+    ) %>%
+    ## Separate outcome, treatment variables
+    ##  extra = "merge": keep everything before first space separate; merge
+    ##   everything else into "subdist" column
+    separate(
+      trt_curve, into = c("trt", "subdist"), sep = " ", extra = "merge"
+    ) %>%
+    ## Add CIs
+    mutate(
+      lb = est - qnorm(0.975) * sqrt(var),
+      lb = ifelse(lb < 0, 0, lb),
+      ub = est + qnorm(0.975) * sqrt(var),
+      ## Order factors
+      trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
+      outcome_order = case_when(
+        tte_outcome == "ICU Discharge" ~ 1,
+        tte_outcome == "Hospital Discharge" ~ 2,
+        tte_outcome == "Readmission" ~ 3,
+        TRUE ~ 4
+      ),
+      outcome_label = LETTERS[outcome_order],
+      tte_outcome2 = case_when(
+        tte_outcome == "MV Liberation" ~ "Liberation from MV",
+        tte_outcome == "Readmission" ~ "ICU Readmission",
+        TRUE ~ tte_outcome
+      ),
+      ## Two-line, one-line versions of outcome + p-values
+      p_string = ifelse(
+        !is.na(p_trt),
+        glue("P{ifelse(p_trt < 0.001, , '=')}{formatp_nejm(p_trt)}"),
+        ""
+      ),
+      tte_outcome_2l = glue(
+        "{tte_outcome2}{ifelse(!is.na(p_trt), '\n\n', '')}{p_string}"
+      ),
+      tte_outcome_2l = fct_reorder(tte_outcome_2l, .x = outcome_order),
+      tte_outcome_1l = glue(
+        "{outcome_label}: ",
+        "{tte_outcome2}{ifelse(!is.na(p_trt), '; ', '')}{p_string}"
+      ),
+      tte_outcome_1l = fct_reorder(tte_outcome_1l, .x = outcome_order),
+      ## Indicator for whether this is the subdistribution of primary interest
+      is_subdist = tte_outcome == subdist
+    )
+  
+  return(df)
+  
+}
+
+## -- Function to "manually" create CIF curves with all events -----------------
+## ggcompetingrisks() doesn't extend all the way to the end of the time period,
+##  if all patients are out of the risk set beforehand; also can't figure out
+##  how to order facets appropriately
+create_cif_manual <- function(
+  cuminc_obj,            ## cmprsk::cuminc() object
+  main_event,            ## string indicating primary event of interest
+  event_string,          ## text to describe primary event of interest
+  # color_bytrt = FALSE, ## Change colors for main curve by treatment?
+  event_color = palette_colors[["dred"]],
+  caption_string = NULL, ## text for caption
+  ## color for curve of main event, if same for all treatments
+  test_string = NULL,    ## to include in subtitle; often result of cuminc_test()
+  cph_mod = NULL         ## optional: Cox model fit; will extract P-value
+){
+  ## Not currently an option
+  # if(color_bytrt){
+  #   cif_colors <- mindusa_trtcols_long
+  # } else{
+  ## Graphics prep: named character vector with color scheme
+  ## ggplot2 will get confused if we have two things named ICU Discharge
+  # if(main_event == "ICU Discharge"){
+  #   cif_colors <- c(
+  #     event_color, palette_colors[["dgray"]]
+  #   ) %>%
+  #     set_names(c(main_event, "Death"))
+  # } else{
+  cif_colors <- c(
+    event_color, palette_colors[["dgray"]], palette_colors[["lgray"]]
+  ) %>%
+    set_names(c(main_event, "Death", "Discharge"))
+  # }
+  # }
+  
+  ## Data preparation: Need to
+  ## - Put all data in a data.frame for plotting
+  ## - Create a final record for the end of the time frame, if it doesn't exist
+  
+  ## All TTE outcomes censored at 90 days except MV liberation
+  cens_time <- case_when(
+    main_event == "MV Liberation" ~ 30.01,
+    TRUE ~ 90.01
+  )
+  
+  cuminc_data <- prep_cuminc_df(
+    cuminc_obj = cuminc_obj,
+    censor_time = cens_time,
+    cph_mod = cph_mod
+  ) %>%
+    ## Factor-ize subdist so legend displays in desired order
+    mutate(
+      subdist_order = case_when(
+        subdist %in% c(
+          "ICU Discharge", "Hospital Discharge", "MV Liberation", "Readmission"
+        ) ~ 1,
+        subdist == "Death" ~ 2,
+        TRUE ~ 3
+      ),
+      subdist = fct_reorder(subdist, subdist_order)
+    )
+  
+  ## Create string for main event in plot title
+  title_string <-
+    paste(capitalize(str_split(event_string, " ")[[1]]), collapse = " ")
+  if(is.null(test_string)){
+    test_string <- sprintf(
+      "P for treatment, %s: %s",
+      event_string,
+      formatp_nejm(unique(cuminc_data$p_trt))
+    )
+  }
+  
+  ## CIF curves for all events
+  ## Competing risks will be grayscale; event of interest will be a color
+  gg_cif <-
+    ggplot(data = cuminc_data, aes(x = time, y = est, group = subdist)) +
+    facet_wrap(~ trt, nrow = 1) +
+    geom_ribbon(aes(ymin = lb, ymax = ub, fill = subdist), alpha = 0.15) +
+    geom_step(aes(color = subdist)) +
+    scale_color_manual(values = cif_colors) +
+    scale_fill_manual(values = cif_colors) +
+    scale_x_continuous(breaks = cif_breaks) +
+    scale_y_continuous(
+      limits = c(0, 1),
+      breaks = seq(0, 1, 0.2),
+      labels = paste0(seq(0, 1, 0.2) * 100, "%"),
+      name = "Probability of Event (%)"
+    ) +
+    labs(
+      title = glue(
+        "Cumulative Incidence of {title_string} and Competing Risks"
+      ),
+      subtitle = test_string
+    ) +
+    theme(
+      legend.title = element_blank(),
+      legend.background = element_blank(),
+      legend.position = c(0.01, 0.99),
+      legend.direction = "vertical",
+      legend.justification = c(0, 1),
+      plot.title = element_text(size = basetext_size * 1.1),
+      axis.title.x = element_blank()
+    )
+  
+  return(gg_cif)
+  
+}
+
+## Function to combine results of cif_plot/create_cif_manual, cr_risktable_plot
+cr_combine_plots <- function(cif, rt, xmax, time_breaks, caption_string = NULL){
+  ## Add caption to risk table, if specified
+  if(!is.null(caption_string)){
+    rt <- rt +
+      labs(caption = paste0("\n", caption_string))
+  }
+  
+  xlims <- c(max(time_breaks) - xmax, xmax)
+  
   multiplot(
     plotlist = list(
       ## Remove X axis info, caption from CIF plot; only include one at bottom
       cif +
-        scale_x_continuous(limits = c(0, xmax), breaks = time_breaks) +
+        scale_x_continuous(limits = xlims, breaks = time_breaks) +
         theme(plot.caption = element_blank(),
               axis.title.x = element_blank(),
-              axis.text.x = element_blank()),
+              axis.text.x = element_blank(),
+              legend.position = c(0.01, 0.98)),
       
       ## Add caption to risk table plot
       rt +
         scale_x_continuous(
-          limits = c(0, xmax),
+          limits = xlims,
           breaks = time_breaks,
           name = "Days after Randomization"
-        ) +
-        labs(caption = paste0("\n", caption_string))
+        )
     ),
     
     ## Layout: single column, CIF takes up 2/3 space
