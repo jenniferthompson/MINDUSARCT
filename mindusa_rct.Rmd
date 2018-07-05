@@ -6086,6 +6086,19 @@ pwalk(
 
 ## Effect Modification Figures
 
+These figures are quite similar to those shown earlier (just with titles), so
+will not be reproduced here.
+
+### Adjusted Medians for Time-to-Event Outcomes
+
+*Suggested captions:*
+
+[These figures] present the relationship between treatment and mental status
+outcomes at various levels of [age, IQCODE, sepsis, ICU type, SOFA] among all
+`r n_rand` randomized patients. Medians and confidence limits are calculated
+using proportional odds logistic regression and adjusted for age at study
+consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+
 ### Hazard Ratios for Time-to-Event Outcomes
 
 *Suggested captions:*
