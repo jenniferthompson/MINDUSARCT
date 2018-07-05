@@ -6084,6 +6084,150 @@ pwalk(
 
 ```
 
+## Adjusted Hazard Ratios, All Time-to-Event Outcomes
+
+*Suggested caption:*
+
+[This figure] presents adjusted hazard ratios for haloperidol and ziprasidone vs
+placebo for each time-to-event outcome. Hazard ratios are calculated using Cox
+proportional hazards regression (death) or Fine-Gray competing risks models (all
+other outcomes), with competing risks of death and, for MV liberation and ICU readmission, discharge prior to the primary event of interest. All are adjusted
+for age at study consent; preexisting cognitive impairment (IQCODE), frailty
+(CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at
+randomization.
+
+Death and hospital and ICU discharge are analyzed among all `r n_rand` randomized patients. Liberation from mechanical ventilation is analyzed among
+the `r sum_na(ptsummary_df$on_mv_rand24)` randomized patients who received
+either type of mechanical ventilation at or within 24 hours after randomization.
+ICU readmission is analyzed only among the `r sum_na(ptsummary_df$elig_readm)`
+randomized patients who survived their initial ICU stay and were discharged to
+the floor.
+
+```{r pubfig_hrs}
+## -- Combine all HR data.frames -----------------------------------------------
+all_hrs <- bind_rows(
+  death_30_hrs, death_90_hrs,
+  mvlib_30_hrs %>% mutate(outcome = "mvlib_30"),
+  icudis_90_hrs %>% mutate(outcome = "icudis_90"),
+  readm_90_hrs %>% mutate(outcome = "readm_90"),
+  hospdis_90_hrs %>% mutate(outcome = "hospdis_90")
+) %>%
+  separate(
+    outcome, into = c("junk", "endpt", "time"), sep = "_", fill = "left"
+  ) %>%
+  dplyr::select(-junk) %>%
+  mutate(
+    linecol = factor(
+      ifelse(endpt == "death" & time == 90, 1, 2),
+      levels = 1:2, labels = c("90 Days", "30 Days")
+    ),
+    facet_text = case_when(
+      endpt == "death" ~ sprintf(
+        "Death\n\n30 days: P=%s; 90 days: P=%s",
+        formatp_nejm(anova(death_30_mod)['trt', 'P']),
+        formatp_nejm(anova(death_90_mod)['trt', 'P'])
+      ),
+      endpt == "mvlib" ~ sprintf(
+        "Liberation from MV\n\n30 days: P=%s",
+        formatp_nejm(anova(mvlib_30_mod)['trt', 'P'])
+      ),
+      endpt == "icudis" ~ sprintf(
+        "ICU Discharge\n\n90 days: P=%s",
+        formatp_nejm(anova(icudis_90_mod)['trt', 'P'])
+      ),
+      endpt == "readm" ~ sprintf(
+        "ICU Readmission\n\n90 days: P=%s",
+        formatp_nejm(anova(readm_90_mod)['trt', 'P'])
+      ),
+      endpt == "hospdis" ~ sprintf(
+        "Hospital Discharge\n\n90 days: P=%s",
+        formatp_nejm(anova(hospdis_90_mod)['trt', 'P'])
+      ),
+      TRUE ~ "other"
+    ),
+    outcome_order = case_when(
+      endpt == "mvlib" ~ 1,
+      endpt == "icudis" ~ 2,
+      endpt == "readm" ~ 3,
+      endpt == "hospdis" ~ 4,
+      TRUE ~ 5
+    ),
+    facet_text = fct_reorder(facet_text, outcome_order)
+  )
+
+## -- Create faceted plot ------------------------------------------------------
+all_hrs_plot <- ggplot(data = all_hrs, aes(y = effect, x = comp.c)) +
+  facet_wrap(~ facet_text) +
+  ## Fake row to set up order properly
+  geom_point(shape = NA) +
+  ## Reference line at 1 (no effect)
+  geom_hline(yintercept = 1, linetype = "solid",
+             colour = palette_colors["lgray"], size = 2) +
+  ## Plot a point for control group
+  geom_point(
+    shape = 15, colour = "black", size = 4,
+    data = all_hrs %>% filter(is.ref)
+  ) +
+  ## Add ratios, CIs for treatment groups vs control
+  geom_pointrange(
+    aes(
+      ymin = lcl, ymax = ucl,
+      group = linecol, colour = linecol, shape = linecol, size = linecol
+    ),
+    position = position_dodge(width = 0.8),
+    data = all_hrs %>% filter(!is.ref)
+  ) +
+  scale_colour_manual(
+    values = c(
+      "30 Days" = palette_colors[["dred"]],
+      "90 Days" = palette_colors[["dgray"]]
+    )
+  ) +
+  scale_shape_manual(values = c(15, 16)) +
+  scale_size_manual(values = c(0.85, 1)) +
+  scale_x_discrete(labels = c("Plac", "Hal", "Zip")) +
+  scale_y_continuous(name = "Adjusted Hazard Ratio (95% Confidence Interval)") +
+  labs(
+    title = "Adjusted Hazard Ratios, Time-to-Event Outcomes",
+    caption = glue(
+      "\nAdjusted analysis using Cox proportional hazards regression (death) or Fine-Gray competing risks analysis.\nCompeting risks include death (all outcomes) and discharge (MV liberation, readmission) prior to the event of interest.\nFor outcomes with competing risks, hazard ratios are for the primary subdistribution specified."
+    )
+  ) +
+  theme(
+    legend.position = c(0.59, 0.09),
+    legend.direction = "vertical",
+    legend.title = element_blank(),
+    legend.background = element_blank(),
+    legend.key = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    # axis.text.y = element_text(vjust = 1),
+    plot.caption = element_text(size = basetext_size * 0.7)
+  ) +
+  coord_flip() +
+  guides(
+    colour = guide_legend(reverse = TRUE),
+    shape = guide_legend(reverse = TRUE),
+    size = guide_legend(reverse = TRUE)
+  )
+
+all_hrs_plot %T>%
+  ggsave(
+    filename = "mindusa_adjhrs.pdf",
+    .,
+    path = "pubfigures/pdf",
+    device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
+    width = 7, height = 6, units = "in"
+  ) %T>%
+  ggsave(
+    filename = "mindusa_adjhrs.png",
+    .,
+    path = "pubfigures/png",
+    type = "cairo", dpi = 400, width = 7, height = 6, units = "in"
+  )
+
+```
+
 ## Effect Modification Figures
 
 These figures are quite similar to those shown earlier (just with titles), so
