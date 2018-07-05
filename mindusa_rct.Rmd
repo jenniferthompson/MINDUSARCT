@@ -5995,6 +5995,9 @@ Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and
 severity of illness (modified SOFA) and level of arousal (RASS) at
 randomization.
 
+*These figures are nearly the same as the versions included earlier in this
+report, just with the addition of titles, and thus will not be replicated here.*
+
 ```{r pubfig_cif_supp}
 ## -- Wrapper function ---------------------------------------------------------
 save_cif_suppplots <- function(
@@ -6094,7 +6097,41 @@ of mechanical ventilation at or within 24 hours after randomization. ICU
 readmission is analyzed only among the `r sum_na(ptsummary_df$elig_readm)` randomized patients who survived their initial ICU stay and were discharged to the floor.
 
 ```{r pubfig_em}
-## -- Wrapper to create pub versions (with title_string) and save --------------
+## -- Wrappers to create pub versions (with title_string) and save -------------
+## Mental outcomes
+save_mental_em_pub <- function(
+  median_df,
+  em_string,
+  title_text,
+  file_text,
+  file_ht
+){
+  em_pub <- mental_medians_plot_em(
+    median_df = median_df,
+    em_string = em_string,
+    title_string = sprintf(
+      "Treatment vs Mental Status Outcomes,\nModified by %s", title_text
+    )
+  )
+
+  em_pub %T>%
+    ggsave(
+      filename = sprintf("mindusa_mentalby%s.pdf", file_text),
+      .,
+      path = "pubfigures/pdf",
+      device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
+      width = 7, height = file_ht, units = "in"
+    ) %T>%
+    ggsave(
+      filename = sprintf("mindusa_mentalby%s.png", file_text),
+      .,
+      path = "pubfigures/png",
+      type = "cairo", dpi = 400, width = 7, height = file_ht, units = "in"
+    )
+  
+}
+
+## Time-to-event
 save_tte_em_pub <- function(
   ratio_df,
   em_string,
@@ -6129,6 +6166,25 @@ save_tte_em_pub <- function(
 }
 
 ## Save all effect modification plots
+pwalk(
+  .l = list(
+    median_df = list(
+      mental_medians_age, mental_medians_iqcode, mental_medians_medsurg,
+      mental_medians_sepsis, mental_medians_sofa
+    ),
+    em_string = c("age", "IQCODE", "ICU type", "sepsis", "modified SOFA"),
+    title_text = c(
+      "Age at Consent", "IQCODE at Consent",
+      "Medical vs Surgical ICU Admission",
+      "Sepsis/Septic Shock at ICU Admission",
+      "Severity of Illness at Randomization"
+    ),
+    file_text = c("age", "iqcode", "medsurg", "sepsis", "modsofa"),
+    file_ht = c(10, 7.5, 6, 6.5, 10)
+  ),
+  .f = save_mental_em_pub
+)
+
 pwalk(
   .l = list(
     ratio_df = list(
