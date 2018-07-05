@@ -4637,10 +4637,19 @@ tte_ratios_sofa <- pmap_df(.l = tte_args_sofa, .f = get_ratios_sofa) %>%
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
+    outcome_order = case_when(
+      outcome == "death_30" ~ 1,
+      outcome == "death_90" ~ 2,
+      outcome == "mvlib_30" ~ 3,
+      outcome == "icudis_90" ~ 4,
+      outcome == "readm_90" ~ 5,
+      outcome == "hospdis_90" ~ 6,
+      TRUE ~ 7
+    ),
     p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
       sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
-    # outcome_text = fct_shift(factor(outcome_text)),
+    outcome_text = fct_reorder(factor(outcome_text), outcome_order),
     em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
     em_text = fct_reorder(em_text, sofa_mod_imp_rand),
     comp.c_short = factor(
@@ -4961,10 +4970,19 @@ tte_ratios_iqcode <- pmap_df(.l = tte_args_iqcode, .f = get_ratios_iqcode) %>%
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
+    outcome_order = case_when(
+      outcome == "death_30" ~ 1,
+      outcome == "death_90" ~ 2,
+      outcome == "mvlib_30" ~ 3,
+      outcome == "icudis_90" ~ 4,
+      outcome == "readm_90" ~ 5,
+      outcome == "hospdis_90" ~ 6,
+      TRUE ~ 7
+    ),
     p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
       sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
-    # outcome_text = fct_shift(factor(outcome_text)),
+    outcome_text = fct_reorder(factor(outcome_text), outcome_order),
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
     comp.c_short = factor(
@@ -5286,10 +5304,19 @@ tte_ratios_medsurg <-
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
+    outcome_order = case_when(
+      outcome == "death_30" ~ 1,
+      outcome == "death_90" ~ 2,
+      outcome == "mvlib_30" ~ 3,
+      outcome == "icudis_90" ~ 4,
+      outcome == "readm_90" ~ 5,
+      outcome == "hospdis_90" ~ 6,
+      TRUE ~ 7
+    ),
     p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
       sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
-    # outcome_text = fct_shift(factor(outcome_text)),
+    outcome_text = fct_reorder(factor(outcome_text), outcome_order),
     em_text = factor(med_surg, levels = c("Medical", "Surgical")),
     # em_text = fct_reorder(em_text, iqcode_total_ph),
     comp.c_short = factor(
@@ -5603,10 +5630,19 @@ tte_ratios_sepsis <-
       outcome == "readm_90" ~ "ICU\nReadmission,\n90 Days",
       TRUE ~ "other"
     ),
+    outcome_order = case_when(
+      outcome == "death_30" ~ 1,
+      outcome == "death_90" ~ 2,
+      outcome == "mvlib_30" ~ 3,
+      outcome == "icudis_90" ~ 4,
+      outcome == "readm_90" ~ 5,
+      outcome == "hospdis_90" ~ 6,
+      TRUE ~ 7
+    ),
     p_sep = ifelse(p_int < 0.001, "", "="),
     outcome_text =
       sprintf("%s\n\nP%s%s", outcome_string, p_sep, formatp_nejm(p_int)),
-    # outcome_text = fct_shift(factor(outcome_text)),
+    outcome_text = fct_reorder(factor(outcome_text), outcome_order),
     em_text = factor(
       sepsis_adm, levels = c("Non-septic", "Sepsis/septic shock")
     ),
@@ -6047,7 +6083,15 @@ pwalk(
 
 ## Effect Modification Figures
 
+### Hazard Ratios for Time-to-Event Outcomes
+
 *Suggested captions:*
+
+[These figures] present the relationship between treatment and time-to-event outcomes at various levels of [age, IQCODE, sepsis, ICU type, SOFA]. Death and
+hospital and ICU discharge are analyzed among all `r n_rand` randomized
+patients. Liberation from mechanical ventilation is analyzed among the `r sum_na(ptsummary_df$on_mv_rand24)` randomized patients who received either type
+of mechanical ventilation at or within 24 hours after randomization. ICU
+readmission is analyzed only among the `r sum_na(ptsummary_df$elig_readm)` randomized patients who survived their initial ICU stay and were discharged to the floor.
 
 ```{r pubfig_em}
 ## -- Wrapper to create pub versions (with title_string) and save --------------

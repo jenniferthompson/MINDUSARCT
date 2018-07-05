@@ -938,11 +938,12 @@ prep_cuminc_df <- function(
       ub = est + qnorm(0.975) * sqrt(var),
       ## Order factors
       trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
+      ## Order agreed on July 2018: MV liberation; ICU d/c; readm; hosp d/c
       outcome_order = case_when(
-        tte_outcome == "ICU Discharge" ~ 1,
-        tte_outcome == "Hospital Discharge" ~ 2,
+        tte_outcome == "ICU Discharge" ~ 2,
+        tte_outcome == "Hospital Discharge" ~ 4,
         tte_outcome == "Readmission" ~ 3,
-        TRUE ~ 4
+        TRUE ~ 1
       ),
       outcome_label = LETTERS[outcome_order],
       tte_outcome2 = case_when(
