@@ -4213,16 +4213,18 @@ death_90_mod_age <- cph(
   robcov(cluster = model_df$study_site)
 
 ## -- Fit competing risks models using finegray() objects prev. created --------
-cr_mods_age <- map(
-  cr_outcome_fgs,
-  ~ cph(
-    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_age)),
-    data = .,
+## Anonymous function was causing issues when adding robcov(); wrapper:
+fit_cr_em <- function(df, rhs){
+  cph(
+    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", rhs)),
+    data = df,
     weights = fgwt,
     x = TRUE, y = TRUE
-  )
-)
+  ) %>%
+    robcov(cluster = df$study_site)
+}
 
+cr_mods_age <- map(cr_outcome_fgs, fit_cr_em, rhs = mod_rhs_age)
 tte_mods_age <- c(list(death_30_mod_age, death_90_mod_age), cr_mods_age)
 
 ## -- Create a data.frame with one HR, CI per age * trt * model combination ----
@@ -4565,16 +4567,7 @@ death_90_mod_sofa <- cph(
   robcov(cluster = model_df$study_site)
 
 ## -- Fit competing risks models using finegray() objects prev. created --------
-cr_mods_sofa <- map(
-  cr_outcome_fgs,
-  ~ cph(
-    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_sofa)),
-    data = .,
-    weights = fgwt,
-    x = TRUE, y = TRUE
-  )
-)
-
+cr_mods_sofa <- map(cr_outcome_fgs, fit_cr_em, rhs = mod_rhs_sofa)
 tte_mods_sofa <- c(list(death_30_mod_sofa, death_90_mod_sofa), cr_mods_sofa)
 
 ## -- Create a data.frame with one HR, CI per SOFA * trt * model comb ----------
@@ -4897,16 +4890,7 @@ death_90_mod_iqcode <- cph(
   robcov(cluster = model_df$study_site)
 
 ## -- Fit competing risks models using finegray() objects prev. created --------
-cr_mods_iqcode <- map(
-  cr_outcome_fgs,
-  ~ cph(
-    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_iqcode)),
-    data = .,
-    weights = fgwt,
-    x = TRUE, y = TRUE
-  )
-)
-
+cr_mods_iqcode <- map(cr_outcome_fgs, fit_cr_em, rhs = mod_rhs_iqcode)
 tte_mods_iqcode <-
   c(list(death_30_mod_iqcode, death_90_mod_iqcode), cr_mods_iqcode)
 
@@ -5230,16 +5214,7 @@ death_90_mod_medsurg <- cph(
   robcov(cluster = model_df$study_site)
 
 ## -- Fit competing risks models using finegray() objects prev. created --------
-cr_mods_medsurg <- map(
-  cr_outcome_fgs,
-  ~ cph(
-    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_medsurg)),
-    data = .,
-    weights = fgwt,
-    x = TRUE, y = TRUE
-  )
-)
-
+cr_mods_medsurg <- map(cr_outcome_fgs, fit_cr_em, rhs = mod_rhs_medsurg)
 tte_mods_medsurg <-
   c(list(death_30_mod_medsurg, death_90_mod_medsurg), cr_mods_medsurg)
 
@@ -5556,16 +5531,7 @@ death_90_mod_sepsis <- cph(
   robcov(cluster = model_df$study_site)
 
 ## -- Fit competing risks models using finegray() objects prev. created --------
-cr_mods_sepsis <- map(
-  cr_outcome_fgs,
-  ~ cph(
-    as.formula(paste("Surv(fgstart, fgstop, fgstatus) ~", mod_rhs_sepsis)),
-    data = .,
-    weights = fgwt,
-    x = TRUE, y = TRUE
-  )
-)
-
+cr_mods_sepsis <- map(cr_outcome_fgs, fit_cr_em, rhs = mod_rhs_sepsis)
 tte_mods_sepsis <-
   c(list(death_30_mod_sepsis, death_90_mod_sepsis), cr_mods_sepsis)
 
