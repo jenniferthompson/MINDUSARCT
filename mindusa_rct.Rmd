@@ -1731,6 +1731,57 @@ abcde_table %>%
 
 ```
 
+#### ABCDE Compliance by Treatment Group
+
+The following describes ABCDE Bundle element compliance by treatment group
+during the 14-day intervention period only.
+
+```{r abcde_trt}
+## -- Add treatment group to daily data ----------------------------------------
+daily_int_trt_df <- daily_int_df %>%
+  left_join(subset(ptsummary_df, select = c(id, trt)), by = "id")
+
+## -- Wrapper to functions defined earlier: ------------------------------------
+## Send only subset of daily_int_df for specified treatment to get_comp_x()
+## Rename Pct to treatment name
+## Combine columns from all three treatment groups
+trt_levels_chr <- as.character(trt_levels$trt_actual)
+get_comp_trt <- function(
+  element = letters[1:5],
+  df = daily_int_trt_df %>% filter(intervention)
+){
+  map(
+    trt_levels_chr,
+    ~ do.call(
+      sprintf("get_comp_%s", element),
+      list(df = subset(df, trt == .))
+    )
+  ) %>%
+    reduce(left_join, by = "Variable") %>%
+    set_names(c("Variable", as.character(trt_levels$trt_actual)))
+}
+
+abcde_table_trt <- map_dfr(letters[1:5], get_comp_trt)
+
+abcde_table_trt %>%
+  kable(
+    escape = FALSE,
+    format = "html",
+    col.names = c("", trt_levels_chr),
+    align = c("l", "r", "r", "r")
+  ) %>%
+  row_spec(c(1, 2, 11, 12, 22:25, 34, 35), bold = TRUE) %>%
+  row_spec(c(5:10, 15:21), color = palette_colors[["lgray"]]) %>%
+  group_rows("Awakening", 1, 10) %>%
+  group_rows("Breathing", 11, 21) %>%
+  group_rows("Coordination", 22, 23) %>%
+  group_rows("Delirium", 24, 33) %>%
+  group_rows("Early Mobility/Exercise", 34, 39) %>%
+  mykablestyle()
+
+```
+
+
 # Exploration of Missing Data & Potential Redundancy{#exploration}
 
 We examine all outcomes and covariates to determine how much missing data is present. In short, we have no missingness for our outcomes and very little for our covariates; therefore, we will perform complete case analysis only. Expand below for further information.
@@ -1788,7 +1839,10 @@ n_rand_comp <- sum_na(model_df$comp_covars)
 ## (This does *not* include variables related to liberation from MV or ICU
 ## readmission, as that would introduce artificial missingness)
 pts_missany <- model_df %>%
-  dplyr::select(-rass_rand, -on_mv_rand24, -tte_mvlib_30, -ftype_mvlib_30) %>%
+  dplyr::select(
+    covariate_vars,
+    setdiff(outcome_vars, str_subset(outcome_vars, "^tte|ftype|event"))
+  ) %>%
   miss_case_table() %>%
   filter(n_miss_in_case > 0) %>%
   summarise(
@@ -2068,8 +2122,8 @@ following criteria:
 
 We have very little missing covariate or outcome data (see [above](#exploration)
 for further details); therefore, we use complete case analysis for all
-in-hospital outcomes. From models which would include all `r n_rand` randomized patients (all except liberation from mechanical ventilation), complete case
-analysis excludes `r pts_missany %>% pull(nmiss)` (`r rndformat(pts_missany %>% pull(pctmiss), 0)`%).
+in-hospital outcomes. From models which would include all `r n_rand` randomized patients (all except liberation from mechanical ventilation and ICU
+readmission), complete case analysis excludes `r pts_missany %>% pull(nmiss)` (`r rndformat(pts_missany %>% pull(pctmiss), 0)`%).
 
 We do use single imputation for missing mental status on a daily basis, to
 reduce potential bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the intervention period without sufficient RASS and/or CAM information to
