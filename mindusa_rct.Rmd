@@ -19,8 +19,12 @@ $(document).ready(function(){
 </script>
 
 The MIND-USA clinical trial aims to define the role of antipsychotics in the management of delirium in critically ill patients, specifically comparing haloperidol (typical antipsychotic) and ziprasidone (atypical antipsychotic) to placebo. Further details can be found in both the trial listing on [clinicaltrials.gov](https://clinicaltrials.gov/ct2/show/NCT01211522) and on
-the [Open Science Framework](https://osf.io/mq38r/), which houses the full
-statistical analysis plan and links to code for data management and analysis.
+the [Open Science Framework](https://osf.io/mq38r/), which houses:
+
+- Full statistical analysis plan (registered version *prior to treatment unblinding* can be found [here](https://osf.io/xps5h/))
+- SOP for database locking
+- Links to code for data management and analysis
+- This full report
 
 ```{r setup, results = "hide", warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
@@ -239,7 +243,8 @@ ptsummary_df$antipsyc_adm_pr <- with(ptsummary_df, {
 
 <hr>
 
-Because this trial aims to describe the association between antipsychotics and treatment of delirium (rather than prevention), patients were required to be delirious prior to being randomized to study drug. In order to treat delirium immediately upon it being observed, however, patients (or their surrogates) were consented as soon as they met study inclusion criteria and were found not to meet exclusion criteria.
+Because this trial aims to describe the association between antipsychotics and treatment of delirium (rather than prevention), patients were required to be delirious prior to being randomized to study drug. In order to treat delirium immediately once observed, however, patients (or their surrogates) were
+consented as soon as they met study inclusion criteria and were found not to meet exclusion criteria.
 
 Upon consent, patients could be randomized any time in the following five days, provided: no exclusions were met within that time; the patient remained in the ICU; and they did eventually become delirious. Patients are considered "disqualified" if they left the ICU or the study (via discharge, death, or withdrawal) prior to experiencing delirium, or never experienced delirium in the five days following consent.
 
@@ -256,9 +261,12 @@ screen_ns <- ptstatus_df %>%
   ## disqualified for meeting exclusion criteria are included in "excluded after
   ## consent" and will not be listed here
   mutate(
-    dq_nodel = ifelse(!disqualified, NA, dq_reason == "No delirium within 5 days"),
-    dq_icudc = ifelse(!disqualified, NA, dq_reason == "ICU discharge before delirium"),
-    dq_diedwd = ifelse(!disqualified, NA, dq_reason == "Died/withdrew before delirium")
+    dq_nodel =
+      ifelse(!disqualified, NA, dq_reason == "No delirium within 5 days"),
+    dq_icudc =
+      ifelse(!disqualified, NA, dq_reason == "ICU discharge before delirium"),
+    dq_diedwd =
+      ifelse(!disqualified, NA, dq_reason == "Died/withdrew before delirium")
   ) %>%
   ## Select the categories we want
   dplyr::select(
@@ -349,11 +357,12 @@ screen_table %>%
   group_rows("Consented Patients", 6, 8) %>%
   group_rows("Reasons for Ineligibility", 9, 11) %>%
   group_rows("Organ Failures Present at Randomization", 12, 14) %>%
-  row_spec(grep("^Randomized", screen_table$status_label), bold = TRUE)
+  row_spec(grep("^Randomized", screen_table$status_label), bold = TRUE) %>%
+  footnote(
+    general = "Patients could have none, one, or two of the listed organ failures present at randomization; percentages may not add up to 100%."
+  )
 
 ```
-
-**Note**: Patients could have none, one, or two of the listed organ failures present at randomization; percentages will not add up to 100%.
 
 ## Study Exclusions
 
@@ -427,16 +436,15 @@ exc_colheads <- c(
 
 ```
 
-Exclusions could take place at the time of screening (vast majority), or after
-consent, if a patient was determined to have cognitive disability (indicated by
-an IQCODE score >= 4.5) or was discovered to have an exclusion criteria prior to
-randomization. For the `r format_comma(sum_na(ptstatus_df$excluded_ever))`
+The vast majority of exclusions were found at the time of screening. Some
+patients were excluded after consent, if determined to have cognitive disability
+(indicated by an IQCODE score >= 4.5) or were discovered to have an exclusion criteria prior to randomization. For the `r format_comma(sum_na(ptstatus_df$excluded_ever))`
 patients excluded from MINDUSA, `r table_nums("exclusions", display = "cite")`
 presents exclusions:
 
-1. At any point (column 1; % out of all exclusions)
-1. At the time of screening (column 2; % out of all screening exclusions)
-1. After consent (column 3; % out of all post-consent exclusions)
+1. At any point (column 1; % out of *all* exclusions)
+1. At the time of screening (column 2; % out of all *screening* exclusions)
+1. After consent (column 3; % out of all *post-consent* exclusions)
 
 Patients could meet multiple exclusion criteria; therefore, column percentages may total more than 100%.
 
@@ -474,27 +482,28 @@ ptstatus_df %>%
 
 <hr>
 
-Our study design was such that a substantial number of patients gave consent to be in the study, but were unable to be randomized. Thus, we describe demographics and ICU admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`), and then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
+Due to our study design (described briefly in the previous section), a
+substantial number of patients gave consent to be in the study, but were unable to be randomized to treatment. Thus, we first describe demographics and ICU
+admission characteristics of all consented patients, comparing those randomized to those not randomized (`r table_nums("baseline_all", display = "cite")`). We
+then describe those characteristics, as well as the course of hospitalization, by treatment group among randomized patients only (`r table_nums("baseline_trt", display = "cite")` and `r table_nums("inhosp_trt", display = "cite")`).
 
 ## Notes on Baseline Tables
 
-#### Medical vs Surgical Patients
-
-In both baseline tables, "surgical patients" met one or more of the following
-criteria:
+**Medical vs Surgical Patients**: In both baseline tables, "surgical patients"
+met one or more of the following criteria:
 
 1. Recorded primary ICU admission reason involving "surgery"
 2. Emergency or elective surgery between hospital admission and ICU admission
 3. Went to the OR between ICU admission and study enrollment
 
-#### AUDIT Questionnaire
-
-This questionnaire was developed for administration to the patient directly; out of necessity, we often administered it to surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing the total is missing; and 2) any missing questions are assumed to have a score of 0.
+**AUDIT Questionnaire**: This questionnaire was developed to be administered
+directly to the patient; out of necessity, we often administered it to
+surrogates, leading to missing data if a surrogate was unsure about the answer to a particular question. We have therefore calculated the score in two different ways: 1) if any question is missing, the total is missing; and 2) any missing questions are assumed to have a score of 0.
 
 ## Randomized vs Non-Randomized Patients
 
-Since no information after study disqualification was collected on patients who
-were not randomized, we can only describe demographic and ICU admission
+No information after study disqualification was collected on patients who were
+not randomized; therefore, we can only describe demographic and ICU admission
 characteristics of these patients. `r table_nums("baseline_all", display = "cite")` describes these characteristics for both all consented patients, and separately for patients who were and were not able to be randomized.
 
 ### Demographic & ICU Admission Characteristics, All **Consented** Patients
@@ -529,8 +538,10 @@ label(ptsummary_all_df2$bmi) <- "BMI"
 label(ptsummary_all_df2$home_antipsyc) <- "On antipsychotics prior to admission"
 label(ptsummary_all_df2$charlson_total) <- "Charlson Comorbidities Index"
 label(ptsummary_all_df2$iqcode_total_ph) <- "IQCODE total score"
-label(ptsummary_all_df2$adl_total_ph) <- "Katz Activities of Daily Living total score"
-label(ptsummary_all_df2$faq_total_ph) <- "Functional Activities Questionnaire total score"
+label(ptsummary_all_df2$adl_total_ph) <-
+  "Katz Activities of Daily Living total score"
+label(ptsummary_all_df2$faq_total_ph) <-
+  "Functional Activities Questionnaire total score"
 label(ptsummary_all_df2$audit_total_ph_complete) <-
   "AUDIT total score; incomplete questions considered missing"
 label(ptsummary_all_df2$audit_total_ph_partial) <-
@@ -540,8 +551,10 @@ label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
 label(ptsummary_all_df2$med_surg) <- "Patient type"
 label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission (imputed data)"
 label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
-label(ptsummary_all_df2$sofa_imp_consent) <- "SOFA on day of consent (imputed data)"
-label(ptsummary_all_df2$cv_sofa_consent) <- "Cardiovascular SOFA on day of consent"
+label(ptsummary_all_df2$sofa_imp_consent) <-
+  "SOFA on day of consent (imputed data)"
+label(ptsummary_all_df2$cv_sofa_consent) <-
+  "Cardiovascular SOFA on day of consent"
 label(ptsummary_all_df2$apache_adm) <- "APACHE II at ICU admission"
 
 ## Formula we'll use for both demographic/admission tables
@@ -599,6 +612,8 @@ Unless otherwise specified, quantities in this table reflect the **14 days inclu
 - "Liberation from mechanical ventilation" variables apply only to patients who
 were on either type of MV when randomized, or were placed on MV within the 24
 hours following randomization.
+- "Successful" ICU and hospital discharge indicates discharge followed by at
+least 48 hours alive.
 - All time-to-event descriptions (eg, ICU length of stay) begin at the time of
 randomization and go through the entire hospitalization (even if the patient
 remained hospitalized after the intervention period).
@@ -631,7 +646,10 @@ inhosp_vars <- c(
   "ever_del_int", "del_int_exp", "ever_hyperdel_int", "hyperdel_int_exp",
   "ever_hypodel_int", "hypodel_int_exp", "ever_coma_int", "coma_int_exp",
   "ever_delcoma_int", "delcoma_int_exp", "dcfd_int",
-  "icu_los", "icu_readmit_number", "hosp_los", "dc_status", "hospdis_loc"
+  "icu_los", "event_icudis_90", "tte_icudis_90_exp",
+  "icu_readmit_number", "daysto_readm_exp",
+  "hosp_los", "event_hospdis_90", "tte_hospdis_90_exp",
+  "dc_status", "hospdis_loc"
 )
 
 ## Create new dataset with variable labels, factors
@@ -652,7 +670,20 @@ inhosp_desc_df <- ptsummary_df %>%
     ever_hyperdel_int = factor_tf(ever_hyperdel_int),
     ever_hypodel_int = factor_tf(ever_hypodel_int),
     ever_coma_int = factor_tf(ever_coma_int),
-    ever_delcoma_int = factor_tf(ever_delcoma_int)
+    ever_delcoma_int = factor_tf(ever_delcoma_int),
+    event_icudis_90 =
+      factor_tf(!is.na(ftype_icudis_90) & ftype_icudis_90 == "ICU Discharge"),
+    event_hospdis_90 = factor_tf(
+      !is.na(ftype_hospdis_90) & ftype_hospdis_90 == "Hospital Discharge"
+    ),
+    
+    ## Create descriptive versions of time-to-event variables:
+    ## Want y/n version of failure type; if patient experienced event, want
+    ##  new variable with only those event times
+    tte_icudis_90_exp =
+      ifelse(ftype_icudis_90 == "ICU Discharge", tte_icudis_90, NA),
+    tte_hospdis_90_exp =
+      ifelse(ftype_hospdis_90 == "Hospital Discharge", tte_hospdis_90, NA)
   )
 label(inhosp_desc_df$antipsyc_adm_pr) <-
   "Received open-label antipsychotics between ICU admission and randomization"
@@ -660,12 +691,15 @@ label(inhosp_desc_df$sofa_imp_rand) <-
   "SOFA on day of randomization (imputed data)"
 label(inhosp_desc_df$cv_sofa_rand) <-
   "Cardiovascular SOFA on day of randomization"
-label(inhosp_desc_df$ever_mv) <- "Ever on mechanical ventilation (either type), entire hospitalization"
+label(inhosp_desc_df$ever_mv) <-
+  "Ever on mechanical ventilation (either type), entire hospitalization"
 label(inhosp_desc_df$days_mv_exp) <-
   "Days on mechanical ventilation (either type), entire hospitalization"
-label(inhosp_desc_df$mv_num) <- "Times MV initiated (either type), entire hospitalization"
+label(inhosp_desc_df$mv_num) <-
+  "Times MV initiated (either type), entire hospitalization"
 label(inhosp_desc_df$int_num) <- "Number of intubations, entire hospitalization"
-label(inhosp_desc_df$noninv_num) <- "Times NIPPV initiated, entire hospitalization"
+label(inhosp_desc_df$noninv_num) <-
+  "Times NIPPV initiated, entire hospitalization"
 label(inhosp_desc_df$on_mv_rand24) <- "On MV at or within 24h of randomization"
 label(inhosp_desc_df$ever_mvlib_rand24) <-
   "Ever successfully liberated from MV at randomization"
@@ -687,13 +721,16 @@ label(inhosp_desc_df$opioid_total_exp_int) <- "Total dose of opioids, if any"
 label(inhosp_desc_df$opioid_mean_exp_int) <-
   "Mean daily dose of opioids on days received"
 label(inhosp_desc_df$propofol_ever_int) <- "Received propofol"
-label(inhosp_desc_df$propofol_days_exp_int) <- "Days received propofol, if at all"
+label(inhosp_desc_df$propofol_days_exp_int) <-
+  "Days received propofol, if at all"
 label(inhosp_desc_df$propofol_total_exp_int) <- "Total dose of propofol, if any"
 label(inhosp_desc_df$propofol_mean_exp_int) <-
   "Mean daily dose of propofol on days received"
 label(inhosp_desc_df$dex_ever_int) <- "Received dexmedetomidine"
-label(inhosp_desc_df$dex_days_exp_int) <- "Days received dexmedetomidine, if at all"
-label(inhosp_desc_df$dex_total_exp_int) <- "Total dose of dexmedetomidine, if any"
+label(inhosp_desc_df$dex_days_exp_int) <-
+  "Days received dexmedetomidine, if at all"
+label(inhosp_desc_df$dex_total_exp_int) <-
+  "Total dose of dexmedetomidine, if any"
 label(inhosp_desc_df$dex_mean_exp_int) <-
   "Mean daily dose of dexmedetomidine on days received"
 label(inhosp_desc_df$halop_ever_int) <- "Received open-label haloperidol"
@@ -736,9 +773,19 @@ label(inhosp_desc_df$dcfd_int) <-
   "Delirium/coma-free days (missing days imputed)"
 label(inhosp_desc_df$icu_los) <-
   "Total length of ICU stay (entire hospitalization)"
+label(inhosp_desc_df$event_icudis_90) <-
+  "Successfully discharged from ICU within 90 days"
+label(inhosp_desc_df$tte_icudis_90_exp) <-
+  "Days to first successful ICU discharge within 90 days"
 label(inhosp_desc_df$icu_readmit_number) <-
   "Number of ICU readmissions during hospitalization"
 label(inhosp_desc_df$hosp_los) <- "Total length of hospitalization"
+label(inhosp_desc_df$event_hospdis_90) <-
+  "Successfully discharged from the hospital within 90 days"
+label(inhosp_desc_df$tte_hospdis_90_exp) <-
+  "Days to successful hospital discharge, if ever"
+label(inhosp_desc_df$daysto_readm_exp) <-
+  "Days to first ICU readmission, if ever"
 label(inhosp_desc_df$dc_status) <- "Status at end of hospitalization"
 label(inhosp_desc_df$hospdis_loc) <- "Hospital discharge location"
 
