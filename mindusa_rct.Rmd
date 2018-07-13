@@ -776,7 +776,7 @@ label(inhosp_desc_df$icu_los) <-
 label(inhosp_desc_df$event_icudis_90) <-
   "Successfully discharged from ICU within 90 days"
 label(inhosp_desc_df$tte_icudis_90_exp) <-
-  "Days to first successful ICU discharge within 90 days"
+  "Days to final successful ICU discharge within 90 days"
 label(inhosp_desc_df$icu_readmit_number) <-
   "Number of ICU readmissions during hospitalization"
 label(inhosp_desc_df$hosp_los) <- "Total length of hospitalization"
