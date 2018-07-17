@@ -649,7 +649,8 @@ inhosp_vars <- c(
   "icu_los", "event_icudis_90", "tte_icudis_90_exp",
   "icu_readmit_number", "daysto_readm_exp",
   "hosp_los", "event_hospdis_90", "tte_hospdis_90_exp",
-  "dc_status", "hospdis_loc"
+  "dc_status", "hospdis_loc", "daysto_death_ih",
+  "event_death_30", "event_death_90"
 )
 
 ## Create new dataset with variable labels, factors
@@ -676,6 +677,8 @@ inhosp_desc_df <- ptsummary_df %>%
     event_hospdis_90 = factor_tf(
       !is.na(ftype_hospdis_90) & ftype_hospdis_90 == "Hospital Discharge"
     ),
+    event_death_30 = factor_tf(event_death_30),
+    event_death_90 = factor_tf(event_death_90),
     
     ## Create descriptive versions of time-to-event variables:
     ## Want y/n version of failure type; if patient experienced event, want
@@ -788,6 +791,9 @@ label(inhosp_desc_df$daysto_readm_exp) <-
   "Days to first ICU readmission, if ever"
 label(inhosp_desc_df$dc_status) <- "Status at end of hospitalization"
 label(inhosp_desc_df$hospdis_loc) <- "Hospital discharge location"
+label(inhosp_desc_df$daysto_death_ih) <- "Days to death in hospital"
+label(inhosp_desc_df$event_death_30) <- "Died within 30 days of randomization"
+label(inhosp_desc_df$event_death_90) <- "Died within 90 days of randomization"
 
 html(
   summaryM(
@@ -817,19 +823,18 @@ In both tables, quantities are represented as either `N (%)` or as `median [25th
 
 Patients were approximately equally randomized to the three treatment groups, with each group receiving study drug approximately the same number of days and times.
 
-Among patients with study drug temporarily held, the most common reasons were oversedation and "other." Study drug was most often permanently discontinued by
-request of the patient, family, or medical team.
+`r round(mean(ptsummary_df$ever_drug_held)*100)`% of randomized patients ever had study drug temporarily held, most commonly due to oversedation. There is a
+somewhat higher proportion of patients in the ziprasidone group who *ever* had
+study drug held, although the total number of doses of study drug given are
+similar between groups. Compared to the placebo and haloperidol groups, about 5%
+more patients randomized to ziprasidone ever had drug held due to prolonged QTc,
+and about 6% more had drug held at some point due to medical team refusal.
 
-There is a somewhat higher proportion of patients in the ziprasidone group who
-*ever* had study drug held, although the number of doses of study drug given
-ended up being similar between groups. More patients in the placebo group had
-drug held due to oversedation and "other" reasons. Compared to the placebo and
-haloperidol groups, a slightly higher proportion of patients randomized to
-ziprasidone ever had drug held due to prolonged QTc (~5%), and about 9% more
-had drug held at some point due to medical team refusal.
-
-Though one patient had study drug discontinued due to suspected NMS, there were
-no *confirmed* cases after investigation by the DSMB.
+`r round(mean(ptsummary_df$ever_drug_permdc_active)*100)`% of randomized
+patients had the intervention permanently discontinued while actively receiving
+study drug *(i.e., permanent discontinuation occurred at a scheduled dose
+immediately following a dose given, rather than temporarily held)*. This was
+most commonly due to refusal of either the medical team or the patient/family.
 
 ```{r prep_rand_table}
 randtable_df <- rand_df %>%
@@ -846,7 +851,7 @@ rand_sums <- randtable_df %>%
   summarise_at(
     vars(randomized, ever_studydrug, ever_drug_held,
          matches("^ever\\_held\\_[a-z]+$"),
-         ever_drug_permdc, matches("^permdc\\_[a-z]+$"),
+         ever_drug_permdc_active, matches("^permdc\\_active\\_[a-z]+$"),
          died_inhosp, wd_inhosp, elig_fu),
     funs(sum_na)
   )
@@ -868,23 +873,30 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
   mutate(
     npct_studydrug = get_npct(ever_studydrug, randomized),
     npct_held = get_npct(ever_drug_held, ever_studydrug),
-    npct_held_ae = get_npct(ever_held_ae, ever_drug_held),
-    npct_held_dystonia = get_npct(ever_held_dystonia, ever_drug_held),
-    npct_held_eps = get_npct(ever_held_eps, ever_drug_held),
-    npct_held_other = get_npct(ever_held_other, ever_drug_held),
-    npct_held_oversed = get_npct(ever_held_oversed, ever_drug_held),
-    npct_held_refuseptfam = get_npct(ever_held_refuseptfam, ever_drug_held),
-    npct_held_qtc = get_npct(ever_held_qtc, ever_drug_held),
-    npct_held_refuseteam = get_npct(ever_held_refuseteam, ever_drug_held),
-    npct_permdc = get_npct(ever_drug_permdc, ever_studydrug),
-    npct_permdc_ae = get_npct(permdc_ae, ever_drug_permdc),
-    npct_permdc_coma = get_npct(permdc_coma, ever_drug_permdc),
-    npct_permdc_refuseteam = get_npct(permdc_refuseteam, ever_drug_permdc),
-    npct_permdc_nms = get_npct(permdc_nms, ever_drug_permdc),
-    npct_permdc_react = get_npct(permdc_react, ever_drug_permdc),
-    npct_permdc_other = get_npct(permdc_other, ever_drug_permdc),
-    npct_permdc_refuseptfam = get_npct(permdc_refuseptfam, ever_drug_permdc),
-    npct_permdc_torsades = get_npct(permdc_torsades, ever_drug_permdc),
+    npct_held_ae = get_npct(ever_held_ae, ever_studydrug),
+    npct_held_dystonia = get_npct(ever_held_dystonia, ever_studydrug),
+    npct_held_eps = get_npct(ever_held_eps, ever_studydrug),
+    npct_held_other = get_npct(ever_held_other, ever_studydrug),
+    npct_held_oversed = get_npct(ever_held_oversed, ever_studydrug),
+    npct_held_refuseptfam = get_npct(ever_held_refuseptfam, ever_studydrug),
+    npct_held_qtc = get_npct(ever_held_qtc, ever_studydrug),
+    npct_held_refuseteam = get_npct(ever_held_refuseteam, ever_studydrug),
+    npct_permdc_active = get_npct(ever_drug_permdc_active, ever_studydrug),
+    npct_permdc_active_ae = get_npct(permdc_active_ae, ever_studydrug),
+    npct_permdc_active_coma =
+      get_npct(permdc_active_coma, ever_studydrug),
+    npct_permdc_active_refuseteam =
+      get_npct(permdc_active_refuseteam, ever_studydrug),
+    npct_permdc_active_nms =
+      get_npct(permdc_active_nms, ever_studydrug),
+    npct_permdc_active_react =
+      get_npct(permdc_active_react, ever_studydrug),
+    npct_permdc_active_other =
+      get_npct(permdc_active_other, ever_studydrug),
+    npct_permdc_active_refuseptfam =
+      get_npct(permdc_active_refuseptfam, ever_studydrug),
+    npct_permdc_active_torsades =
+      get_npct(permdc_active_torsades, ever_studydrug),
     npct_died = get_npct(died_inhosp, randomized),
     npct_wd = get_npct(wd_inhosp, randomized),
     npct_elig = get_npct(elig_fu, randomized),
@@ -938,8 +950,8 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
   dplyr::select(
     trt, randomized, npct_studydrug, hrs_random_drug, drug_days, drug_doses,
     ends_with("_ml"), ends_with("_mg"),
-    npct_held, matches("^npct\\_held\\_"), npct_permdc,
-    matches("^npct\\_permdc\\_"), npct_died, npct_wd, npct_elig
+    npct_held, matches("^npct\\_held\\_"), npct_permdc_active,
+    matches("^npct\\_permdc\\_active\\_"), npct_died, npct_wd, npct_elig
   ) %>%
   gather(key = table_row, value = table_string, -trt) %>%
   spread(key = trt, value = table_string) %>%
@@ -957,7 +969,7 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "max_drug_dose_mg" ~ 10,
       table_row == "total_drug_dose_mg" ~ 11,
       table_row == "npct_held" ~ 12,
-      table_row == "npct_permdc" ~ 13,
+      table_row == "npct_permdc_active" ~ 13,
       table_row == "npct_died" ~ 14,
       table_row == "npct_wd" ~ 15,
       table_row == "npct_elig" ~ 16,
@@ -977,7 +989,7 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "total_drug_dose_ml"      ~ "Total drug given (ml)",
       table_row == "total_drug_dose_mg"      ~ "Total drug given (mg)",
       table_row == "npct_held"               ~ "Ever had study drug temporarily held",
-      table_row == "npct_permdc"             ~ "Had study drug permanently discontinued",
+      table_row == "npct_permdc_active"      ~ "Had active study drug permanently discontinued",
       table_row == "npct_died"               ~ "Died in the hospital",
       table_row == "npct_wd"                 ~ "Withdrew from study in the hospital",
       table_row == "npct_elig"               ~ "Eligible for long-term follow-up",
@@ -989,14 +1001,15 @@ rand_table <- left_join(rand_sums, rand_cont, by = "trt") %>%
       table_row == "npct_held_qtc"           ~ "Prolonged QTc",
       table_row == "npct_held_refuseptfam"   ~ "Patient/family refusal",
       table_row == "npct_held_refuseteam"    ~ "Medical team refusal",
-      table_row == "npct_permdc_ae"          ~ "Adverse event",
-      table_row == "npct_permdc_coma"        ~ "Coma due to structural brain damage",
-      table_row == "npct_permdc_nms"         ~ "Suspected NMS",
-      table_row == "npct_permdc_other"       ~ "Other reason",
-      table_row == "npct_permdc_react"       ~ "DRESS",
-      table_row == "npct_permdc_refuseptfam" ~ "Patient/family refusal",
-      table_row == "npct_permdc_refuseteam"  ~ "Medical team refusal",
-      table_row == "npct_permdc_torsades"    ~ "Torsades de pointes",
+      table_row == "npct_permdc_active_ae"   ~ "Adverse event",
+      table_row == "npct_permdc_active_coma" ~
+        "Coma due to structural brain damage",
+      table_row == "npct_permdc_active_nms"         ~ "Suspected NMS",
+      table_row == "npct_permdc_active_other"       ~ "Other reason",
+      table_row == "npct_permdc_active_react"       ~ "DRESS",
+      table_row == "npct_permdc_active_refuseptfam" ~ "Patient/family refusal",
+      table_row == "npct_permdc_active_refuseteam"  ~ "Medical team refusal",
+      table_row == "npct_permdc_active_torsades"    ~ "Torsades de pointes",
       TRUE ~ "")
   ) %>%
   arrange(sort_order) %>%
@@ -1013,51 +1026,64 @@ rand_table %>%
   ) %>%
   mykablestyle %>%
   group_rows("Randomized Patients", 2, 16) %>%
-  group_rows("Reasons Study Drug Temporarily Held", 17, 24) %>%
-  group_rows("Reasons Study Drug Permanently Discontinued", 25, 32)
+  group_rows(
+    "Reasons Study Drug Temporarily Held (% of Patients Who Received Study Drug)",
+    17, 24
+  ) %>%
+  group_rows(
+    "Reasons Active Study Drug Permanently Discontinued (% of Patients Who Received Study Drug)",
+    25, 32
+  )
 
 ```
 
 ## Intervention by Dose
 
-`r table_nums("intervention_dose", display = "cite")` describes the `r format(nrow(doses_df), big.mark = ",")` doses of study drug attempted during the
-course of the study - generally two doses per day that the patient remained
-alive and in the ICU. This includes doses where drug was held, temporarily or
-permanently, for adverse clinical reasons; it does not include instances where
-study drug was not administered due to resolution of delirium or patient
-unavailability (including ICU discharge, death, study withdrawal, being off the floor, or being placed on comfort care measures/hospice).
+```{r dose_attempts}
+## Restrict to only doses attempted
+dose_attempts <- doses_df %>%
+  ## Restrict to randomized patients and add treatment group
+  right_join(rand_df, by = "id") %>%
+  ## Only keep doses either given, or held due to adverse clinical reasons
+  ## (excludes doses held due to patient unavailability), or permanently d/c'ed
+  ## while actively receiving study drug
+  filter(drug_given | drug_held | drug_permdc_active)
 
-*Study staff sometimes continued to document dose opportunities after permanent
-discontinuation; therefore, describing permanent discontinuation by dose would be misleading, and it is omitted from this table. (For example, 24 doses in the placebo group were held due to coma due to structural brain damage, but these doses all came from three patients; similarly, the 22 doses discontinued for suspected NMS all came from one patient.)*
+```
+
+`r table_nums("intervention_dose", display = "cite")` describes the `r format(nrow(dose_attempts), big.mark = ",")` doses of study drug attempted
+during the course of the study - generally, two doses per day that the patient
+remained alive and in the ICU. This includes:
+
+1. Doses **given**
+1. Doses **temporarily held** for adverse clinical reasons
+1. Doses **permanently discontinued** for adverse clinical reasons while the
+patient was actively receiving study drug
+    (ie: A patient who was actively receiving drug until discontinuation due to suspected NMS would be counted below; a patient who had had drug held for two days due to oversedation, then had study drug permanently discontinued by request of their family, would not be included)
+
+We do not include below instances where study drug was not administered due to
+resolution of delirium or patient unavailability (including ICU discharge,
+death, study withdrawal, being off the floor, or being placed on comfort care
+measures/hospice).
 
 Nearly all randomized patients received at least one dose of study drug. Two patients had study drug held due to either oversedation or prolonged QTc during
 their remaining ICU stay, and never received a dose of study drug.
 
 About 75% of doses were successfully given in each of the three treatment groups. Pre-dose QTcs were also roughly equivalent between the three groups.
 
-Oversedation was the most common reason for temporary hold by far, and was slightly more common in the placebo group, while slightly more doses in the
-ziprasidone group were held due to prolonged QTc. Rates of medical team refusal
-were similar between the three groups. Study drug hold due to other safety
-concerns (adverse events, dystonia, EPS, NMS, DRESS) was very rare.
+Oversedation was the most common reason for temporary hold by far, followed
+distantly by medical team refusal and prolonged QTc. Temporary study drug hold
+due to other safety concerns (adverse events, dystonia, EPS) was rare.
 
 ```{r prep_dose_table}
 ## How many total doses in each treatment group?
-doses_grp <- doses_df %>%
-  ## Restrict to randomized patients and add treatment group
-  right_join(rand_df, by = "id") %>%
-  ## Only keep doses either given, or held/d/c'd due to adverse clinical reasons
-  ## (excludes doses held due to patient unavailability)
-  filter(drug_given | drug_held | drug_permdc) %>%
+doses_grp <- dose_attempts %>%
   group_by(trt) %>%
   summarise(doses_trt = n())
 
-## Summarize variables that just need sums
-dose_table <- doses_df %>%
-  ## Restrict to randomized patients and add treatment group
-  right_join(rand_df, by = "id") %>%
-  ## Only keep doses either given, or held/d/c'd due to adverse clinical reasons
-  ## (excludes doses held due to patient unavailability)
-  filter(drug_given | drug_held | drug_permdc) %>%
+dose_table <- dose_attempts %>%
+  ## Indicator for whether dose was held d/t oversedation, but no actual RASS
+  mutate(rass_na = held_oversed & is.na(oversed_actual)) %>%
   group_by(trt) %>%
   summarise(
     doses_given = sum_na(drug_given),
@@ -1089,6 +1115,7 @@ dose_table <- doses_df %>%
     rass_3 = sum_na(oversed_actual == "-3"),
     rass_4 = sum_na(oversed_actual == "-4"),
     rass_5 = sum_na(oversed_actual == "-5"),
+    rass_na = sum_na(rass_na),
     held_eps = sum_na(held_eps),
     held_dystonia = sum_na(held_dystonia),
     held_ae = sum_na(held_ae),
@@ -1109,7 +1136,7 @@ dose_table <- doses_df %>%
   ## -- Turn into a table ------------------------------------------------------
   ## Doses given
   mutate_at(
-    vars(type_initial:ml_200), funs(get_npct(., denom = doses_given))
+    vars(type_initial:ml_200), funs(get_npct(., denom = nrow(dose_attempts)))
   ) %>%
   mutate(
     desc_preqtc = describe_cont(
@@ -1117,19 +1144,24 @@ dose_table <- doses_df %>%
     )
   ) %>%
   ## Doses temporarily held
-  mutate_at(vars(rass_0:rass_5), funs(get_npct(., denom = held_oversed))) %>%
+  mutate_at(
+    vars(rass_0:rass_na), funs(get_npct(., denom = held_oversed))
+  ) %>%
   mutate_at(
     vars(held_qtc, held_oversed, held_eps:held_other),
-    funs(get_npct(., denom = doses_held))
+    funs(get_npct(., denom = nrow(dose_attempts)))
   ) %>%
   ## Doses permanently discontinued
   mutate_at(
-    vars(permdc_nms:permdc_other), funs(get_npct(., denom = doses_permdc))
+    vars(permdc_nms:permdc_other),
+    funs(get_npct(., denom = nrow(dose_attempts)))
   ) %>%
-  ## Do these last because we need the numeric versions for numerators
+  ## Do these last because we need the numeric versions for denominators
+  ## (No longer true if we use all dose attempts as denominators, but keeping
+  ## comment in case we switch back)
   mutate_at(
     vars(doses_given, doses_held, doses_permdc),
-    funs(get_npct(., denom = doses_trt))
+    funs(get_npct(., denom = nrow(dose_attempts)))
   ) %>%
   ## Transpose to one row per descriptor, with a column for each treatment group
   dplyr::select(trt, doses_trt, doses_given:doses_permdc, type_initial:ml_200,
@@ -1181,7 +1213,8 @@ dose_table <- doses_df %>%
       table_row == "doses_trt" ~ "Dose Opportunities",
       table_row == "doses_given" ~ "Given",
       table_row == "doses_held" ~ "Temporarily held",
-      table_row == "doses_permdc" ~ "Permanently discontinued",
+      table_row == "doses_permdc" ~
+        "Permanently discontinued from active study drug",
       table_row == "ml_025" ~ "0.25 mL",
       table_row == "ml_050" ~ "0.50 mL",
       table_row == "ml_100" ~ "1.00 mL",
@@ -1202,6 +1235,7 @@ dose_table <- doses_df %>%
       table_row == "held_refuseptfam" ~ "Patient/family refusal",
       table_row == "held_refuseteam" ~ "Medical team refusal",
       table_row == "held_other" ~ "Other",
+      table_row == "rass_na" ~ "Not documented",
       table_row == "rass_0" ~ "0",
       table_row %in% paste0("rass_", 1:5) ~
         paste0("-", gsub("^rass\\_", "", table_row)),
@@ -1230,9 +1264,9 @@ dose_table %>%
   ) %>%
   mykablestyle %>%
   group_rows("All Dose Opportunities", 2, 4) %>%
-  group_rows("Doses Given", 5, 16) %>%
-  group_rows("Doses Temporarily Held", 17, 24) %>%
-  group_rows("Actual RASS for Doses Held due to Oversedation", 25, 30)
+  group_rows("Doses Given (% of All Opportunities)", 5, 16) %>%
+  group_rows("Doses Temporarily Held (% of All Opportunities)", 17, 24) %>%
+  group_rows("Actual RASS for Doses Held due to Oversedation", 25, 31)
 
 ```
 
@@ -6063,7 +6097,7 @@ cif_pub_facet <- ggplot(
   scale_fill_manual(values = mindusa_trtcols_long) +
   scale_x_continuous(name = "Days after Randomization", breaks = cif_breaks) +
   scale_y_continuous(
-    name = "Cumulative Probability",
+    name = "Cumulative Incidence Probability",
     limits = c(0, 1),
     breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
   ) +
