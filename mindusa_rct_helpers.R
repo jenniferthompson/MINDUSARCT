@@ -195,7 +195,7 @@ mental_medians_plot <- function(df, mod, text_results = TRUE){
 calc_medians_em <- function(mod, df, em_vals, em_var){
   quantile_orm_df(
     mod = mod,
-    new.data = set_names(df, str_subset(names(coef(mod)), "^[^y>=]")),
+    new.data = set_names(df, names(coef(mod))[grepl("^[^y>=1]", names(coef(mod)))]),
     trt_levels = rep(levels(model_df$trt), each = length(em_vals))
   ) %>%
     bind_cols(dplyr::select(df, one_of(em_var))) %>%
@@ -691,7 +691,7 @@ cr_risktable <- function(
   ## treatment group if all pts are out of risk set
   dummy_times <- cross_df(
     list(
-      trt = unique(str_replace(sf_sum$strata, "trt=", "")),
+      trt = unique(gsub("trt=", "", sf_sum$strata)),
       time = sort(unique(sf_sum$time))
     )
   )
@@ -708,7 +708,7 @@ cr_risktable <- function(
   }
      
   df <- data.frame(
-    trt = str_replace(sf_sum$strata, "trt=", ""),
+    trt = gsub("trt=", "", sf_sum$strata),
     time = sf_sum$time,
     n_risk = sf_sum$n.risk[, ncol(sf_sum$n.risk)],
     n_censored = sf_sum$n.censor
@@ -727,7 +727,7 @@ cr_risktable <- function(
     mutate_at(vars(event_types, "n_censored"), cumsum) %>%
     ungroup() %>%
     set_names(
-      str_replace(names(.), main_event, "primary")
+      gsub(main_event, "primary", names(.))
     )
   
   ## -- Create string for N at risk, etc ---------------------------------------
@@ -1037,7 +1037,7 @@ create_cif_manual <- function(
   
   ## Create string for main event in plot title
   title_string <-
-    paste(capitalize(str_split(event_string, " ")[[1]]), collapse = " ")
+    paste(capitalize(strsplit(event_string, " ")[[1]]), collapse = " ")
   if(is.null(test_string)){
     test_string <- sprintf(
       "P for treatment, %s: %s",
