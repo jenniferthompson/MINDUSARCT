@@ -1076,16 +1076,12 @@ distantly by medical team refusal and prolonged QTc. Temporary study drug hold
 due to other safety concerns (adverse events, dystonia, EPS) was rare.
 
 ```{r prep_dose_table}
-## How many total doses in each treatment group?
-doses_grp <- dose_attempts %>%
-  group_by(trt) %>%
-  summarise(doses_trt = n())
-
 dose_table <- dose_attempts %>%
   ## Indicator for whether dose was held d/t oversedation, but no actual RASS
   mutate(rass_na = held_oversed & is.na(oversed_actual)) %>%
   group_by(trt) %>%
   summarise(
+    doses_trt = n(), ## Total doses per treatment
     doses_given = sum_na(drug_given),
     doses_held = sum_na(drug_held),
     doses_permdc = sum_na(drug_permdc),
@@ -1131,8 +1127,6 @@ dose_table <- dose_attempts %>%
     permdc_refuseteam = sum_na(permdc_refuseteam),
     permdc_other = sum_na(permdc_other)
   ) %>%
-  ## Add total doses per treatment group; need these for denominators
-  left_join(doses_grp, by = "trt") %>%
   ## -- Turn into a table ------------------------------------------------------
   ## Doses given
   mutate_at(
@@ -1149,19 +1143,18 @@ dose_table <- dose_attempts %>%
   ) %>%
   mutate_at(
     vars(held_qtc, held_oversed, held_eps:held_other),
-    funs(get_npct(., denom = nrow(dose_attempts)))
+    funs(get_npct(., denom = doses_trt))
   ) %>%
   ## Doses permanently discontinued
   mutate_at(
-    vars(permdc_nms:permdc_other),
-    funs(get_npct(., denom = nrow(dose_attempts)))
+    vars(permdc_nms:permdc_other), funs(get_npct(., denom = doses_trt))
   ) %>%
   ## Do these last because we need the numeric versions for denominators
   ## (No longer true if we use all dose attempts as denominators, but keeping
   ## comment in case we switch back)
   mutate_at(
     vars(doses_given, doses_held, doses_permdc),
-    funs(get_npct(., denom = nrow(dose_attempts)))
+    funs(get_npct(., denom = doses_trt))
   ) %>%
   ## Transpose to one row per descriptor, with a column for each treatment group
   dplyr::select(trt, doses_trt, doses_given:doses_permdc, type_initial:ml_200,
