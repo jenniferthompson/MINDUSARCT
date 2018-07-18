@@ -4073,7 +4073,7 @@ rms_results_kable(readm_90_mod)
 
 ```
 
-# Effect Modification Analyses
+# Heterogeneity of Treatment Effect
 <hr>
 
 Our goal in this section is to determine whether there is any difference in the
@@ -4084,9 +4084,9 @@ baseline factors:
 1. Severity of illness at randomization, measured by modified SOFA
 1. Preexisting cognitive impairment, measured by IQCODE
 1. Medical vs surgical admission reason
-1. Sepsis at ICU admission
+1. Sepsis/septic shock at ICU admission
 
-Detailed definitions for each of these potential modifiers of treatment effect will be included with each section.
+Detailed definitions for each of these potential modifiers of treatment effect will be included with each section, if needed.
 
 ## Age at Study Consent
 
@@ -4180,17 +4180,20 @@ pred_df_age <- rep(list(pred_df_age_prep), length(levels(model_df$trt))) %>%
   
 ```
 
-For most outcomes, associations between treatment and outcome are generally
-consistent regardless of age; for example, though the oldest patients tend to
-have the fewest days alive and free of delirium and coma as a group, the median
+The association between treatment and our primary outcome of delirium/coma-free
+days is consistent regardless of age; though the oldest patients tend to have
+the fewest days alive and free of delirium and coma as a group, the median
 DCFDs for each treatment group still overlap considerably at each age presented,
-indicating no difference in the effect of treatment on this outcome.
+indicating no difference in the effect of treatment on this outcome. Treatment
+effect (or lack thereof) is similarly consistent for duration of hyperactive
+delirium.
 
-One *possible* exception: Among the youngest patients, the ziprasidone group has
-fewer days of delirium, but also a slightly elevated hazard ratio for death
-compared to the placebo group. This big-picture interpretation is reflected by
-the lack of effect modification for the broad outcome of DCFDs, but may be worth
-further investigation.
+Among the youngest patients, the ziprasidone group has fewer days of delirium
+(and specifically hypoactive delirium), but also a slightly elevated hazard
+ratio for death compared to the placebo group. This big-picture interpretation is reflected by the lack of effect modification for the broad outcome of DCFDs,
+but may be worth further investigation. Haloperidol is potentially associated
+with a higher risk of death by both 30 and 90 days after randomization among the
+oldest patients.
 
 ### Mental Status Outcomes{.tabset}
 
@@ -4537,15 +4540,12 @@ delirium and coma as a group, the median DCFDs for each treatment group still
 overlap considerably at each level of modified SOFA presented, indicating no
 difference in the effect of treatment on this outcome.
 
-There are some hints of effect modification; these don't tell a consistent story, and will need to be interpreted in light of their clinical significance. For example, the ziprasidone and placebo groups look quite similar in terms of overall delirium duration regardless of SOI at randomization, but the haloperidol shifts back and forth relative to those groups at various levels of SOI.
-
-Being in the haloperidol group may be a risk factor for a higher 90-day
-mortality rate for patients with less severe illness at randomization, but does
-not seem to be associated with mortality rates for the most sick patients. Given
-the lack of overall association between treatment and mortality, and the lack of
-effect modification between SOI and treatment for 30-day mortality, this should
-be interpreted with caution, and together with 12-month mortality results when
-those are available later in 2018.
+The single exception is 90-day mortality, where haloperidol seems to be
+associated with a higher rate of death for patients with moderate severity of
+illness. Given the lack of overall association between treatment and mortality,
+and the lack of effect modification between SOI and treatment for 30-day
+mortality, this should be interpreted with caution, and together with 12-month
+mortality results when follow-up assessments are complete.
 
 ### Mental Status Outcomes{.tabset}
 
@@ -4866,9 +4866,10 @@ pred_df_iqcode <-
   
 ```
 
-Aside from coma duration (where any effect modification is clinically minimal),
-we see no effect modification from preexisting cognitive impairment and the
-association between treatment and any of our primary or secondary outcomes.
+Though we see some statistically significant heterogeneity of effect, the
+adjusted differences do not seem to be clinically meaningful. The possible exception is ICU readmission; patients with the worst pre-existing cognitive impairment who were randomized to haloperidol had the highest adjusted rate of ICU readmission. This is worthy of further investigation; we also, however, note
+our low rates of readmission generally, and the wide confidence interval
+surrounding this estimate.
 
 ### Mental Status Outcomes{.tabset}
 
@@ -4938,7 +4939,7 @@ mental_table_iqcode <- mental_medians_iqcode %>%
 
 #### Visual Results
 
-```{r plot_mental_outcomes_iqcode, fig.height = 6}
+```{r plot_mental_outcomes_iqcode, fig.height = 6.5}
 mental_medplot_iqcode
 
 ```
@@ -5190,9 +5191,11 @@ pred_df_medsurg <-
   
 ```
 
-Aside from coma duration (where any effect modification is clinically minimal),
-we see no effect modification from ICU type and the association between
-treatment and any of our primary or secondary outcomes.
+Aside from coma duration (where any effect modification is clinically minimal)
+and potentially liberation from mechanical ventilation, where ziprasidone may
+have some benefit among surgical patients, we see no effect modification from
+ICU type and the association between treatment and any of our primary or
+secondary outcomes.
 
 ### Mental Status Outcomes{.tabset}
 
@@ -5506,8 +5509,10 @@ pred_df_sepsis <-
   
 ```
 
-We see no effect modification from sepsis at ICU admission and the association
-between treatment and any of our primary or secondary outcomes.
+Among patients septic/in septic shock at ICU readmission, ziprasidone treatment
+is associated with a small increase in coma duration, and both antipsychotics
+(but particularly haloperidol) are associated with a small decrease in time to
+ICU discharge compared to placebo.
 
 ### Mental Status Outcomes{.tabset}
 
@@ -5779,10 +5784,9 @@ Planned figures for supplement:
 
 *Suggested caption:*
 
-[This figure] presents adjusted median values and 95% confidence intervals by
-treatment group for days alive and free of delirium and coma (DCFDs); days of delirium; and days of coma during the 14-day intervention period. P-values refer
-to the entire association between treatment and the outcome. Medians and
-p-values are calculated using proportional odds logistic regression clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+During the 14-day treatment period, the primary outcome (delirium/coma-free days) and secondary outcomes (durations of delirium and coma) were similar in the three treatment groups. P-values are computed for the entire association between treatment and the outcome. Medians and p-values are calculated using proportional odds logistic regression clustered by study site, and are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+
+(Similar for appendix, hyperactive/hypoactive delirium.)
 
 ```{r pubfig_mental}
 ## Helpful links for using Lato:
@@ -5949,15 +5953,15 @@ medians_deltypes_pub %T>%
     type = "cairo", dpi = 400, width = 6, height = 4, units = "in"
   )
 
-multiplot(
-  medians_dcfd_pub, medians_delcoma_pub,
-  layout = matrix(c(1, 2), byrow = TRUE, nrow = 2)
-)
+# multiplot(
+#   medians_dcfd_pub, medians_delcoma_pub,
+#   layout = matrix(c(1, 2), byrow = TRUE, nrow = 2)
+# )
 
 ```
 
 ```{r}
-medians_deltypes_pub
+# medians_deltypes_pub
 
 ```
 
@@ -5965,14 +5969,8 @@ medians_deltypes_pub
 
 *Suggested caption:*
 
-[This figure] presents Kaplan-Meier curves by treatment group for death up to 90
-days after randomization. P-values for 30- and 90-day death refer to the entire
-association between treatment and mortality and are calculated using Cox
-proportional hazards models clustered by study site. Models are adjusted for age
-at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA
-Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and
-severity of illness (modified SOFA) and level of arousal (RASS) at
-randomization.
+The study population had 73% survival at 30 days and 65% survival at 90 days. In adjusted analyses, neither haloperidol (...) nor ziprasidone (...) affected 30-day survival compared with placebo (across groups, adjusted P = ...). Ziprasidone had no effect on 90-day survival (HR...); haloperidol's effect on 90-day survival trended toward harm in adjusted analyses (HR...). P-values for
+30- and 90-day death refer to the entire association between treatment and mortality and are calculated using Cox proportional hazards models clustered by study site. Models are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r pubfig_death}
 ## -- Start with KM already created; add *adj* p-vals, tweak labels/legend -----
@@ -6007,7 +6005,7 @@ ggsave(
   type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
 )
 
-multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2))
+# multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2))
 
 ```
 
@@ -6021,12 +6019,7 @@ will include full CIF curves as well as the N at risk tables for each outcome.
 
 *Suggested caption:*
 
-[This figure] presents the cumulative incidence probabilities for time-to-event
-outcomes. All four outcomes have a competing risk of death prior to the event; ICU readmission and liberation from mechanical ventilation also have a competing risk of ICU discharge prior to the event. *(Full cumulative incidence functions,
-including death and ICU discharge and N at risk, and adjusted hazard ratios for each treatment are provided in the online supplement.)* P-values refer to the
-overall effect of treatment. They are calculated using the Fine-Gray method for
-competing risks (clustered by study site), and adjusted for age at study
-consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+There were no differences between treatment groups in time to liberation from mechanical ventilation, ICU discharge, or hospital discharge. In adjusted analyses there was a difference in ICU readmission across groups, with patients treated with ziprasidone having a slightly lower readmission rate among those who survived their initial ICU stay. P-values refer to the overall effect of treatment. They are calculated using the Fine-Gray method for competing risks (clustered by study site), and adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r pubfig_cif_main}
 cif_data <- pmap_df(
@@ -6093,9 +6086,6 @@ age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA
 Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and
 severity of illness (modified SOFA) and level of arousal (RASS) at
 randomization.
-
-*These figures are nearly the same as the versions included earlier in this
-report, just with the addition of titles, and thus will not be replicated here.*
 
 ```{r pubfig_cif_supp}
 ## -- Wrapper function ---------------------------------------------------------
@@ -6183,7 +6173,7 @@ pwalk(
 
 ```
 
-## Adjusted Hazard Ratios, All Time-to-Event Outcomes
+## Adjusted Subdistribution Hazard Ratios, All Time-to-Event Outcomes
 
 *Suggested caption:*
 
