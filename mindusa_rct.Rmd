@@ -2023,7 +2023,8 @@ gg_miss_var(
     dplyr::select(
       -id, -med_surg, -sepsis_adm,
       -rass_rand, -on_mv_rand24, -tte_mvlib_30,
-      -ftype_mvlib_30, -tte_readm_90, -ftype_readm_90
+      -ftype_mvlib_30, -tte_readm_90, -ftype_readm_90,
+      -comp_covars, -elig_readm
     ),
   show_pct = TRUE
 ) +
@@ -2036,7 +2037,8 @@ gg_miss_var(
 
 ```
 
-IQCODE and level of arousal at randomization are the only covariates with missing data; the amount is still quite minimal (<2%), and these variables are not missing in ways that appear to be related. In the plot below, red indicates missingness and blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
+IQCODE and level of arousal at randomization are the only covariates with missing data; the amount is still quite minimal (<2% for each), and these
+variables are not missing in ways that appear to be related. In the plot below, red indicates missingness and blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
 
 ```{r iqcode_rass_miss}
 ggplot(data = model_df) +
@@ -2065,8 +2067,10 @@ Hmisc::redun(
 
 <hr>
 
-Our full, prespecified Statistical Analysis Plan includes more detailed information on database management, data cleaning, study methods, and guiding statistical principles. The current version is stored on the [Open Science
-Framework](https://osf.io/gkb6u/).
+Our full, prespecified Statistical Analysis Plan includes more detailed information on database management, data cleaning, study methods, and guiding statistical principles. The version in place prior to breaking the treatment
+blind is registered on the [Open Science Framework](https://osf.io/xps5h/). Any
+further updates to the SAP, in addition to other study documents and R code for
+analysis, will be available via the project's [primary OSF project page](https://osf.io/mq38r/).
 
 ## Unadjusted Analysis{#unadjusted}
 
@@ -2176,7 +2180,7 @@ nonlinear relationship with our outcome, using restricted cubic splines with `r 
 of arousal and treatment are both categorical covariates, and thus nonlinearity
 does not apply.)
 
-## Effect Modification
+## Heterogeneity of Treatment Effect
 
 We are interested in whether any association between treatment group and our
 main outcomes is modified by several factors. In secondary analyses, we will include interaction (or cross-product) terms in our multivariable models between
@@ -2185,7 +2189,7 @@ treatment and the following variables:
 - Age at consent
 - Severity of illness, measured by modified SOFA on the day of randomization
 - Pre-existing cognitive impairment, measured by IQCODE at consent
-- Sepsis at randomization, as defined by... [probably something similar to this JAMA paper](https://jamanetwork.com/journals/jama/fullarticle/2654187)
+- Sepsis at randomization, as defined by primary reason for ICU admission
 - Medical vs surgical patient, as defined by meeting at least one of the
 following criteria:
     - Recorded primary ICU admission reason involving "surgery"
@@ -2344,7 +2348,7 @@ After adjusting for all baseline covariates, we again see no significant
 association between treatment and days alive and free of delirium and coma
 during the intervention period.
 
-#### Model Fitting and Assumptions {.tabset}
+#### Model Fitting and Assumptions{.tabset}
 
 ##### Model Fitting
 
@@ -2395,8 +2399,7 @@ JTHelpers::rms_po_assume(
 #### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
-DCFDs by treatment group. All results are shown visually, with tables included
-for exact numbers if desired.
+DCFDs by treatment group.
 
 ##### Adjusted Odds Ratios
 
@@ -2461,7 +2464,7 @@ Medians are adjusted to the median/mode values of all covariates, so that each
 represents the expected median number of DCFDs for a patient in each treatment
 group who is otherwise part of a "typical" *(many air quotes)* population.
 
-```{r dcfd_medians, fig.width = 5, fig.height = 3}
+```{r dcfd_medians, fig.width = 6, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
 dcfd_adjmeds <- quantile_orm_df(mod = dcfd_mod)
 
@@ -2585,8 +2588,7 @@ JTHelpers::rms_po_assume(
 #### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
-delirium duration by treatment group. All results are shown visually, with
-tables included for exact numbers if desired.
+delirium duration by treatment group.
 
 ##### Adjusted Odds Ratios
 
@@ -2614,7 +2616,7 @@ represents the expected median number of days with delirium for a patient in
 each treatment group who is otherwise part of a "typical" *(many air quotes)*
 population.
 
-```{r del_medians, fig.width = 5, fig.height = 3}
+```{r del_medians, fig.width = 6, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
 del_adjmeds <- quantile_orm_df(mod = del_mod)
 
@@ -2735,8 +2737,7 @@ JTHelpers::rms_po_assume(
 #### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
-delirium duration by treatment group. All results are shown visually, with
-tables included for exact numbers if desired.
+delirium duration by treatment group.
   
 ##### Adjusted Odds Ratios
 
@@ -2749,7 +2750,7 @@ hyperdel_ors <- trt_ratios(mod = hyperdel_mod)
 
 hyperdel_ors_plot <- plot_trt_ratios(
   ratio_df = hyperdel_ors,
-  "Duration of Hyperactive Delirium",
+  "Duration of\nHyperactive Delirium",
   mod = hyperdel_mod
 )
 
@@ -2764,7 +2765,7 @@ represents the expected median number of days with hyperactive delirium for a
 patient in each treatment group who is otherwise part of a "typical" *(many air
 quotes)* population.
 
-```{r hyperdel_medians, fig.width = 5, fig.height = 3}
+```{r hyperdel_medians, fig.width = 7, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
 hyperdel_adjmeds <- quantile_orm_df(mod = hyperdel_mod)
 
@@ -2879,8 +2880,7 @@ JTHelpers::rms_po_assume(
 #### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
-duration of hypoactive delirium by treatment group. All results are shown
-visually, with tables included for exact numbers if desired.
+duration of hypoactive delirium by treatment group.
 
 ##### Adjusted Odds Ratios
 
@@ -2893,7 +2893,7 @@ hypodel_ors <- trt_ratios(mod = hypodel_mod)
 
 hypodel_ors_plot <- plot_trt_ratios(
   ratio_df = hypodel_ors,
-  "Duration of Hypoactive Delirium",
+  "Duration of\nHypoactive Delirium",
   mod = hypodel_mod
 )
 
@@ -2908,7 +2908,7 @@ represents the expected median number of days with hypoactive delirium for a
 patient in each treatment group who is otherwise part of a "typical" *(many air
 quotes)* population.
 
-```{r hypodel_medians, fig.width = 5, fig.height = 3}
+```{r hypodel_medians, fig.width = 7, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
 hypodel_adjmeds <- quantile_orm_df(mod = hypodel_mod)
 
@@ -3031,8 +3031,7 @@ JTHelpers::rms_po_assume(
 #### Model Results {.tabset}
 
 We show the odds ratios (using placebo as reference) and adjusted medians for
-coma duration by treatment group. All results are shown visually, with tables
-included for exact numbers if desired.
+coma duration by treatment group.
 
 ##### Adjusted Odds Ratios
 
@@ -3058,7 +3057,7 @@ represents the expected median number of days with coma for a patient in each
 treatment group who is otherwise part of a "typical" *(many air quotes)*
 population.
 
-```{r coma_medians, fig.width = 5, fig.height = 3}
+```{r coma_medians, fig.width = 6, fig.height = 3}
 ## Get adjusted medians + bounds for each treatment group
 coma_adjmeds <- quantile_orm_df(mod = coma_mod)
 
