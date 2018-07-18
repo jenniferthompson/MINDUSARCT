@@ -3471,7 +3471,7 @@ We show the subdistribution hazard ratios for ICU discharge for haloperidol and
 ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
 favorable for this outcome. `r icudis_90_text[["Haloperidol"]]`
 
-##### Visual Form
+##### Adjusted Subdistribution Hazard Ratios
 
 ```{r icudis_90_hrs_plot, fig.width = 5, fig.height = 3.5}
 icudis_90_hrs_plot <- plot_trt_ratios(
@@ -3490,13 +3490,6 @@ icudis_90_hrs_plot <- plot_trt_ratios(
   theme(plot.caption = element_text(size = basetext_size * 0.6))
 
 icudis_90_hrs_plot
-
-```
-
-##### Tabular Form
-
-```{r table_icudis_90_hrs}
-table_trt_ratios(ratio_df = icudis_90_hrs)
 
 ```
 
@@ -3667,12 +3660,12 @@ We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
 favorable for this outcome. `r hospdis_90_text[["Haloperidol"]]`
 
-##### Visual Form
+##### Adjusted Subdistribution Hazard Ratios
 
 ```{r hospdis_90_hrs_plot, fig.width = 5, fig.height = 3.5}
 hospdis_90_hrs_plot <- plot_trt_ratios(
   ratio_df = hospdis_90_hrs,
-  outcome_text = "Successful Hospital Discharge",
+  outcome_text = "Successful\nHospital Discharge",
   extra_text = glue(
     "\n\n",
     '"Successful": hospital discharge within 90 days of randomization, ',
@@ -3687,13 +3680,6 @@ hospdis_90_hrs_plot <- plot_trt_ratios(
         plot.title = element_text(size = basetext_size * 1.15))
 
 hospdis_90_hrs_plot
-
-```
-
-##### Tabular Form
-
-```{r table_hospdis_90_hrs}
-table_trt_ratios(ratio_df = hospdis_90_hrs)
 
 ```
 
@@ -3740,7 +3726,7 @@ section](#unadjusted) for more details. All `r  sum_na(ptsummary_df$on_mv_rand24
 We see no association between treatment and time to successful liberation from
 mechanical ventilation.
 
-```{r cuminc_mvlib_unadj, warning = FALSE, fig.height = 6, fig.width = 8}
+```{r cuminc_mvlib_unadj, warning = FALSE, fig.height = 6, fig.width = 8.25}
 ## Prep: Smaller df including only patients on MV within 24h of randomization
 model_df_mv <- model_df %>% filter(on_mv_rand24)
 
@@ -3868,12 +3854,12 @@ We show the subdistribution hazard ratios for hospital discharge for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **higher** than 1 are
 favorable for this outcome. `r mvlib_30_text[["Haloperidol"]]`
 
-##### Visual Form
+##### Adjusted Subdistribution Hazard Ratios
 
 ```{r mvlib_30_hrs_plot, fig.width = 5, fig.height = 3.5}
 mvlib_30_hrs_plot <- plot_trt_ratios(
   ratio_df = mvlib_30_hrs,
-  outcome_text = "Successful Liberation from MV",
+  outcome_text = "Successful\nLiberation from MV",
   extra_text = glue(
     "\n\n",
     '"Successful": liberation from MV during the intervention period, ',
@@ -3888,13 +3874,6 @@ mvlib_30_hrs_plot <- plot_trt_ratios(
         plot.title = element_text(size = basetext_size * 1.15))
 
 mvlib_30_hrs_plot
-
-```
-
-##### Tabular Form
-
-```{r table_mvlib_30_hrs}
-table_trt_ratios(ratio_df = mvlib_30_hrs)
 
 ```
 
@@ -4065,33 +4044,18 @@ We show the subdistribution hazard ratios for ICU readmission for haloperidol
 and ziprasidone vs placebo. Subdistribution hazard ratios **lower** than 1 are
 favorable for this outcome. `r readm_90_text[["Haloperidol"]]`
 
-##### Visual Form
+##### Adjusted Subdistribution Hazard Ratios
 
 ```{r readm_90_hrs_plot, fig.width = 5, fig.height = 3.5}
 readm_90_hrs_plot <- plot_trt_ratios(
   ratio_df = readm_90_hrs,
   outcome_text = "ICU Readmission",
-  # extra_text = glue(
-  #   "\n\n",
-  #   '"Successful": liberation from MV during the intervention period, ',
-  #   "followed by at least 48 hours alive without reinitiation.\n",
-  #   "Patients who withdrew & revoked access to PHI ",
-  #   "are censored on the day of withdrawal.\n",
-  #   "Deaths prior to liberation are accounted for using competing risks."
-  # ),
   mod = readm_90_mod
 ) +
   theme(plot.caption = element_text(size = basetext_size * 0.6),
         plot.title = element_text(size = basetext_size * 1.15))
 
 readm_90_hrs_plot
-
-```
-
-##### Tabular Form
-
-```{r table_readm_90_hrs}
-table_trt_ratios(ratio_df = readm_90_hrs)
 
 ```
 
