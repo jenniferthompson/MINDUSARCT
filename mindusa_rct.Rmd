@@ -33,6 +33,7 @@ suppressPackageStartupMessages(library(checkpoint))
 
 ## Set checkpoint: Packages on CRAN as of May 14, 2018 (Github-only packages
 ## also installed on this date)
+options(repos = "https://mran.microsoft.com/snapshot/2018-05-14")
 checkpoint("2018-05-14")
 
 suppressPackageStartupMessages(library(knitr))
@@ -5789,7 +5790,7 @@ During the 14-day treatment period, the primary outcome (delirium/coma-free days
 
 (Similar for appendix, hyperactive/hypoactive delirium.)
 
-```{r pubfig_mental}
+```{r pubfig_mental, fig.show = "hide"}
 ## Helpful links for using Lato:
 ## Using a non-default font by Zev Ross
 ## https://www.zevross.com/blog/2014/07/30/tired-of-using-helvetica-in-your-r-graphics-heres-how-to-use-the-fonts-you-like-2/
@@ -6193,7 +6194,7 @@ ICU readmission is analyzed only among the `r sum_na(ptsummary_df$elig_readm)`
 randomized patients who survived their initial ICU stay and were discharged to
 the floor.
 
-```{r pubfig_hrs, fig.width = 7, fig.height = 6}
+```{r pubfig_hrs, fig.show = "hide"}
 ## -- Combine all HR data.frames -----------------------------------------------
 all_hrs <- bind_rows(
   death_30_hrs, death_90_hrs,
