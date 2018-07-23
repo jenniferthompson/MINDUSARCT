@@ -220,6 +220,16 @@ fig_nums(
 ##  by create_rctdata.R in ../MINDUSADataMgmt.
 load("analysisdata/rct.Rdata")
 
+## For clinical coordinators to summarize: Which patients had study drug held
+## and/or discontinued due to an AE?
+write.csv(
+  subset(ptsummary_df,
+         ever_held_ae | permdc_active_ae,
+         select = c(id, ever_held_ae, permdc_active_ae)),
+  file = "ae_holds.csv",
+  row.names = FALSE
+)
+
 ## How many patients were randomized?
 n_rand <- length(rand_pts)
 
