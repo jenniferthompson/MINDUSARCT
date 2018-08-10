@@ -30,6 +30,29 @@ describe_cont <- function(
   )
 }
 
+## Redact PHI from a character string (eg, descriptions of AEs, or reasons for
+## study drug hold)
+remove_phi <- function(x){
+  stringr::str_replace_all(
+    x,
+    c(
+      ## Dates
+      "[0-9]+(/|-|.)[0-9]+((/|-|.)[0-9][0-9][0-9]*)*" = "xx/xx/xx",
+      "[0-9]+(th|rd|st)* *(of )*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|January|February|March|April|June|July|August|September|October|November|December)" = "xx/xx/xx",
+      "(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|JANUARY|FEBRUARY|MARCH|APRIL|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER|January|February|March|April|June|July|August|September|October|November|December) *[0-9]+" = "xx/xx/xx",
+      ## Times
+      ## 1) xx:xx format
+      ## 2) xxxx format
+      ## 3) xx[:xx][a/p]m format
+      "[0-9]+:[0-9][0-9]" = "xx:xx",
+      "(?<![A-Z][A-Z][A-Z]-)[0-9][0-9][0-9][0-9]" = "xx:xx",
+      "[0-9]+[ |:]*[0-9]*(?=[a|A|p|P]\\.*[ |m|M|.])" = "xx",
+      ## Highly specific info, often included in parentheses
+      " \\(.+\\)"                = "..."
+    )
+  )
+} 
+
 ## -- Wrapper functions for facet axis breaks (thanks, Jim Hester!) ------------
 cif_breaks <- function(x) if (max(x) <= 40) seq(0, 30, 5) else seq(0, 90, 15)
 tteem_breaks <- function(x){

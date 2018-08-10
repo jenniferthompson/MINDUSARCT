@@ -1350,7 +1350,7 @@ other_permdc_table %>%
 As noted above, during the intervention, `r sum(doses_df$held_ae)` study drug
 doses were documented as temporarily held due to an adverse event, and `r sum(doses_df$permdc_active_ae)` doses were documented as permanently
 discontinued due to an adverse event. The following table describes these `r sum(doses_df$held_ae) + sum(doses_df$permdc_active_ae)` scenarios, as manually
-investigated by our clinical staff. Potentially identifiable information is not included.
+investigated by our clinical staff. Potentially identifiable information, including dates, times and parenthetical details, is redacted.
 
 The final column indicates whether the adverse event documentation reflects any
 potential data entry issues. Our database was locked prior to breaking the treatment blind; therefore, any errors discovered after that point have not been
@@ -1369,7 +1369,9 @@ drug_aes %>%
     data_issue = factor(
       as.numeric(stringr::str_detect(comments, "error")),
       levels = 0:1, labels = c("No", "Yes")
-    )
+    ),
+    ## Remove PHI from comments
+    description = remove_phi(description)
   ) %>%
   dplyr::select(hold_dc, descrip_source, description, data_issue) %>%
   DT::datatable(
@@ -1379,7 +1381,7 @@ drug_aes %>%
     ),
     filter = "top",
     options = list(
-      pageLength = 5,
+      pageLength = 3,
       lengthMenu = c(2, seq(5, nrow(drug_aes), 5))
     )
   )
