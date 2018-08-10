@@ -256,7 +256,7 @@ ptsummary_df <- left_join(ptsummary_df, rand_df, by = "id")
 ## ICU admission -> consent: ptsummary_df$antipsyc_adm
 ## Consent -> randomization/DQ: ptsummary_df$antipsyc_ever_pr
 ptsummary_df$antipsyc_adm_pr <- with(ptsummary_df, {
-  antipsyc_adm | (!is.na(antipsyc_ever_pr) & antipsyc_ever_pr)
+  factor_tf(antipsyc_adm | (!is.na(antipsyc_ever_pr) & antipsyc_ever_pr))
 })
 
 ```
@@ -579,8 +579,70 @@ label(ptsummary_all_df2$cv_sofa_consent) <-
   "Cardiovascular SOFA on day of consent"
 label(ptsummary_all_df2$apache_adm) <- "APACHE II at ICU admission"
 
+## Do things to make the table pretty: Factor version of rand. indicator, labels
+ptsummary_df2 <- ptsummary_df %>%
+  left_join(
+    dplyr::select(ptsummary_all_df, id, sofa_imp_consent, cv_sofa_consent),
+    by = "id"
+  ) %>%
+  mutate(
+    randomized_f = factor(
+      as.numeric(ptsummary_df$randomized),
+      levels = 0:1,
+      labels = c("Not Randomized", "Randomized")
+    )
+  ) %>%
+  mutate_at(
+    vars(enroll_mv, enroll_nippv, enroll_shock),
+    funs(factor(as.numeric(.), levels = 0:1, labels = c("No", "Yes")))
+  )
+
+label(ptsummary_df2$enroll_mv) <- "On invasive MV at consent"
+label(ptsummary_df2$enroll_nippv) <- "On NIPPV at consent"
+label(ptsummary_df2$enroll_shock) <- "Treatment for shock at consent"
+label(ptsummary_df2$age_consent) <- "Age at consent"
+label(ptsummary_df2$gender) <- "Gender"
+label(ptsummary_df2$race_cat) <- "Race"
+label(ptsummary_df2$ethnicity) <- "Ethnicity"
+label(ptsummary_df2$english_level) <- "Fluency in English"
+label(ptsummary_df2$education) <- "Education"
+label(ptsummary_df2$insurance) <- "Insurance"
+label(ptsummary_df2$bmi) <- "BMI"
+label(ptsummary_df2$home_antipsyc) <- "On antipsychotics prior to admission"
+label(ptsummary_df2$charlson_total) <- "Charlson Comorbidities Index"
+label(ptsummary_df2$iqcode_total_ph) <- "IQCODE total score"
+label(ptsummary_df2$adl_total_ph) <-
+  "Katz Activities of Daily Living total score"
+label(ptsummary_df2$faq_total_ph) <-
+  "Functional Activities Questionnaire total score"
+label(ptsummary_df2$audit_total_ph_complete) <-
+  "AUDIT total score; incomplete questions considered missing"
+label(ptsummary_df2$audit_total_ph_partial) <-
+  "AUDIT total score; incomplete questions considered normal"
+label(ptsummary_df2$frailty_f) <- "CSHA Clinical Frailty Score"
+label(ptsummary_df2$icu_rsn) <- "Primary reason for ICU admission"
+label(ptsummary_df2$med_surg) <- "Patient type"
+label(ptsummary_df2$sofa_adm) <- "SOFA at ICU admission (imputed data)"
+label(ptsummary_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
+label(ptsummary_df2$sofa_imp_consent) <- "SOFA on day of consent (imputed data)"
+label(ptsummary_df2$cv_sofa_consent) <- "Cardiovascular SOFA on day of consent"
+label(ptsummary_df2$apache_adm) <- "APACHE II at ICU admission"
+label(ptsummary_df2$antipsyc_adm_pr) <-
+  "Received open-label antipsychotics between ICU admission and randomization"
+label(ptsummary_df2$sofa_imp_rand) <-
+  "SOFA on day of randomization (imputed data)"
+label(ptsummary_df2$cv_sofa_rand) <-
+  "Cardiovascular SOFA on day of randomization"
+label(ptsummary_df2$rass_rand) <- "RASS at randomization"
+
 ## Formula we'll use for both demographic/admission tables
 admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + med_surg + apache_adm + sofa_adm + cv_sofa_adm_f + sofa_imp_consent + cv_sofa_consent"
+
+## Add randomization info for randomized patients only
+admit_formula_lhs_rand <- paste(
+  admit_formula_lhs,
+  "+ antipsyc_adm_pr + sofa_imp_rand + cv_sofa_rand + rass_rand"
+)
 
 my_html(
   summaryM(as.formula(paste(admit_formula_lhs, "randomized_f", sep = " ~ ")),
@@ -599,8 +661,8 @@ The following tables describe demographic and ICU admission characteristics (`r 
 
 ```{r baseline_trt}
 my_html(
-  summaryM(as.formula(paste(admit_formula_lhs, "trt", sep = " ~ ")),
-           data = subset(ptsummary_all_df2, randomized), test = TRUE),
+  summaryM(as.formula(paste(admit_formula_lhs_rand, "trt", sep = " ~ ")),
+           data = ptsummary_df2, test = TRUE),
   caption = "Demographic & ICU Admission Characteristics of Randomized Patients"
 )
 
@@ -654,9 +716,8 @@ All drug conversion formulas can be found [here](https://docs.google.com/spreads
 medsum_vars <- c("ever_int", "days_exp_int", "total_exp_int", "mean_exp_int")
 
 inhosp_vars <- c(
-  "antipsyc_adm_pr", "sofa_imp_rand", "cv_sofa_rand", "ever_mv", "days_mv_exp",
-  "mv_num", "int_num", "noninv_num", "on_mv_rand24", "ever_mvlib_rand24",
-  "daysto_mvlib_exp", "sepsis", "stroke",
+  "ever_mv", "days_mv_exp", "mv_num", "int_num", "noninv_num", "on_mv_rand24",
+  "ever_mvlib_rand24", "daysto_mvlib_exp", "sepsis", "stroke",
   paste("benzo", medsum_vars, sep = "_"),
   paste("opioid", medsum_vars, sep = "_"),
   paste("propofol", medsum_vars, sep = "_"),
@@ -678,7 +739,6 @@ inhosp_vars <- c(
 ## Create new dataset with variable labels, factors
 inhosp_desc_df <- ptsummary_df %>%
   mutate(
-    antipsyc_adm_pr = factor_tf(antipsyc_adm_pr),
     ever_mv = factor_tf(ever_mv),
     on_mv_rand24 = factor_tf(on_mv_rand24),
     ever_mvlib_rand24 = factor_tf(ever_mvlib_rand24),
@@ -710,12 +770,6 @@ inhosp_desc_df <- ptsummary_df %>%
     tte_hospdis_90_exp =
       ifelse(ftype_hospdis_90 == "Hospital Discharge", tte_hospdis_90, NA)
   )
-label(inhosp_desc_df$antipsyc_adm_pr) <-
-  "Received open-label antipsychotics between ICU admission and randomization"
-label(inhosp_desc_df$sofa_imp_rand) <-
-  "SOFA on day of randomization (imputed data)"
-label(inhosp_desc_df$cv_sofa_rand) <-
-  "Cardiovascular SOFA on day of randomization"
 label(inhosp_desc_df$ever_mv) <-
   "Ever on mechanical ventilation (either type), entire hospitalization"
 label(inhosp_desc_df$days_mv_exp) <-
