@@ -1100,8 +1100,12 @@ due to other safety concerns (adverse events, dystonia, EPS) was rare.
 
 ```{r prep_dose_table}
 dose_table <- dose_attempts %>%
-  ## Indicator for whether dose was held d/t oversedation, but no actual RASS
-  mutate(rass_na = held_oversed & is.na(oversed_actual)) %>%
+  mutate(
+    ## Indicator for whether dose was held d/t oversedation, but no actual RASS
+    rass_na = held_oversed & is.na(oversed_actual),
+    ## Indicator for whether pre-dose QTc > 500
+    pre_qtc_500 = if_else(pre_dose_qtc > 500, TRUE, FALSE)
+  ) %>%
   group_by(trt) %>%
   summarise(
     doses_trt = n(), ## Total doses per treatment
@@ -1126,6 +1130,7 @@ dose_table <- dose_attempts %>%
     q75_preqtc = q75(pre_dose_qtc),
     mean_preqtc = mean_na(pre_dose_qtc),
     sd_preqtc = sd_na(pre_dose_qtc),
+    pre_qtc_500 = sum_na(pre_qtc_500),
     held_qtc = sum_na(held_qtc),
     held_oversed = sum_na(held_oversed),
     rass_0 = sum_na(oversed_actual == "0"),
@@ -1153,12 +1158,14 @@ dose_table <- dose_attempts %>%
   ## -- Turn into a table ------------------------------------------------------
   ## Doses given
   mutate_at(
-    vars(type_initial:ml_200), funs(get_npct(., denom = nrow(dose_attempts)))
+    vars(type_initial:ml_200), funs(get_npct(., denom = doses_given))
   ) %>%
+  ## QTc: doses given + held
   mutate(
     desc_preqtc = describe_cont(
       q50_preqtc, q25_preqtc, q75_preqtc, mean_preqtc, sd_preqtc
-    )
+    ),
+    pre_qtc_500 = get_npct(pre_qtc_500, denom = doses_given)
   ) %>%
   ## Doses temporarily held
   mutate_at(
@@ -1180,9 +1187,11 @@ dose_table <- dose_attempts %>%
     funs(get_npct(., denom = doses_trt))
   ) %>%
   ## Transpose to one row per descriptor, with a column for each treatment group
-  dplyr::select(trt, doses_trt, doses_given:doses_permdc, type_initial:ml_200,
-         desc_preqtc, held_qtc:held_other, rass_0:rass_5,
-         permdc_nms:permdc_other) %>%
+  dplyr::select(
+    trt, doses_trt, doses_given:doses_permdc, type_initial:ml_200,
+    desc_preqtc, pre_qtc_500, held_qtc:held_other, rass_0:rass_5,
+    permdc_nms:permdc_other
+  ) %>%
   gather(key = table_row, value = dose_value, -trt) %>%
   spread(key = trt, value = dose_value) %>%
   ## Remove permanent discontinuation rows
@@ -1206,24 +1215,25 @@ dose_table <- dose_attempts %>%
       table_row == "type_maintmax" ~ 14,
       table_row == "type_other" ~ 15,
       table_row == "desc_preqtc" ~ 16,
-      table_row == "held_ae" ~ 17,
-      table_row == "held_dystonia" ~ 18,
-      table_row == "held_eps" ~ 19,
-      table_row == "held_oversed" ~ 20,
-      table_row == "held_qtc" ~ 21,
-      table_row == "held_refuseptfam" ~ 22,
-      table_row == "held_refuseteam" ~ 23,
-      table_row == "held_other" ~ 24,
-      table_row %in% paste0("rass_", 0:5) ~ 25,
-      table_row == "permdc_ae" ~ 26,
-      table_row == "permdc_coma" ~ 27,
-      table_row == "permdc_nms" ~ 28,
-      table_row == "permdc_react" ~ 29,
-      table_row == "permdc_torsades" ~ 30,
-      table_row == "permdc_refuseptfam" ~ 31,
-      table_row == "permdc_refuseteam" ~ 32,
-      table_row == "permdc_other" ~ 33,
-      TRUE ~ 34
+      table_row == "pre_qtc_500" ~ 17,
+      table_row == "held_ae" ~ 18,
+      table_row == "held_dystonia" ~ 19,
+      table_row == "held_eps" ~ 20,
+      table_row == "held_oversed" ~ 21,
+      table_row == "held_qtc" ~ 22,
+      table_row == "held_refuseptfam" ~ 23,
+      table_row == "held_refuseteam" ~ 24,
+      table_row == "held_other" ~ 25,
+      table_row %in% paste0("rass_", 0:5) ~ 26,
+      table_row == "permdc_ae" ~ 27,
+      table_row == "permdc_coma" ~ 28,
+      table_row == "permdc_nms" ~ 29,
+      table_row == "permdc_react" ~ 30,
+      table_row == "permdc_torsades" ~ 31,
+      table_row == "permdc_refuseptfam" ~ 32,
+      table_row == "permdc_refuseteam" ~ 33,
+      table_row == "permdc_other" ~ 34,
+      TRUE ~ 37
     ),
     table_row = case_when(
       table_row == "doses_trt" ~ "Dose Opportunities",
@@ -1243,6 +1253,7 @@ dose_table <- dose_attempts %>%
       table_row == "type_maintmax" ~ "Maintained at max dose",
       table_row == "type_other" ~ "Other",
       table_row == "desc_preqtc" ~ "Pre-dose QTc",
+      table_row == "pre_qtc_500" ~ "Pre-dose QTc > 500",
       table_row == "held_ae" ~ "Adverse event",
       table_row == "held_dystonia" ~ "Dystonia",
       table_row == "held_eps" ~ "Extrapyramidal symptoms",
@@ -1280,9 +1291,9 @@ dose_table %>%
   ) %>%
   mykablestyle %>%
   group_rows("All Dose Opportunities", 2, 4) %>%
-  group_rows("Doses Given (% of All Opportunities)", 5, 16) %>%
-  group_rows("Doses Temporarily Held (% of All Opportunities)", 17, 24) %>%
-  group_rows("Actual RASS for Doses Held due to Oversedation", 25, 31)
+  group_rows("Doses Given (% of All Opportunities)", 5, 17) %>%
+  group_rows("Doses Temporarily Held (% of All Opportunities)", 18, 25) %>%
+  group_rows("Actual RASS for Doses Held due to Oversedation", 26, 32)
 
 ```
 
