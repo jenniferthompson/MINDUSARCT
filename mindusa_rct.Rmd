@@ -6762,6 +6762,44 @@ missing_mental %>%
 
 ```
 
+#### Reasons Individual Assessments Missing
+
+The following table describes the documented reasons that RASS and/or CAM
+assessments were missing during the intervention phase. (Assessments which are
+listed as died and/or discharged might be where a patient had a morning
+assessment, and was then discharged prior to the afternoon assessment.)
+Descriptions of "other" reasons are listed below (click to unfurl).
+
+```{r reasons_missing}
+pad_int_df2 <- pad_int_df
+label(pad_int_df2$rass_incomp_rsn) <- "Reason RASS not performed"
+label(pad_int_df2$cam_incomp_rsn) <- "Reason CAM-ICU not performed"
+
+my_html(
+  summaryM(rass_incomp_rsn + cam_incomp_rsn ~ 1, data = pad_int_df2),
+  caption = "Reasons for Missing Assessments during Intervention Phase"
+)
+
+```
+
+<details>
+<summary>"Other" Reasons Assessments Not Done</summary>
+```{r asmt_other_table}
+pad_int_df %>%
+  ungroup() %>%
+  filter(!is.na(rass_incomp_other) | !is.na(cam_incomp_other)) %>%
+  dplyr::select(rass_incomp_other, cam_incomp_other) %>%
+  kable(
+    format = "html",
+    col.names = c("RASS Explanation", "CAM-ICU Explanation"),
+    align = c("l", "l")
+  ) %>%
+  mykablestyle
+
+```
+
+</details>
+
 Mental status can change quickly; therefore simple imputation methods like last observation carried forward could be inaccurate. Since we are fortunate to have strong covariate data, we performed single imputation to impute individual missing RASS and CAM scores, including the following variables as covariates in
 the imputation. We used predictive mean matching and polytomous logistic
 regression as the imputation methods, respectively, within R's `mice` package.
