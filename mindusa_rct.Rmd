@@ -259,6 +259,15 @@ ptsummary_df$antipsyc_adm_pr <- with(ptsummary_df, {
   factor_tf(antipsyc_adm | (!is.na(antipsyc_ever_pr) & antipsyc_ever_pr))
 })
 
+## Restrict assessments to only intervention period, before day 14; this is
+## period DCFDs is calculated over
+##   Mostly needed for end section on missingness, but also used to describe all
+##   RASSes assessed by study staff (reviewer request)
+pad_int_df <- daily_int_df %>%
+  filter(intervention & study_status %in% c("Intervention", "Withdrawn")) %>%
+  dplyr::select(id, redcap_event_name, study_day, study_status) %>%
+  left_join(padasmts_df, by = c("id", "redcap_event_name"))
+
 ```
 
 # Screening, Consent, and Randomization{#screening}
@@ -881,6 +890,22 @@ html(
   prmsd = TRUE, brmsd = TRUE, msdsize = mu$smaller2,
   middle.bold = TRUE, outer.size = mu$smaller2, rowsep = TRUE,
   caption = "Description of Intervention Period among Randomized Patients"
+)
+
+```
+
+### Daily RASS Assessments
+
+In response to reviewer queries, we describe all individual RASS assessments
+done by our research staff during the 14-day intervention period.
+
+```{r describe_rass}
+pad_int_trt <- left_join(pad_int_df, rand_df, by = "id")
+label(pad_int_trt$rass_raw) <- "RASS as performed by research staff"
+
+my_html(
+  summaryM(rass_raw ~ trt, data = pad_int_trt, overall = TRUE, continuous = 15),
+  caption = "RASS Assessments during Intervention Phase"
 )
 
 ```
@@ -6694,13 +6719,6 @@ n_days_ih_missrc <- nrow(
     ungroup() %>%
     filter(has_rc == 0)
 )
-
-## Restrict assessments to only intervention period, before day 14; this is
-## period DCFDs is calculated over
-pad_int_df <- daily_int_df %>%
-  filter(intervention & study_status %in% c("Intervention", "Withdrawn")) %>%
-  dplyr::select(id, redcap_event_name, study_day, study_status) %>%
-  left_join(padasmts_df, by = c("id", "redcap_event_name"))
 
 n_asmts_int_total <- nrow(pad_int_df)
 n_asmts_int_miss_rc <- with(pad_int_df, sum(is.na(rass_raw) | is.na(cam_raw)))
