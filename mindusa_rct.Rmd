@@ -600,7 +600,7 @@ The following tables describe demographic and ICU admission characteristics (`r 
 ```{r baseline_trt}
 my_html(
   summaryM(as.formula(paste(admit_formula_lhs, "trt", sep = " ~ ")),
-           data = subset(ptsummary_all_df2, randomized)),
+           data = subset(ptsummary_all_df2, randomized), test = TRUE),
   caption = "Demographic & ICU Admission Characteristics of Randomized Patients"
 )
 
