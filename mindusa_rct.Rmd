@@ -4300,7 +4300,7 @@ mental_medians_age <- map_dfr(
     em_text = paste("Age =", rndformat(age_consent, 0)),
     em_text = fct_reorder(em_text, age_consent),
     trt_short = factor(
-      ifelse(trt == "Placebo", "Plac", substr(1, 3, trt)),
+      ifelse(trt == "Placebo", "Plac", substr(trt, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -4461,7 +4461,7 @@ tte_ratios_age <- pmap_df(.l = tte_args_age, .f = get_ratios_age) %>%
     em_text = paste("Age =", rndformat(age_consent, 0)),
     em_text = fct_reorder(em_text, age_consent),
     comp.c_short = factor(
-      ifelse(comp.c == "Placebo", "Plac", substr(1, 3, comp.c)),
+      ifelse(comp.c == "Placebo", "Plac", substr(comp.c, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -4802,7 +4802,7 @@ tte_ratios_sofa <- pmap_df(.l = tte_args_sofa, .f = get_ratios_sofa) %>%
     em_text = paste("Mod. SOFA =", rndformat(sofa_mod_imp_rand, 0)),
     em_text = fct_reorder(em_text, sofa_mod_imp_rand),
     comp.c_short = factor(
-      ifelse(comp.c == "Placebo", "Plac", substr(1, 3, comp.c)),
+      ifelse(comp.c == "Placebo", "Plac", substr(comp.c, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -4975,7 +4975,7 @@ mental_medians_iqcode <- map_dfr(
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
     trt_short = factor(
-      ifelse(trt == "Placebo", "Plac", substr(1, 3, trt)),
+      ifelse(trt == "Placebo", "Plac", substr(trt, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -5127,7 +5127,7 @@ tte_ratios_iqcode <- pmap_df(.l = tte_args_iqcode, .f = get_ratios_iqcode) %>%
     em_text = paste("IQCODE =", rndformat(iqcode_total_ph, 3)),
     em_text = fct_reorder(em_text, iqcode_total_ph),
     comp.c_short = factor(
-      ifelse(comp.c == "Placebo", "Plac", substr(1, 3, comp.c)),
+      ifelse(comp.c == "Placebo", "Plac", substr(comp.c, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -5300,7 +5300,7 @@ mental_medians_medsurg <- map_dfr(
     outcome_text = fct_shift(factor(outcome_text)),
     em_text = factor(med_surg, levels = 0:1, labels = c("Medical", "Surgical")),
     trt_short = factor(
-      ifelse(trt == "Placebo", "Plac", substr(1, 3, trt)),
+      ifelse(trt == "Placebo", "Plac", substr(trt, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -5454,7 +5454,7 @@ tte_ratios_medsurg <-
     em_text = factor(med_surg, levels = c("Medical", "Surgical")),
     # em_text = fct_reorder(em_text, iqcode_total_ph),
     comp.c_short = factor(
-      ifelse(comp.c == "Placebo", "Plac", substr(1, 3, comp.c)),
+      ifelse(comp.c == "Placebo", "Plac", substr(comp.c, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -5619,7 +5619,7 @@ mental_medians_sepsis <- map_dfr(
       sepsis_adm, levels = 0:1, labels = c("Non-Septic", "Septic/Shock")
     ),
     trt_short = factor(
-      ifelse(trt == "Placebo", "Plac", substr(1, 3, trt)),
+      ifelse(trt == "Placebo", "Plac", substr(trt, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -5775,7 +5775,7 @@ tte_ratios_sepsis <-
     ),
     # em_text = fct_reorder(em_text, iqcode_total_ph),
     comp.c_short = factor(
-      ifelse(comp.c == "Placebo", "Plac", substr(1, 3, comp.c)),
+      ifelse(comp.c == "Placebo", "Plac", substr(comp.c, 1, 3)),
       levels = c("Plac", "Hal", "Zip")
     ),
     comp.c = factor(comp.c, levels = c("Placebo", "Haloperidol", "Ziprasidone"))
@@ -5889,7 +5889,7 @@ plot_medians_pub <- function(
     mutate(
       trt = factor(trt, levels = c("Placebo", "Haloperidol", "Ziprasidone")),
       trt_short = forcats::fct_relabel(
-        trt, ~ ifelse(. == "Placebo", "Plac", substr(1, 3, .))
+        trt, ~ ifelse(. == "Placebo", "Plac", substr(., 1, 3))
       )
     )
 
@@ -5947,6 +5947,7 @@ medians_dcfd_pub <- plot_medians_pub(
     mutate(
       title_text = make_outcome_string(dcfd_mod, "A: Delirium/Coma-Free Days")
     ),
+  trt_abb = TRUE,
   use_xtitle = FALSE
 )
 
