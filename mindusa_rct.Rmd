@@ -6669,6 +6669,18 @@ This primary outcome variable is calculated over the 14 days including and immed
 
 For example, a patient who was delirious on the day of consent and the day following; had one day of normal status; again became delirious for one day; and was then comatose for two days before dying in the ICU would have `14 - (3 days delirium + 2 days coma + 8 days deceased) =` 1 DCFD.
 
+Patients are assumed to have normal mental status after being discharged alive
+from the hospital. Patients who withdrew from the study, and were therefore no
+longer assessed by research staff, have any remaining assessments during their
+intervention period considered missing. (Eg, a patient who withdrew on the
+afternoon of study day 10, allowed study staff to continue accessing their
+medical record, and was known to die on study day 13 would be considered to have
+missing assessments on study days 11 & 12.)
+
+Patients who had study drug temporarily or permanently stopped, but did not
+withdraw from the study, continued to have their mental status assessed by study
+staff, so assessments are still available.
+
 ### Determining Mental Status Using CAM and RASS
 
 We determined mental status for a given *assessment* using the following criteria:
