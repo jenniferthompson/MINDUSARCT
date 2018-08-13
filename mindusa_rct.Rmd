@@ -1171,7 +1171,8 @@ measures/hospice).
 Nearly all randomized patients received at least one dose of study drug. Two patients had study drug held due to either oversedation or prolonged QTc during
 their remaining ICU stay, and never received a dose of study drug.
 
-About 75% of doses were successfully given in each of the three treatment groups. Pre-dose QTcs were also roughly equivalent between the three groups.
+About 75% of doses were successfully given in each of the three treatment groups. Pre-dose QTcs (indicated by 12-lead ECG if available, and telemetry
+otherwise) were also roughly equivalent between the three groups.
 
 Oversedation was the most common reason for temporary hold by far, followed
 distantly by medical team refusal and prolonged QTc. Temporary study drug hold
@@ -1182,8 +1183,11 @@ dose_table <- dose_attempts %>%
   mutate(
     ## Indicator for whether dose was held d/t oversedation, but no actual RASS
     rass_na = held_oversed & is.na(oversed_actual),
+    ## Create "final" QTc: 12-lead ECG if available, otherwise telemetry
+    ecg_result = as.numeric(ecg_result),
+    pre_qtc_final = if_else(!is.na(ecg_result), ecg_result, pre_dose_qtc),
     ## Indicator for whether pre-dose QTc > 500
-    pre_qtc_500 = if_else(pre_dose_qtc > 500, TRUE, FALSE)
+    pre_qtc_500 = if_else(pre_qtc_final > 500, TRUE, FALSE)
   ) %>%
   group_by(trt) %>%
   summarise(
@@ -1204,11 +1208,11 @@ dose_table <- dose_attempts %>%
     ml_050 = sum_na(dose_ml == 0.50),
     ml_100 = sum_na(dose_ml == 1.00),
     ml_200 = sum_na(dose_ml == 2.00),
-    q25_preqtc = q25(pre_dose_qtc),
-    q50_preqtc = q50(pre_dose_qtc),
-    q75_preqtc = q75(pre_dose_qtc),
-    mean_preqtc = mean_na(pre_dose_qtc),
-    sd_preqtc = sd_na(pre_dose_qtc),
+    q25_preqtc = q25(pre_qtc_final),
+    q50_preqtc = q50(pre_qtc_final),
+    q75_preqtc = q75(pre_qtc_final),
+    mean_preqtc = mean_na(pre_qtc_final),
+    sd_preqtc = sd_na(pre_qtc_final),
     pre_qtc_500 = sum_na(pre_qtc_500),
     held_qtc = sum_na(held_qtc),
     held_oversed = sum_na(held_oversed),
@@ -1331,7 +1335,8 @@ dose_table <- dose_attempts %>%
       table_row == "type_maint" ~ "Maintained (med. induced coma)",
       table_row == "type_maintmax" ~ "Maintained at max dose",
       table_row == "type_other" ~ "Other",
-      table_row == "desc_preqtc" ~ "Pre-dose QTc",
+      table_row == "desc_preqtc" ~
+        "Pre-dose QTc (12-lead ECG if available; telemetry otherwise)",
       table_row == "pre_qtc_500" ~ "Pre-dose QTc > 500",
       table_row == "held_ae" ~ "Adverse event",
       table_row == "held_dystonia" ~ "Dystonia",
