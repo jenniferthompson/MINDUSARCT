@@ -2071,8 +2071,7 @@ n_rand_comp <- sum_na(model_df$comp_covars)
 ## readmission, as that would introduce artificial missingness)
 pts_missany <- model_df %>%
   dplyr::select(
-    covariate_vars,
-    setdiff(outcome_vars, grepl("^tte|ftype|event", outcome_vars))
+    covariate_vars, outcome_vars[!grepl("^tte|ftype|event", outcome_vars)]
   ) %>%
   miss_case_table() %>%
   filter(n_miss_in_case > 0) %>%
