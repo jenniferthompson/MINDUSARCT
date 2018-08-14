@@ -520,6 +520,42 @@ table_trt_ratios <- function(
 
 ## -- Time to event outcomes: Modeling/results helper functions ----------------
 
+## -- Generate df of KM estimates for an outcome, overall and by treatment -----
+km_estimates <- function(
+  sf_overall, ## survfit() *not* by treatment (eg, survfit(surv_death_30 ~ 1))
+  sf_trt,     ## survfit() by treatment (eg, survfit(surv_death_30 ~ trt))
+  timept      ## integer; single time point (usually 30 or 90)
+){
+  ## Prep strata names (overall + each treatment)
+  km_strata <- c(
+    "Overall",
+    gsub("trt=", "", as.character(summary(sf_trt, times = timept)$strata))
+  )
+  
+  ## Which info to extract from summary(survfit(...))? (Each element = vector)  
+  km_info <- c("n", "n.risk", "n.event", "n.censor", "surv", "lower", "upper")
+  
+  ## Overall estimates (not by treatment)  
+  kmest_overall <- do.call(
+    cbind,
+    map(km_info, ~ pluck(summary(sf_overall, times = timept), .))
+  )
+  ## Estimates by treatment
+  kmest_trt <- do.call(
+    cbind,
+    map(km_info, ~ pluck(summary(sf_trt, times = timept), .))
+  )
+  
+  ## Concatenate, add strata and column names
+  kmest_df <- rbind(kmest_overall, kmest_trt) %>%
+    as.data.frame() %>%
+    cbind(km_strata, .) %>%
+    set_names(c("strata", km_info))
+  
+  return(kmest_df)
+  
+}
+
 ## Unadjusted analyses: Kaplan-Meier curves for time to death ------------------
 km_plot_death <- function(
   sf,              ## survfit object
@@ -1083,7 +1119,8 @@ prep_cuminc_df <- function(
       tte_outcome_2l = fct_reorder(tte_outcome_2l, .x = outcome_order),
       tte_outcome_1l = glue(
         "{outcome_label}: ",
-        "{tte_outcome2}{ifelse(!is.na(p_trt), '; ', '')}{p_string}"
+        "{tte_outcome2}" #{ifelse(!is.na(p_trt), '; ', '')}{p_string}"
+        ## p-values removed at request of stat reviewer
       ),
       tte_outcome_1l = fct_reorder(tte_outcome_1l, .x = outcome_order),
       ## Indicator for whether this is the subdistribution of primary interest
