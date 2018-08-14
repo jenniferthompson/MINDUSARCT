@@ -524,6 +524,8 @@ table_trt_ratios <- function(
 km_plot_death <- function(
   sf,              ## survfit object
   lr,              ## log-rank test object
+  inc_risktable = TRUE, ## include risk table?
+    ## Should, except for publication version where we create it manually
   time = c(30, 90) ## time frame of interest
 ){
   
@@ -545,26 +547,48 @@ km_plot_death <- function(
   time_breaks <- ifelse(time == 30, 5, 15)
   
   ## -- Create base plot using survminer package -------------------------------
-  km_death <- survminer::ggsurvplot(
-    sf, ## survfit() object
-    
-    # linetype = "strata",
-    
-    ## CIs
-    conf.int = TRUE, conf.int.alpha = 0.15,
-    
-    ## Show N, cumulative events every time_breaks days; color text by trt
-    xlim = c(0, time + 1),
-    break.time.by = time_breaks, risk.table = "nrisk_cumevents",
-    risk.table.fontsize = 3, risk.table.col = "strata", tables.height = 0.35,
-    legend.labs = gsub("trt=", "", names(sf$strata)),
-    
-    ## Use specified themes, colors
-    palette = mindusa_trtcols_long,
-    ggtheme = mindusa_theme(), tables.theme = mindusa_theme(),
-    font.family = basetext_family
-  )
-  
+  if(inc_risktable){
+    km_death <- survminer::ggsurvplot(
+      sf, ## survfit() object
+      
+      # linetype = "strata",
+      
+      ## CIs
+      conf.int = TRUE, conf.int.alpha = 0.15,
+      
+      ## Show N, cumulative events every time_breaks days; color text by trt
+      xlim = c(0, time + 1),
+      break.time.by = time_breaks, risk.table = "nrisk_cumevents",
+      risk.table.fontsize = 3, risk.table.col = "strata", tables.height = 0.35,
+      legend.labs = gsub("trt=", "", names(sf$strata)),
+      
+      ## Use specified themes, colors
+      palette = mindusa_trtcols_long,
+      ggtheme = mindusa_theme(), tables.theme = mindusa_theme(),
+      font.family = basetext_family
+    )
+  } else{
+    km_death <- survminer::ggsurvplot(
+      sf, ## survfit() object
+      
+      # linetype = "strata",
+      
+      ## CIs
+      conf.int = TRUE, conf.int.alpha = 0.15,
+      
+      ## Show N, cumulative events every time_breaks days; color text by trt
+      xlim = c(0, time + 1),
+      break.time.by = time_breaks, risk.table = FALSE,
+      # risk.table.fontsize = 3, risk.table.col = "strata", tables.height = 0.35,
+      legend.labs = gsub("trt=", "", names(sf$strata)),
+      
+      ## Use specified themes, colors
+      palette = mindusa_trtcols_long,
+      ggtheme = mindusa_theme(), tables.theme = mindusa_theme(),
+      font.family = basetext_family
+    )
+  }
+
   ## -- More finely control plot options ---------------------------------------
   km_death$plot <- km_death$plot +
     ## Change Y axis to % labels, not proportion
@@ -594,17 +618,19 @@ km_plot_death <- function(
     )
   
   ## Add labels to and remove unnecessary reference lines from nrisk table
-  km_death$table <- km_death$table +
-    labs(title = "Number at risk (cumulative number of deaths)") +
-    xlab("Days after Randomization") +
-    theme(
-      plot.title = element_text(size = basetext_size * 0.8),
-      axis.title.x = element_text(vjust = 0),
-      axis.title.y = element_blank(),
-      axis.ticks.y = element_blank(),
-      legend.position = "none",
-      panel.grid = element_blank()
-    )
+  if(inc_risktable){
+    km_death$table <- km_death$table +
+      labs(title = "Number at risk (cumulative number of deaths)") +
+      xlab("Days after Randomization") +
+      theme(
+        plot.title = element_text(size = basetext_size * 0.8),
+        axis.title.x = element_text(vjust = 0),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none",
+        panel.grid = element_blank()
+      )
+  }
   
   return(km_death)
   
@@ -699,8 +725,61 @@ cuminc_test <- function(cuminc_obj){
 }
 
 ## -- Functions to extract and plot the N at risk, cumulative events given -----
-## -- a summary(survfit(...)) object -------------------------------------------
-cr_risktable <- function(
+## -- summary(survfit(...)) object ---------------------------------------------
+
+## -- Extracting N at risk (create the table) ----------------------------------
+cr_risktable <- function(sf_sum, ...){
+  UseMethod("cr_risktable", sf_sum)
+}
+
+## Method for survfit objects (no competing risks - must have 1 event)
+cr_risktable.summary.survfit <- function(
+  sf_sum       ## summary(survfit(...))
+){
+  ## -- Create dummy dataset for merging treatments/times ----------------------
+  ## Get all time points specified in any group in sf_sum
+  sf_times <- unique(sf_sum$time)
+  ## Want N, etc at risk at all specified time points; LOCF time points in each
+  ## treatment group if all pts are out of risk set
+  dummy_times <- cross_df(
+    list(
+      trt = unique(gsub("trt=", "", sf_sum$strata)),
+      time = sort(unique(sf_sum$time))
+    )
+  )
+  
+  df <- data.frame(
+    trt = gsub("trt=", "", sf_sum$strata),
+    time = sf_sum$time,
+    n_risk = sf_sum$n.risk,
+    n_censored = sf_sum$n.censor
+  ) %>%
+    ## Add Ns for each event type
+    bind_cols(
+      data.frame("n_event" = sf_sum$n.event)
+    ) %>%
+    ## Fill in values for times after last time available in sf_sum
+    right_join(dummy_times, by = c("trt", "time")) %>%
+    arrange(trt, time) %>%
+    group_by(trt) %>%
+    fill(-trt, -time) %>%
+      ## NOTE: If there is no row for time = 0, this has issues
+      ## Make sure `times` argument in summary(survfit()) includes 0 (or fix later)
+    ## Calculate *cumulative* Ns at each time point
+    mutate_at(vars("n_event", "n_censored"), cumsum) %>%
+    ungroup()
+  
+  ## -- Create string for N at risk, etc ---------------------------------------
+  df$risk_string <- with(df, {
+    ifelse(time == 0, as.character(n_risk), sprintf("%s (%s)", n_risk, n_event))
+  })
+
+  return(df)
+  
+}
+
+## Method for survfitms objects (competing risks - must have >1 event)
+cr_risktable.summary.survfitms <- function(
   sf_sum,       ## summary(survfit(...))
   main_event ## character string; one of the event types in sf_sum
 ){
@@ -776,13 +855,18 @@ cr_risktable <- function(
 
 cr_risktable_plot <- function(
   sf_sum,              ## survfit() object
-  main_event,          ## main event of interest as represented in ftype variable
-  event_string,        ## Text for main event
+  main_event = NULL,   ## main event of interest as represented in ftype variable
+  event_string = NULL, ## Text for main event, if competing risks
   text_size = 0.2,     ## Multiplier for plot text size (default = in report)
+  facet_trts = TRUE,   ## Facet by treatments, or place in separate rows?
   order_trts = TRUE    ## Whether to order treatments the way we really want
     ## If using cif_plot()/ggcompetingrisks, probably want to use FALSE
 ){
-  df <- cr_risktable(sf_sum, main_event = main_event)
+  if(!is.null(main_event)){
+    df <- cr_risktable(sf_sum, main_event = main_event)
+  } else{
+    df <- cr_risktable(sf_sum)
+  }
 
   if(order_trts){
     ## Put plot in correct order - BUT can't quickly figure this out for
@@ -791,30 +875,44 @@ cr_risktable_plot <- function(
   }  
   
   ## Set plot title
-  plot_title <- ifelse(
-    "Discharge" %in% names(df),
-    glue(
-    "Number at risk (cumulative number {event_string}) (deaths; discharges)"
-    ),
-    glue(
-      "Number at risk (cumulative number {event_string}) (deaths)"
-    )
-  )
+  plot_title <-
+    ifelse(
+      "Discharge" %in% names(df),
+      sprintf(
+        "Number at risk (cumulative number %s) (deaths; discharges)", event_string
+      ),
+    ifelse(
+      !is.null(event_string),
+      sprintf("Number at risk (cumulative number %s) (deaths)", event_string),
+    "Number at risk (cumulative number of deaths)"
+    ))
+
   
-  ggplot(data = df, aes(x = time, y = 1, colour = trt)) +
-    facet_wrap(~ trt, nrow = 1) +
-    geom_text(
-      aes(label = risk_string),
-      size = basetext_size * text_size, family = basetext_family,
-      color = palette_colors[["dgray"]]
-    ) +
-    # scale_colour_manual(values = mindusa_trtcols_long) +
+  if(facet_trts){
+    p <- ggplot(data = df, aes(x = time, y = 1, colour = trt)) +
+      geom_text(
+        aes(label = risk_string),
+        size = basetext_size * text_size, family = basetext_family,
+        color = palette_colors[["dgray"]]
+      ) +
+      facet_wrap(~ trt, nrow = 1) +
+      scale_y_continuous(breaks = 1, labels = "100%") +
+      theme(axis.text.y = element_text(colour = "white"))
+  } else{
+    p <- ggplot(data = df, aes(x = time, y = trt, colour = trt)) +
+      geom_text(
+        aes(label = risk_string),
+        size = basetext_size * text_size, family = basetext_family
+      ) +
+      scale_colour_manual(values = mindusa_trtcols_long)
+  }
+  
+  p +
     scale_x_continuous(
       name = "Days after Randomization",
       breaks = unique(sf_sum$time),
       labels = unique(sf_sum$time)
     ) +
-    scale_y_continuous(breaks = 1, labels = "100%") +
     labs(
       title = plot_title,
       ylab = " " ## faking it for spacing purposes
@@ -825,7 +923,6 @@ cr_risktable_plot <- function(
           ## Set Y axis text to background color; need placeholder text for
           ## spacing, so that facets line up
           axis.title.y = element_text(colour = "white"),
-          axis.text.y = element_text(colour = "white"),
           axis.ticks.y = element_blank(),
           legend.position = "none")
   
@@ -968,7 +1065,7 @@ prep_cuminc_df <- function(
         tte_outcome == "Readmission" ~ 3,
         TRUE ~ 1
       ),
-      outcome_label = LETTERS[outcome_order],
+      outcome_label = LETTERS[outcome_order + 1],
       tte_outcome2 = case_when(
         tte_outcome == "MV Liberation" ~ "Liberation from MV",
         tte_outcome == "Readmission" ~ "ICU Readmission",
