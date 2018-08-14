@@ -3301,9 +3301,18 @@ sf_death_90 <- survfit(
 ## -- Log-rank test ------------------------------------------------------------
 logrank_death_30 <- survdiff(surv_death_30 ~ trt, data = model_df)
 logrank_death_90 <- survdiff(surv_death_90 ~ trt, data = model_df)
+
 ## -- Create KM curves, N at risk tables ---------------------------------------
 km_death_30 <- km_plot_death(sf = sf_death_30, lr = logrank_death_30, time = 30)
 km_death_90 <- km_plot_death(sf = sf_death_90, lr = logrank_death_90, time = 90)
+
+## -- Create tables of K-M estimates at 30, 90 days ----------------------------
+kmest_death_30 <- km_estimates(
+  sf_overall = survfit(surv_death_30 ~ 1), sf_trt = sf_death_30, timept = 30
+)
+kmest_death_90 <- km_estimates(
+  sf_overall = survfit(surv_death_90 ~ 1), sf_trt = sf_death_90, timept = 90
+)
 
 ```
 
@@ -3312,12 +3321,38 @@ km_death_90 <- km_plot_death(sf = sf_death_90, lr = logrank_death_90, time = 90)
 ```{r death_30_km, fig.width = 7.5, fig.height = 6}
 km_death_30
 
+kable(
+  kmest_death_30,
+  format = "html",
+  digits = 2,
+  align = c("l", rep("r", 7)),
+  col.names = c(
+    "Treatment", "Randomized", "Still at Risk", "Died", "Censored", "Estimate",
+    "Lower 95%", "Upper 95%"
+  ),
+  caption = "Kaplan-Meier Estimates, Death at 30 Days after Randomization"
+) %>%
+  mykablestyle()
+
 ```
 
 #### 90-Day Death
 
 ```{r death_90_km, fig.width = 7.5, fig.height = 6}
 km_death_90
+
+kable(
+  kmest_death_90,
+  format = "html",
+  digits = 2,
+  align = c("l", rep("r", 7)),
+  col.names = c(
+    "Treatment", "Randomized", "Still at Risk", "Died", "Censored", "Estimate",
+    "Lower 95%", "Upper 95%"
+  ),
+  caption = "Kaplan-Meier Estimates, Death at 90 Days after Randomization"
+) %>%
+  mykablestyle()
 
 ```
 
@@ -5930,12 +5965,11 @@ publication and future presentations.
 Listing of planned figures in primary manuscript:
 
 1. CONSORT information (done by clinical authors; information provided in [*Screening, Consent, and Randomization*](#screening))
+1. Survival: 90-day KM curve, including results from 30 + 90-day models, + cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission (outcomes of interest only)
+
+Possible figures for supplement:
+
 1. Mental status outcomes: medians, DCFDs, delirium, coma duration
-1. Survival: 90-day KM curve, including results from 30 + 90-day models
-1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission (outcomes of interest only)
-
-Planned figures for supplement:
-
 1. Medians, hypoactive/hyperactive delirium
 1. Adjusted hazard ratios for all TTE outcomes
 1. Complete cumulative incidence curves for all TTE outcomes, including curves for death/discharge and N at risk
@@ -6127,61 +6161,76 @@ medians_deltypes_pub %T>%
 
 ```
 
-## 90-Day Survival
+## 90-Day Survival + Time-to-Event Outcomes
 
-*Suggested caption:*
-
-The study population had 73% survival at 30 days and 65% survival at 90 days. In adjusted analyses, neither haloperidol (...) nor ziprasidone (...) affected 30-day survival compared with placebo (across groups, adjusted P = ...). Ziprasidone had no effect on 90-day survival (HR...); haloperidol's effect on 90-day survival trended toward harm in adjusted analyses (HR...). P-values for
-30- and 90-day death refer to the entire association between treatment and mortality and are calculated using Cox proportional hazards models clustered by study site. Models are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+These are combined into a single figure to align with journal requirements.
 
 ```{r pubfig_death, fig.height = 6.5, fig.width = 7}
-## -- Start with KM already created; add *adj* p-vals, tweak labels/legend -----
-death_90_pub <- km_death_90
+## -- 1) Kaplan-Meier curve, death to 90 days ----------------------------------
+## summary(survfit()) object at every 15 days
+sf_death_90_pub <- summary(
+  survfit(
+    surv_death_90 ~ trt,
+    data = model_df %>%
+      mutate(
+        trt = factor(trt, levels = c("Ziprasidone", "Haloperidol", "Placebo"))
+      )
+  ),
+  times = seq(0, 90, 15)
+)
 
-death_90_pub$plot <- death_90_pub$plot +
+## Publication version of KM curve without N at risk table
+##  (will create that manually next)
+km_death_90_pub <- km_plot_death(
+  sf = sf_death_90, lr = logrank_death_90, inc_risktable = FALSE, time = 90
+)
+
+km_death_90_pub$plot <- km_death_90_pub$plot +
   labs(
-    subtitle = glue(
-      "At 30 days, adjusted P={formatp_nejm(anova(death_30_mod)['trt', 'P'])};",
-      " at 90 days, adjusted P={formatp_nejm(anova(death_90_mod)['trt', 'P'])}"
-    )
+    title = "A: Kaplan-Meier Curve, 90-Day All-Cause Death"#,
+    ## Remove p-values at stat reviewer request :raised_hands:
+    # subtitle = glue(
+    #   "At 30 days, adjusted P={formatp_nejm(anova(death_30_mod)['trt', 'P'])};",
+    #   " at 90 days, adjusted P={formatp_nejm(anova(death_90_mod)['trt', 'P'])}"
+    # )
   ) +
-  theme(legend.position = c(0.015, 0.03))
+  theme(plot.subtitle = element_blank(), legend.position = c(0.015, 0.03))
 
-death_90_pub$table <- death_90_pub$table +
-  scale_y_discrete(labels = c("Plac", "Hal", "Zip"))
+## 2) N at risk table ----------------------------------------------------------
+## Need to do separately/manually - got spacing issues when trying to combine
+## survminer version with CIF curves (probably some grid issue)
+nrisk_death_90_pub <- cr_risktable_plot(sf_death_90_pub, facet_trts = FALSE) +
+  scale_y_discrete(labels = c("   Plac", "Hal", "Zip")) +
+  theme(plot.margin = unit(c(0, 5.5, 5.5, 5.5), "pt"))
 
-## Save as pdf, png
-## ggsave() can't draw ggsurvplot objects; use multiplot
+## Save KM + N at risk only
 ggsave(
-  filename = "mindusa_km.pdf",
-  multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2)),
+  filename = "mindusa_tteoutcomes.pdf",
+  multiplot(
+    km_death_90_pub$plot +
+      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+    nrisk_death_90_pub + theme(axis.title.x = element_text(face = "bold")),
+    layout = matrix(c(1, 1, 2), ncol = 1)
+  ),
   path = "pubfigures/pdf",
   device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
   width = 7, height = 6.5, units = "in"
 )
-
 ggsave(
-  filename = "mindusa_km.png",
-  multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2)),
+  filename = "mindusa_tteoutcomes.png",
+  multiplot(
+    km_death_90_pub$plot +
+      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+    nrisk_death_90_pub + theme(axis.title.x = element_text(face = "bold")),
+    layout = matrix(c(1, 1, 2), ncol = 1)
+  ),
   path = "pubfigures/png",
   type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
 )
 
-# multiplot(death_90_pub, layout = matrix(c(1, 1, 2), ncol = 2))
-
 ```
 
 ## Cumulative Incidence Curves
-
-In the main manuscript, we will include only the cumulative incidence curves for
-the primary distribution of interest (eg, only ICU discharge, not death), in order to create a single paneled figure with all outcomes. In the supplement, we
-will include full CIF curves as well as the N at risk tables for each outcome.
-
-### Main Paper
-
-*Suggested caption:*
-
-There were no differences between treatment groups in time to liberation from mechanical ventilation, ICU discharge, or hospital discharge. In adjusted analyses there was a difference in ICU readmission across groups, with patients treated with ziprasidone having a slightly lower readmission rate among those who survived their initial ICU stay. P-values refer to the overall effect of treatment. They are calculated using the Fine-Gray method for competing risks (clustered by study site), and adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r pubfig_cif_main, fig.width = 7, fig.height = 6.5}
 cif_data <- pmap_df(
@@ -6210,27 +6259,74 @@ cif_pub_facet <- ggplot(
   scale_y_continuous(
     name = "Cumulative Incidence Probability",
     limits = c(0, 1),
-    breaks = seq(0, 1, 0.2), labels = paste0(seq(0, 1, 0.2)*100, "%")
+    breaks = seq(0, 1, 0.25), labels = paste0(seq(0, 1, 0.25)*100, "%")
   ) +
   theme(
-    strip.text = element_text(hjust = 0, size = basetext_size * 1.1),
+    strip.text = element_text(hjust = 0, size = basetext_size * 0.9),
     strip.background = element_blank(),
-    legend.title = element_blank(),
-    legend.background = element_blank(),
-    legend.position = c(0.89, 0.1),
-    legend.direction = "vertical",
-    legend.text.align = 1
+    axis.text = element_text(size = basetext_size * 0.7),
+    ## When kept a separate plot
+    # legend.title = element_blank(),
+    # legend.position = c(0.89, 0.1),
+    # legend.background = element_blank(),
+    # legend.direction = "vertical",
+    # legend.text.align = 1
+    legend.position = "none" ## unnecessary when combined with KM plot
   )
 
+## Save CIF curves alone
 cif_pub_facet %T>%
   ggsave(
     filename = "mindusa_tteoutcomes.pdf", ., path = "pubfigures/pdf",
     device = cairo_pdf, ## cairo_pdf() to embed fonts, keep spaces
     width = 7, height = 6.5, units = "in"
   ) %T>%
+  ggsave(
+    filename = "mindusa_tteoutcomes.png", ., path = "pubfigures/png",
+    type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
+  )
+
+```
+
+*Suggested caption:*
+
+The study population had 73% survival at 30 days and 65% survival at 90 days. In adjusted analyses, neither haloperidol (...) nor ziprasidone (...) affected 30-day survival compared with placebo (across groups, adjusted P = ...). Ziprasidone had no effect on 90-day survival (HR...); haloperidol's effect on 90-day survival trended toward harm in adjusted analyses (HR...). P-values for
+30- and 90-day death refer to the entire association between treatment and mortality and are calculated using Cox proportional hazards models clustered by study site. Models are adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+
+There were no differences between treatment groups in time to liberation from mechanical ventilation, ICU discharge, or hospital discharge. In adjusted analyses there was a difference in ICU readmission across groups, with patients treated with ziprasidone having a slightly lower readmission rate among those who survived their initial ICU stay. P-values refer to the overall effect of treatment. They are calculated using the Fine-Gray method for competing risks (clustered by study site), and adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
+
+```{r combine_tte}
+## -- Save combined KM curve, N at risk table, CIF curves for manuscript -------
 ggsave(
-  filename = "mindusa_tteoutcomes.png", ., path = "pubfigures/png",
-  type = "cairo", dpi = 400, width = 7, height = 6.5, units = "in"
+  filename = "mindusa_kmtte.pdf",
+  multiplot(
+    plotlist = list(
+      km_death_90_pub$plot +
+        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+      nrisk_death_90_pub + theme(axis.title.x = element_blank()),
+      cif_pub_facet + theme(axis.title.x = element_text(face = "bold"))
+    ),
+    layout = matrix(c(1, 1, 1, 2, 3, 3, 3), ncol = 1)
+  ),
+  path = "pubfigures/pdf",
+  device = cairo_pdf,
+  width = 7, height = 10, units = "in"
+)
+
+ggsave(
+  filename = "mindusa_kmtte.png",
+  multiplot(
+    plotlist = list(
+      km_death_90_pub$plot +
+        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+      nrisk_death_90_pub + theme(axis.title.x = element_blank()),
+      cif_pub_facet + theme(axis.title.x = element_text(face = "bold"))
+    ),
+    layout = matrix(c(1, 1, 1, 2, 3, 3, 3), ncol = 1)
+  ),
+  path = "pubfigures/png",
+  type = "cairo", dpi = 400,
+  width = 7, height = 10, units = "in"
 )
 
 ```
