@@ -4269,6 +4269,134 @@ rms_results_kable(readm_90_mod)
 
 ```
 
+## Summary of All Primary Outcomes
+
+```{r outcome_summary}
+descrip_continuous <- inhosp_desc_df %>%
+  group_by(trt) %>%
+  summarise_at(
+    vars(dcfd_int, del_int_all, coma_int_all, hyperdel_int_all,
+         hypodel_int_all, daysto_mvlib_exp, tte_icudis_90_exp,
+         tte_hospdis_90_exp),
+    funs(med = q50, p25 = q25, p75 = q75)
+  ) %>%
+  gather(key = variable, value = value, dcfd_int_med:tte_hospdis_90_exp_p75) %>%
+  separate(
+    variable, into = c("variable", "stat"), sep = "\\_(?=[a-z, 0-9]+$)"
+  ) %>%
+  spread(key = stat, value = value) %>%
+  mutate(
+    desc_string = gsub(
+      " +", " ",
+      sprintf(
+        "%s [%s, %s]",
+        rndformat(med, digits = 1),
+        rndformat(p25, digits = 1),
+        rndformat(p75, digits = 1)
+      )
+    )
+  ) %>%
+  dplyr::select(trt, variable, desc_string) %>%
+  spread(key = trt, value = desc_string) %>%
+  mutate(version = "Unadjusted")
+
+descrip_npct <- ptsummary_df %>%
+  group_by(trt) %>%
+  summarise_at(
+    vars(randomized, event_readm_90, event_death_30, event_death_90),
+    funs(sum_na)
+  ) %>%
+  mutate_at(vars(starts_with("event")), funs(get_npct), denom = .$randomized) %>%
+  gather(key = variable, value = npct, starts_with("event")) %>%
+  mutate(variable = gsub("^event\\_", "", variable)) %>%
+  dplyr::select(-randomized) %>%
+  spread(key = trt, value = npct) %>%
+  mutate(version = "Unadjusted")
+
+orshrs <- bind_rows(
+  list(dcfd_ors, del_ors, hyperdel_ors, hypodel_ors, coma_ors,
+       mvlib_30_hrs %>% mutate(outcome = "mvlib_30"),
+       icudis_90_hrs %>% mutate(outcome = "icudis_90"),
+       readm_90_hrs %>% mutate(outcome = "readm_90"),
+       hospdis_90_hrs %>% mutate(outcome = "hospdis_90"),
+       death_30_hrs, death_90_hrs)
+) %>%
+  filter(!is.ref) %>%
+  mutate(
+    ratio_ci = sprintf(
+      "%s (%s, %s)", rndformat(effect, 2), rndformat(lcl, 2), rndformat(ucl, 2)
+    )
+  ) %>%
+  dplyr::select(outcome, comp.c, ratio_ci) %>%
+  spread(key = comp.c, value = ratio_ci) %>%
+  mutate(Placebo = "") %>%
+  dplyr::select(outcome, Placebo, Haloperidol, Ziprasidone) %>%
+  set_names(c("variable", "Placebo", "Haloperidol", "Ziprasidone")) %>%
+  mutate(version = "Adjusted")
+
+descriptives <- bind_rows(descrip_continuous, descrip_npct, orshrs) %>%
+  mutate(
+    variable = case_when(
+      variable == "daysto_mvlib_exp" ~ "mvlib_30",
+      variable == "tte_hospdis_90_exp" ~ "hospdis_90",
+      variable == "tte_icudis_90_exp" ~ "icudis_90",
+      TRUE ~ gsub("^surv\\_", "", variable)
+    )
+  ) %>%
+  dplyr::select(variable, version, Placebo, Haloperidol, Ziprasidone) %>%
+  ## Make pretty for printing
+  mutate(
+    sort_order = case_when(
+      variable == "coma_int_all"     ~ 5,
+      variable == "dcfd_int"         ~ 1,
+      variable == "death_30"         ~ 10,
+      variable == "death_90"         ~ 11,
+      variable == "del_int_all"      ~ 2,
+      variable == "hospdis_90"       ~ 9,
+      variable == "hyperdel_int_all" ~ 3,
+      variable == "hypodel_int_all"  ~ 4,
+      variable == "icudis_90"        ~ 7,
+      variable == "mvlib_30"         ~ 6,
+      variable == "readm_90"         ~ 8,
+      TRUE                           ~ 12
+    ),
+    variable = case_when(
+      variable == "coma_int_all"     ~ "Coma days",
+      variable == "dcfd_int"         ~ "Delirium/coma-free days",
+      variable == "death_30"         ~ "Mortality at 30 days - no. (%)",
+      variable == "death_90"         ~ "Mortality at 90 days - no. (%)",
+      variable == "del_int_all"      ~ "Delirium days",
+      variable == "hospdis_90"       ~ "Time to hospital discharge",
+      variable == "hyperdel_int_all" ~ "Hyperactive delirium days",
+      variable == "hypodel_int_all"  ~ "Hypoactive delirium days",
+      variable == "icudis_90"        ~ "Time to ICU discharge",
+      variable == "mvlib_30"         ~
+        "Time to liberation from mechanical ventilation",
+      variable == "readm_90"         ~ "ICU readmission - no. (%)",
+      TRUE                           ~ "fix this!"
+    )
+  ) %>%
+  arrange(variable, desc(version)) %>%
+  dplyr::select(variable, version, Placebo, Haloperidol, Ziprasidone)
+
+kable(
+  descriptives,
+  format = "html",
+  align = c("l", "l", rep("r", 3)),
+  col.names = c("Outcome", "Version", "Placebo", "Haloperidol", "Ziprasidone"),
+  caption = "Summary of Primary Outcomes"
+) %>%
+  collapse_rows(columns = 1) %>%
+  mykablestyle() %>%
+  add_footnote("For adjusted analyses, results are odds or hazard ratios, with placebo as reference.")
+
+```
+
+
+
+
+
+
 # Heterogeneity of Treatment Effect
 <hr>
 
