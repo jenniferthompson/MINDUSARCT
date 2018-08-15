@@ -4298,7 +4298,19 @@ descrip_continuous <- inhosp_desc_df %>%
   ) %>%
   dplyr::select(trt, variable, desc_string) %>%
   spread(key = trt, value = desc_string) %>%
-  mutate(version = "Unadjusted")
+  mutate(
+    version = "Unadjusted",
+    pvalue = c(
+      coma_kw$p.value,
+      mvlib_30_cif$Tests["MV Liberation", "pv"],
+      dcfd_kw$p.value,
+      del_kw$p.value,
+      hyperdel_kw$p.value,
+      hypodel_kw$p.value,
+      hospdis_90_cif$Tests["Hospital Discharge", "pv"],
+      icudis_90_cif$Tests["ICU Discharge", "pv"]
+    )
+  )
 
 descrip_npct <- ptsummary_df %>%
   group_by(trt) %>%
@@ -4311,7 +4323,14 @@ descrip_npct <- ptsummary_df %>%
   mutate(variable = gsub("^event\\_", "", variable)) %>%
   dplyr::select(-randomized) %>%
   spread(key = trt, value = npct) %>%
-  mutate(version = "Unadjusted")
+  mutate(
+    version = "Unadjusted",
+    pvalue = c(
+      1 - pchisq(logrank_death_30$chisq, df = 2),
+      1 - pchisq(logrank_death_90$chisq, df = 2),
+      readm_90_cif$Tests["Readmission", "pv"]
+    )
+  )
 
 orshrs <- bind_rows(
   list(dcfd_ors, del_ors, hyperdel_ors, hypodel_ors, coma_ors,
@@ -4332,7 +4351,15 @@ orshrs <- bind_rows(
   mutate(Placebo = "") %>%
   dplyr::select(outcome, Placebo, Haloperidol, Ziprasidone) %>%
   set_names(c("variable", "Placebo", "Haloperidol", "Ziprasidone")) %>%
-  mutate(version = "Adjusted")
+  mutate(
+    version = "Adjusted",
+    pvalue = map_dbl(
+      list(coma_mod, dcfd_mod, del_mod, hospdis_90_mod, hyperdel_mod,
+           hypodel_mod, icudis_90_mod, mvlib_30_mod, readm_90_mod,
+           death_30_mod, death_90_mod),
+      ~ anova(.)["trt", "P"]
+    )
+  )
 
 descriptives <- bind_rows(descrip_continuous, descrip_npct, orshrs) %>%
   mutate(
@@ -4343,7 +4370,9 @@ descriptives <- bind_rows(descrip_continuous, descrip_npct, orshrs) %>%
       TRUE ~ gsub("^surv\\_", "", variable)
     )
   ) %>%
-  dplyr::select(variable, version, Placebo, Haloperidol, Ziprasidone) %>%
+  dplyr::select(
+    variable, version, Placebo, Haloperidol, Ziprasidone, pvalue
+  ) %>%
   ## Make pretty for printing
   mutate(
     sort_order = case_when(
@@ -4374,21 +4403,29 @@ descriptives <- bind_rows(descrip_continuous, descrip_npct, orshrs) %>%
         "Time to liberation from mechanical ventilation",
       variable == "readm_90"         ~ "ICU readmission - no. (%)",
       TRUE                           ~ "fix this!"
-    )
+    ),
+    pvalue = formatp_nejm(pvalue)
   ) %>%
-  arrange(variable, desc(version)) %>%
-  dplyr::select(variable, version, Placebo, Haloperidol, Ziprasidone)
+  arrange(sort_order, desc(version)) %>%
+  dplyr::select(variable, version, Placebo, Haloperidol, Ziprasidone, pvalue)
 
 kable(
   descriptives,
   format = "html",
-  align = c("l", "l", rep("r", 3)),
-  col.names = c("Outcome", "Version", "Placebo", "Haloperidol", "Ziprasidone"),
+  align = c("l", "l", rep("r", 4)),
+  col.names = c(
+    "Outcome", "Version", "Placebo", "Haloperidol", "Ziprasidone", "P-Value*"
+  ),
   caption = "Summary of Primary Outcomes"
 ) %>%
   collapse_rows(columns = 1) %>%
   mykablestyle() %>%
-  add_footnote("For adjusted analyses, results are odds or hazard ratios, with placebo as reference.")
+  add_footnote(
+    c(
+      "For unadjusted analyses, results are median [interquartile range] for each treatment group unless otherwise indicated. P-values for overall difference in treatment are from Kruskal-Wallis (DCFDs, delirium, coma), log-rank (death) or score (all other outcomes) tests.",
+      "For adjusted analyses, results are odds or hazard ratios, with placebo as reference. P-values for the overall effect of treatment are from proportional odds logistic regression (DCFDs, delirium, coma), Cox proportional hazards regression (death), or Fine-Gray competing risks regression (all other outcomes)."),
+    notation = "number"
+  )
 
 ```
 
