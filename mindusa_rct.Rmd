@@ -908,6 +908,20 @@ my_html(
   caption = "RASS Assessments during Intervention Phase"
 )
 
+ggplot(data = pad_int_trt) +
+  aes(x = rass_raw) +
+  geom_bar(
+    aes(fill = trt), alpha = 0.75, position = "dodge", stat = "count"
+  ) +
+  scale_x_continuous(
+    breaks = seq(-5, 4, 1), name = "Daily RASS Assessments by Research Staff"
+  ) +
+  scale_y_continuous(name = "Frequency") +
+  scale_fill_manual(values = mindusa_trtcols_long) +
+  theme(
+    legend.title = element_blank()
+  )
+
 ```
 
 # Description of the Intervention
