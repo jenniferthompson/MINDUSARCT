@@ -582,6 +582,8 @@ label(ptsummary_all_df2$icu_rsn) <- "Primary reason for ICU admission"
 label(ptsummary_all_df2$med_surg) <- "Patient type"
 label(ptsummary_all_df2$sofa_adm) <- "SOFA at ICU admission (imputed data)"
 label(ptsummary_all_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
+label(ptsummary_all_df2$days_icuadm_enroll) <-
+  "Days between ICU admission and consent"
 label(ptsummary_all_df2$sofa_imp_consent) <-
   "SOFA on day of consent (imputed data)"
 label(ptsummary_all_df2$cv_sofa_consent) <-
@@ -633,6 +635,8 @@ label(ptsummary_df2$icu_rsn) <- "Primary reason for ICU admission"
 label(ptsummary_df2$med_surg) <- "Patient type"
 label(ptsummary_df2$sofa_adm) <- "SOFA at ICU admission (imputed data)"
 label(ptsummary_df2$cv_sofa_adm_f) <- "Cardiovascular SOFA at ICU admission"
+label(ptsummary_df2$days_icuadm_rand) <-
+  "Days between ICU admission and randomization"
 label(ptsummary_df2$sofa_imp_consent) <- "SOFA on day of consent (imputed data)"
 label(ptsummary_df2$cv_sofa_consent) <- "Cardiovascular SOFA on day of consent"
 label(ptsummary_df2$apache_adm) <- "APACHE II at ICU admission"
@@ -645,12 +649,12 @@ label(ptsummary_df2$cv_sofa_rand) <-
 label(ptsummary_df2$rass_rand) <- "RASS at randomization"
 
 ## Formula we'll use for both demographic/admission tables
-admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + med_surg + apache_adm + sofa_adm + cv_sofa_adm_f + sofa_imp_consent + cv_sofa_consent"
+admit_formula_lhs <- "enroll_mv + enroll_nippv + enroll_shock + age_consent + gender + race_cat + ethnicity + english_level + education + iqcode_total_ph + adl_total_ph + faq_total_ph + audit_total_ph_complete + audit_total_ph_partial + frailty_f + insurance + bmi + home_antipsyc + charlson_total + frailty_f + icu_rsn + med_surg + apache_adm + sofa_adm + cv_sofa_adm_f + days_icuadm_enroll + sofa_imp_consent + cv_sofa_consent"
 
 ## Add randomization info for randomized patients only
 admit_formula_lhs_rand <- paste(
   admit_formula_lhs,
-  "+ antipsyc_adm_pr + sofa_imp_rand + cv_sofa_rand + rass_rand"
+  "+ antipsyc_adm_pr + days_icuadm_rand + sofa_imp_rand + cv_sofa_rand + rass_rand"
 )
 
 my_html(
