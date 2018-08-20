@@ -1447,6 +1447,64 @@ other_permdc_table %>%
 ```
 </details>
 
+## Description of Temporary Holds
+
+We describe, for each time study drug was temporarily held, the number of doses
+for which it was held and whether study drug was ultimately restarted, or not
+restarted for one of several reasons.
+
+```{r tempholds}
+tempholds_df <- tempholds_df %>%
+  left_join(rand_df, by = "id")
+
+tempholds_trt <- tempholds_df %>%
+  count(trt)
+
+tempholds_doses <- tempholds_df %>%
+  group_by(trt) %>%
+  summarise_at(
+    vars(doses_held),
+    funs(p25 = q25, p50 = q50, p75 = q75, mean = mean_na, sd = sd_na)
+  ) %>%
+  mutate(describe_holds = describe_cont(p50, p25, p75, mean, sd)) %>%
+  dplyr::select(trt, describe_holds) %>%
+  spread(key = trt, value = describe_holds) %>%
+  mutate(reason = "Number of doses held")
+
+tempholds_reasons <- tempholds_df %>%
+  count(trt, drug_restarted) %>%
+  left_join(tempholds_trt, by = "trt") %>%
+  set_names(c("trt", "reason", "n_reason", "n_trt")) %>%
+  mutate(npct = get_npct(n_reason, n_trt)) %>%
+  dplyr::select(trt, reason, npct) %>%
+  spread(key = trt, value = npct)
+
+tempholds_info <- bind_rows(tempholds_doses, tempholds_reasons) %>%
+  dplyr::select(reason, Placebo, Haloperidol, Ziprasidone) %>%
+  mutate(
+    sort_order = case_when(
+      reason == "Number of doses held"       ~ 1,
+      reason == "Restarted"                  ~ 2,
+      reason == "Not restarted"              ~ 3,
+      reason == "Dlr resolved/ICU discharge" ~ 4,
+      reason == "Permanently discontinued"   ~ 5,
+      TRUE                                   ~ 6
+    )
+  ) %>%
+  arrange(sort_order) %>%
+  dplyr::select(-sort_order)
+
+tempholds_info %>%
+  kable(
+    format = "html",
+    col.names = c("", "Placebo", "Haloperidol", "Ziprasidone"),
+    align = c("l", rep("r", 3))
+  ) %>%
+  mykablestyle() %>%
+  group_rows("Was drug restarted?", 2, 6)
+
+```
+
 ## Holds/Discontinuations due to Adverse Events
 
 As noted above, during the intervention, `r sum(doses_df$held_ae)` study drug
