@@ -2274,8 +2274,10 @@ gg_miss_var(
 
 ```
 
-IQCODE and level of arousal at randomization are the only covariates with missing data; the amount is still quite minimal (<2% for each), and these
-variables are not missing in ways that appear to be related. In the plot below, red indicates missingness and blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
+IQCODE (`r sum(is.na(ptsummary_df$iqcode_total_ph))` patients) and level of arousal at randomization (`r sum(is.na(ptsummary_df$rass_rand))` patients) are the only covariates with missing data; the amount is still quite minimal (<2% for each), and these variables are not missing in ways that appear to be related. In the plot below, red indicates missingness and blue indicates a present value. Cases which have both variables missing would be in red in the lower lefthand corner.
+
+(Level of arousal at randomization is more specifically defined as the recorded RASS that is not comatose [ie, > -3] and closest to the time of randomization,
+as long as it is within 5 hours before or after randomization.)
 
 ```{r iqcode_rass_miss}
 ggplot(data = model_df) +
@@ -2283,6 +2285,8 @@ ggplot(data = model_df) +
                   position = position_jitter(height = 0.2), alpha = 0.5)
 
 ```
+
+This is based on the RASS closest to randomization (before or after the time noted), assuming it was 1) not comatose (>-3) and 2) within 5 hours of randomization. There were 4 patients with no recorded non-comatose RASS within those 5 hours.
 
 </details>
 
