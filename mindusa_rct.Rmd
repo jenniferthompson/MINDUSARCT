@@ -1479,10 +1479,18 @@ tempholds_reasons <- tempholds_df %>%
   dplyr::select(trt, reason, npct) %>%
   spread(key = trt, value = npct)
 
-tempholds_info <- bind_rows(tempholds_doses, tempholds_reasons) %>%
+tempholds_info <- bind_rows(
+  tempholds_trt %>%
+    spread(key = trt, value = n) %>%
+    mutate(reason = "Total temporary holds") %>%
+    mutate_at(vars("Placebo", "Haloperidol", "Ziprasidone"), ~ as.character(.)),
+  tempholds_doses,
+  tempholds_reasons
+) %>%
   dplyr::select(reason, Placebo, Haloperidol, Ziprasidone) %>%
   mutate(
     sort_order = case_when(
+      reason == "Total temporary holds"      ~ 0,
       reason == "Number of doses held"       ~ 1,
       reason == "Restarted"                  ~ 2,
       reason == "Not restarted"              ~ 3,
@@ -1501,7 +1509,7 @@ tempholds_info %>%
     align = c("l", rep("r", 3))
   ) %>%
   mykablestyle() %>%
-  group_rows("Was drug restarted?", 2, 6)
+  group_rows("Was drug restarted?", 3, 7)
 
 ```
 
