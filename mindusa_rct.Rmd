@@ -2169,6 +2169,20 @@ pts_missany <- model_df %>%
     pctmiss = sum_na(pct_miss)
   )
 
+pts_missany_trt <- model_df %>%
+  dplyr::select(
+    covariate_vars, outcome_vars[!grepl("^tte|ftype|event", outcome_vars)]
+  ) %>%
+  group_by(trt) %>%
+  miss_case_table() %>%
+  ungroup() %>%
+  filter(n_miss_in_case > 0) %>%
+  group_by(trt) %>%
+  summarise(
+    nmiss = sum_na(n_cases),
+    pctmiss = sum_na(pct_miss)
+  )
+
 ## Set datadist to this data.frame
 dd <- datadist(model_df, adjto.cat = "first")
 options(datadist = "dd")
@@ -2450,7 +2464,7 @@ following criteria:
 We have very little missing covariate or outcome data (see [above](#exploration)
 for further details); therefore, we use complete case analysis for all
 in-hospital outcomes. From models which would include all `r n_rand` randomized patients (all except liberation from mechanical ventilation and ICU
-readmission), complete case analysis excludes `r pts_missany %>% pull(nmiss)` (`r rndformat(pts_missany %>% pull(pctmiss), 0)`%).
+readmission), complete case analysis excludes `r pts_missany %>% pull(nmiss)` (`r rndformat(pts_missany %>% pull(pctmiss), 0)`%; `r glue_data(pts_missany_trt, "{trt}, {nmiss}") %>% paste(collapse = "; ")`).
 
 We do use single imputation for missing mental status on a daily basis, to
 reduce potential bias from the `r round(mean(is.na(subset(daily_int_df, study_status == "Intervention")$mental_status_raw)) * 100)`% of patient-days during the intervention period without sufficient RASS and/or CAM information to
