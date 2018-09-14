@@ -6232,11 +6232,12 @@ publication and future presentations.
 Listing of planned figures in primary manuscript:
 
 1. CONSORT information (done by clinical authors; information provided in [*Screening, Consent, and Randomization*](#screening))
-1. Survival: 90-day KM curve, including results from 30 + 90-day models, + cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission (outcomes of interest only)
+1. Survival: 90-day KM curve
+1. Mental status outcomes: medians, DCFDs, delirium, coma duration
 
 Possible figures for supplement:
 
-1. Mental status outcomes: medians, DCFDs, delirium, coma duration
+1. Cumulative incidence curves: ICU discharge, hospital discharge, MV liberation, ICU readmission (outcomes of interest only)
 1. Medians, hypoactive/hyperactive delirium
 1. Adjusted hazard ratios for all TTE outcomes
 1. Complete cumulative incidence curves for all TTE outcomes, including curves for death/discharge and N at risk
@@ -6263,14 +6264,18 @@ During the 14-day treatment period, the primary outcome (delirium/coma-free days
 ## Row 1: DCFDs; Row 2: Delirium + Coma
 ## Facet all for consistency
 
-## Prep function: Create text string with title, p-value for treatment given
-##  a model + title
-make_outcome_string <- function(mod_obj, title_string){
-  p_trt <- anova(mod_obj)["trt", "P"]
-  sprintf(
-    "%s; P%s%s",
-    title_string, ifelse(p_trt < 0.001, '', '='), formatp_nejm(p_trt)
-  )
+## Prep function: Create text string with title, p-value for treatment
+##  (if requested) given a model + title
+make_outcome_string <- function(mod_obj, title_string, use_p = FALSE){
+  if(use_p){
+    p_trt <- anova(mod_obj)["trt", "P"]
+    sprintf(
+      "%s; P%s%s",
+      title_string, ifelse(p_trt < 0.001, '', '='), formatp_nejm(p_trt)
+    )
+  } else{
+    sprintf("%s", title_string)
+  }
 }
 
 ## -- Function to create separate plots for each mental outcome/set ------------
@@ -6344,7 +6349,7 @@ medians_dcfd_pub <- plot_medians_pub(
     mutate(
       title_text = make_outcome_string(dcfd_mod, "A: Delirium/Coma-Free Days")
     ),
-  trt_abb = TRUE,
+  trt_abb = FALSE,
   use_xtitle = FALSE
 )
 
@@ -6355,6 +6360,7 @@ medians_delcoma_pub <- plot_medians_pub(
     coma_adjmeds %>%
       mutate(title_text = make_outcome_string(coma_mod, "C: Coma Days"))
   ),
+  trt_abb = FALSE,
   use_xtitle = TRUE
 )
 
@@ -6372,6 +6378,7 @@ medians_deltypes_pub <- plot_medians_pub(
       )
   ),
   ftext_size = 1.0,
+  trt_abb = FALSE,
   use_xtitle = TRUE
 ) +
   scale_y_continuous(
@@ -6428,9 +6435,7 @@ medians_deltypes_pub %T>%
 
 ```
 
-## 90-Day Survival + Time-to-Event Outcomes
-
-These are combined into a single figure to align with journal requirements.
+## 90-Day Survival
 
 ```{r pubfig_death, fig.height = 6.5, fig.width = 7}
 ## -- 1) Kaplan-Meier curve, death to 90 days ----------------------------------
@@ -6449,34 +6454,43 @@ sf_death_90_pub <- summary(
 ## Publication version of KM curve without N at risk table
 ##  (will create that manually next)
 km_death_90_pub <- km_plot_death(
-  sf = sf_death_90, lr = logrank_death_90, inc_risktable = FALSE, time = 90
+  sf = sf_death_90, lr = logrank_death_90, inc_risktable = TRUE, time = 90
 )
 
 km_death_90_pub$plot <- km_death_90_pub$plot +
   labs(
-    title = "A: Kaplan-Meier Curve, 90-Day All-Cause Death"#,
+    title = "Kaplan-Meier Curve, 90-Day All-Cause Death",
     ## Remove p-values at stat reviewer request :raised_hands:
     # subtitle = glue(
     #   "At 30 days, adjusted P={formatp_nejm(anova(death_30_mod)['trt', 'P'])};",
     #   " at 90 days, adjusted P={formatp_nejm(anova(death_90_mod)['trt', 'P'])}"
     # )
+    ylab = " \n\n\n\n\n\nProbability of Overall Survival (%)"
   ) +
-  theme(plot.subtitle = element_blank(), legend.position = c(0.015, 0.03))
+  theme(
+    plot.subtitle = element_blank(),
+    legend.position = c(0.015, 0.03),
+    axis.title.y = element_text(vjust = -5),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 
-## 2) N at risk table ----------------------------------------------------------
-## Need to do separately/manually - got spacing issues when trying to combine
-## survminer version with CIF curves (probably some grid issue)
-nrisk_death_90_pub <- cr_risktable_plot(sf_death_90_pub, facet_trts = FALSE) +
-  scale_y_discrete(labels = c("   Plac", "Hal", "Zip")) +
-  theme(plot.margin = unit(c(0, 5.5, 5.5, 5.5), "pt"))
+## Not needed for current configuration, which keeps KM curve separate from CIFs
+# ## 2) N at risk table ----------------------------------------------------------
+# ## Need to do separately/manually - got spacing issues when trying to combine
+# ## survminer version with CIF curves (probably some grid issue)
+# nrisk_death_90_pub <- cr_risktable_plot(sf_death_90_pub, facet_trts = FALSE) +
+#   scale_y_discrete(labels = c("Placebo", "Haloperidol", "Ziprasidone")) +
+#   theme(plot.margin = unit(c(0, 5.5, 5.5, 5.5), "pt"))
+
+km_death_90_pub$table <- km_death_90_pub$table +
+   theme(axis.title.x = element_text(face = "bold"))
 
 ## Save KM + N at risk only
 ggsave(
-  filename = "mindusa_tteoutcomes.pdf",
+  filename = "mindusa_kmnrisk.pdf",
   multiplot(
-    km_death_90_pub$plot +
-      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
-    nrisk_death_90_pub + theme(axis.title.x = element_text(face = "bold")),
+    km_death_90_pub,
     layout = matrix(c(1, 1, 2), ncol = 1)
   ),
   path = "pubfigures/pdf",
@@ -6484,11 +6498,9 @@ ggsave(
   width = 7, height = 6.5, units = "in"
 )
 ggsave(
-  filename = "mindusa_tteoutcomes.png",
+  filename = "mindusa_kmnrisk.png",
   multiplot(
-    km_death_90_pub$plot +
-      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
-    nrisk_death_90_pub + theme(axis.title.x = element_text(face = "bold")),
+    km_death_90_pub,
     layout = matrix(c(1, 1, 2), ncol = 1)
   ),
   path = "pubfigures/png",
@@ -6497,7 +6509,7 @@ ggsave(
 
 ```
 
-## Cumulative Incidence Curves
+## Cumulative Incidence Curves for Outcomes with Competing Risks
 
 ```{r pubfig_cif_main, fig.width = 7, fig.height = 6.5}
 cif_data <- pmap_df(
@@ -6533,12 +6545,12 @@ cif_pub_facet <- ggplot(
     strip.background = element_blank(),
     axis.text = element_text(size = basetext_size * 0.7),
     ## When kept a separate plot
-    # legend.title = element_blank(),
-    # legend.position = c(0.89, 0.1),
-    # legend.background = element_blank(),
-    # legend.direction = "vertical",
-    # legend.text.align = 1
-    legend.position = "none" ## unnecessary when combined with KM plot
+    legend.title = element_blank(),
+    legend.position = c(0.89, 0.1),
+    legend.background = element_blank(),
+    legend.direction = "vertical",
+    legend.text.align = 1
+    # legend.position = "none" ## unnecessary when combined with KM plot
   )
 
 ## Save CIF curves alone
@@ -6555,6 +6567,8 @@ cif_pub_facet %T>%
 
 ```
 
+### All TTE Outcomes Combined
+
 *Suggested caption:*
 
 The study population had 73% survival at 30 days and 65% survival at 90 days. In adjusted analyses, neither haloperidol (...) nor ziprasidone (...) affected 30-day survival compared with placebo (across groups, adjusted P = ...). Ziprasidone had no effect on 90-day survival (HR...); haloperidol's effect on 90-day survival trended toward harm in adjusted analyses (HR...). P-values for
@@ -6563,42 +6577,46 @@ The study population had 73% survival at 30 days and 65% survival at 90 days. In
 There were no differences between treatment groups in time to liberation from mechanical ventilation, ICU discharge, or hospital discharge. In adjusted analyses there was a difference in ICU readmission across groups, with patients treated with ziprasidone having a slightly lower readmission rate among those who survived their initial ICU stay. P-values refer to the overall effect of treatment. They are calculated using the Fine-Gray method for competing risks (clustered by study site), and adjusted for age at study consent; preexisting cognitive impairment (IQCODE), frailty (CSHA Clinical Frailty Score), and comorbidities (Charlson Comorbidities Index); and severity of illness (modified SOFA) and level of arousal (RASS) at randomization.
 
 ```{r combine_tte}
-## -- Save combined KM curve, N at risk table, CIF curves for manuscript -------
-ggsave(
-  filename = "mindusa_kmtte.pdf",
-  multiplot(
-    plotlist = list(
-      km_death_90_pub$plot +
-        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
-      nrisk_death_90_pub + theme(axis.title.x = element_blank()),
-      cif_pub_facet + theme(axis.title.x = element_text(face = "bold"))
-    ),
-    layout = matrix(c(1, 1, 1, 2, 3, 3, 3), ncol = 1)
-  ),
-  path = "pubfigures/pdf",
-  device = cairo_pdf,
-  width = 7, height = 10, units = "in"
-)
-
-ggsave(
-  filename = "mindusa_kmtte.png",
-  multiplot(
-    plotlist = list(
-      km_death_90_pub$plot +
-        theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
-      nrisk_death_90_pub + theme(axis.title.x = element_blank()),
-      cif_pub_facet + theme(axis.title.x = element_text(face = "bold"))
-    ),
-    layout = matrix(c(1, 1, 1, 2, 3, 3, 3), ncol = 1)
-  ),
-  path = "pubfigures/png",
-  type = "cairo", dpi = 400,
-  width = 7, height = 10, units = "in"
-)
+## NOTE: This works with a previous version which used abbreviated treatment
+## labels and combined KM curves with four other TTE outcomes. It no longer
+## functions due to nrisk_death_90_pub and km_death_90_pub working differently,
+## but is saved just in cases.
+# ## -- Save combined KM curve, N at risk table, CIF curves for manuscript -------
+# ggsave(
+#   filename = "mindusa_kmtte.pdf",
+#   multiplot(
+#     plotlist = list(
+#       km_death_90_pub$plot +
+#         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+#       nrisk_death_90_pub + theme(axis.title.x = element_blank()),
+#       cif_pub_facet + theme(axis.title.x = element_text(face = "bold"))
+#     ),
+#     layout = matrix(c(1, 1, 1, 2, 3, 3, 3), ncol = 1)
+#   ),
+#   path = "pubfigures/pdf",
+#   device = cairo_pdf,
+#   width = 7, height = 10, units = "in"
+# )
+# 
+# ggsave(
+#   filename = "mindusa_kmtte.png",
+#   multiplot(
+#     plotlist = list(
+#       km_death_90_pub$plot +
+#         theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()),
+#       nrisk_death_90_pub + theme(axis.title.x = element_blank()),
+#       cif_pub_facet + theme(axis.title.x = element_text(face = "bold"))
+#     ),
+#     layout = matrix(c(1, 1, 1, 2, 3, 3, 3), ncol = 1)
+#   ),
+#   path = "pubfigures/png",
+#   type = "cairo", dpi = 400,
+#   width = 7, height = 10, units = "in"
+# )
 
 ```
 
-### Online Supplement
+### CIF Details
 
 *Suggested caption:*
 
