@@ -1101,7 +1101,7 @@ prep_cuminc_df <- function(
         tte_outcome == "Readmission" ~ 3,
         TRUE ~ 1
       ),
-      outcome_label = LETTERS[outcome_order + 1],
+      outcome_label = LETTERS[outcome_order],
       tte_outcome2 = case_when(
         tte_outcome == "MV Liberation" ~ "Liberation from MV",
         tte_outcome == "Readmission" ~ "ICU Readmission",
