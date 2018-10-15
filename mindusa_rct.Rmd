@@ -2452,7 +2452,7 @@ treatment and the following variables:
 - Age at consent
 - Severity of illness, measured by modified SOFA on the day of randomization
 - Pre-existing cognitive impairment, measured by IQCODE at consent
-- Sepsis at randomization, as defined by primary reason for ICU admission
+- Severe sepsis, as defined by primary reason for ICU admission
 - Medical vs surgical patient, as defined by meeting at least one of the
 following criteria:
     - Recorded primary ICU admission reason involving "surgery"
